@@ -132,7 +132,11 @@ export interface backendInterface {
     getClaimById(id: bigint): Promise<Claim>;
     getClaimsByCategory(category: string): Promise<Array<Claim>>;
     getEvidenceForClaim(claimId: bigint): Promise<Array<Evidence>>;
+    getEvidenceVoteTally(evidenceId: bigint): Promise<{
+        netScore: bigint;
+    }>;
     getSessionVoteForClaim(claimId: bigint, sessionId: string): Promise<string | null>;
+    getSessionVoteForEvidence(evidenceId: bigint, sessionId: string): Promise<string | null>;
     getVoteTally(claimId: bigint): Promise<{
         trueCount: bigint;
         falseCount: bigint;
@@ -140,6 +144,7 @@ export interface backendInterface {
     }>;
     submitEvidence(claimId: bigint, sessionId: string, text: string, imageUrls: Array<string>, urls: Array<string>): Promise<void>;
     submitVote(claimId: bigint, sessionId: string, verdict: string): Promise<void>;
+    voteEvidence(evidenceId: bigint, sessionId: string, direction: string): Promise<void>;
 }
 import type { _CaffeineStorageRefillInformation as __CaffeineStorageRefillInformation, _CaffeineStorageRefillResult as __CaffeineStorageRefillResult } from "./declarations/backend.did.d.ts";
 export class Backend implements backendInterface {
@@ -312,6 +317,22 @@ export class Backend implements backendInterface {
             return result;
         }
     }
+    async getEvidenceVoteTally(arg0: bigint): Promise<{
+        netScore: bigint;
+    }> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getEvidenceVoteTally(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getEvidenceVoteTally(arg0);
+            return result;
+        }
+    }
     async getSessionVoteForClaim(arg0: bigint, arg1: string): Promise<string | null> {
         if (this.processError) {
             try {
@@ -323,6 +344,20 @@ export class Backend implements backendInterface {
             }
         } else {
             const result = await this.actor.getSessionVoteForClaim(arg0, arg1);
+            return from_candid_opt_n8(this._uploadFile, this._downloadFile, result);
+        }
+    }
+    async getSessionVoteForEvidence(arg0: bigint, arg1: string): Promise<string | null> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getSessionVoteForEvidence(arg0, arg1);
+                return from_candid_opt_n8(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getSessionVoteForEvidence(arg0, arg1);
             return from_candid_opt_n8(this._uploadFile, this._downloadFile, result);
         }
     }
@@ -369,6 +404,20 @@ export class Backend implements backendInterface {
             }
         } else {
             const result = await this.actor.submitVote(arg0, arg1, arg2);
+            return result;
+        }
+    }
+    async voteEvidence(arg0: bigint, arg1: string, arg2: string): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.voteEvidence(arg0, arg1, arg2);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.voteEvidence(arg0, arg1, arg2);
             return result;
         }
     }

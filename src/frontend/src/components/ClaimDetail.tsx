@@ -1,8 +1,17 @@
+import type { Evidence } from "@/backend.d";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  useAllEvidenceTallies,
   useClaimById,
   useEvidence,
   useSessionVote,
@@ -14,19 +23,49 @@ import { cn } from "@/lib/utils";
 import { formatRelativeTime } from "@/utils/time";
 import {
   ArrowLeft,
+  ArrowUpDown,
   CheckCircle2,
   ExternalLink,
   HelpCircle,
   Link2,
   Loader2,
   MessageSquare,
+  Search,
   Send,
   XCircle,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
+
+type SortOption = "most_upvotes" | "most_downvotes" | "newest" | "oldest";
+
+function sortEvidence(
+  items: Evidence[],
+  sort: SortOption,
+  tallies: Record<string, number>,
+): Evidence[] {
+  const arr = [...items];
+  switch (sort) {
+    case "most_upvotes":
+      return arr.sort(
+        (a, b) =>
+          (tallies[b.id.toString()] ?? 0) - (tallies[a.id.toString()] ?? 0),
+      );
+    case "most_downvotes":
+      return arr.sort(
+        (a, b) =>
+          (tallies[a.id.toString()] ?? 0) - (tallies[b.id.toString()] ?? 0),
+      );
+    case "newest":
+      return arr.sort((a, b) => Number(b.timestamp) - Number(a.timestamp));
+    case "oldest":
+      return arr.sort((a, b) => Number(a.timestamp) - Number(b.timestamp));
+  }
+}
+import { Input } from "@/components/ui/input";
 import { CategoryBadge } from "./CategoryBadge";
+import { EvidenceVoteButtons } from "./EvidenceVoteButtons";
 import { ImageUploader } from "./ImageUploader";
 import { Lightbox } from "./Lightbox";
 import { UrlInputList } from "./UrlInputList";
@@ -119,11 +158,34 @@ export function ClaimDetail({ claimId, sessionId, onBack }: ClaimDetailProps) {
   const [evidenceText, setEvidenceText] = useState("");
   const [evidenceImageUrls, setEvidenceImageUrls] = useState<string[]>([]);
   const [evidenceUrls, setEvidenceUrls] = useState<string[]>([]);
+  const [sortOption, setSortOption] = useState<SortOption>("most_upvotes");
+  const [evidenceSearch, setEvidenceSearch] = useState("");
 
   const { data: claim, isLoading: claimLoading } = useClaimById(claimId);
   const { data: tally, isLoading: tallyLoading } = useVoteTally(claimId);
   const { data: sessionVote } = useSessionVote(claimId, sessionId);
   const { data: evidence, isLoading: evidenceLoading } = useEvidence(claimId);
+
+  const evidenceIds = useMemo(
+    () => (evidence ?? []).map((e) => e.id),
+    [evidence],
+  );
+  const { data: tallies = {} } = useAllEvidenceTallies(evidenceIds);
+
+  const sortedEvidence = useMemo(
+    () => (evidence ? sortEvidence(evidence, sortOption, tallies) : []),
+    [evidence, sortOption, tallies],
+  );
+
+  const filteredEvidence = useMemo(() => {
+    if (!evidenceSearch.trim()) return sortedEvidence;
+    const q = evidenceSearch.toLowerCase();
+    return sortedEvidence.filter(
+      (item) =>
+        item.text.toLowerCase().includes(q) ||
+        (item.urls ?? []).some((url) => url.toLowerCase().includes(q)),
+    );
+  }, [sortedEvidence, evidenceSearch]);
   const submitVote = useSubmitVote();
   const submitEvidence = useSubmitEvidence();
 
@@ -318,8 +380,8 @@ export function ClaimDetail({ claimId, sessionId, onBack }: ClaimDetailProps) {
 
           {/* Evidence */}
           <section>
-            <div className="flex items-center gap-2 mb-4">
-              <MessageSquare className="h-5 w-5 text-muted-foreground" />
+            <div className="flex items-center gap-2 mb-3 flex-wrap">
+              <MessageSquare className="h-5 w-5 text-muted-foreground flex-shrink-0" />
               <h2 className="font-display text-lg font-semibold text-foreground">
                 Community Evidence
               </h2>
@@ -328,6 +390,52 @@ export function ClaimDetail({ claimId, sessionId, onBack }: ClaimDetailProps) {
                   ({evidence.length})
                 </span>
               )}
+              <div className="ml-auto flex items-center gap-1.5">
+                <ArrowUpDown className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                <Select
+                  value={sortOption}
+                  onValueChange={(v) => setSortOption(v as SortOption)}
+                >
+                  <SelectTrigger
+                    data-ocid="evidence.sort.select"
+                    className="h-7 text-xs font-body w-36 bg-secondary border-border"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem
+                      value="most_upvotes"
+                      className="text-xs font-body"
+                    >
+                      Most Upvotes
+                    </SelectItem>
+                    <SelectItem
+                      value="most_downvotes"
+                      className="text-xs font-body"
+                    >
+                      Most Downvotes
+                    </SelectItem>
+                    <SelectItem value="newest" className="text-xs font-body">
+                      Newest
+                    </SelectItem>
+                    <SelectItem value="oldest" className="text-xs font-body">
+                      Oldest
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {/* Evidence search bar */}
+            <div className="relative mb-4">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                data-ocid="evidence.search_input"
+                placeholder="Search evidence by text or URL…"
+                value={evidenceSearch}
+                onChange={(e) => setEvidenceSearch(e.target.value)}
+                className="pl-9 h-8 text-xs bg-secondary border-border font-body"
+              />
             </div>
 
             {/* Add Evidence Form */}
@@ -404,11 +512,11 @@ export function ClaimDetail({ claimId, sessionId, onBack }: ClaimDetailProps) {
                   </div>
                 ))}
               </div>
-            ) : evidence && evidence.length > 0 ? (
+            ) : filteredEvidence.length > 0 ? (
               <ScrollArea className="max-h-[600px]">
                 <div className="space-y-3 pr-4">
                   <AnimatePresence>
-                    {evidence.map((item, idx) => (
+                    {filteredEvidence.map((item, idx) => (
                       <motion.div
                         key={item.id.toString()}
                         data-ocid={`evidence.item.${idx + 1}`}
@@ -424,16 +532,38 @@ export function ClaimDetail({ claimId, sessionId, onBack }: ClaimDetailProps) {
                         <ImageGrid imageUrls={item.imageUrls ?? []} size="sm" />
                         {/* Evidence URLs */}
                         <UrlChips urls={item.urls ?? []} />
-                        <p className="text-xs text-muted-foreground font-body mt-2">
-                          Anonymous · {formatRelativeTime(item.timestamp)}
-                        </p>
+                        {/* Footer: timestamp + vote buttons */}
+                        <div className="flex items-center justify-between mt-2 gap-2">
+                          <p className="text-xs text-muted-foreground font-body">
+                            Anonymous · {formatRelativeTime(item.timestamp)}
+                          </p>
+                          <EvidenceVoteButtons
+                            evidenceId={item.id}
+                            sessionId={sessionId}
+                            index={idx + 1}
+                          />
+                        </div>
                       </motion.div>
                     ))}
                   </AnimatePresence>
                 </div>
               </ScrollArea>
+            ) : evidenceSearch.trim() ? (
+              <div
+                data-ocid="evidence.empty_state"
+                className="text-center py-8 text-muted-foreground font-body"
+              >
+                <Search className="h-8 w-8 mx-auto mb-2 opacity-40" />
+                <p className="text-sm">No evidence matches your search.</p>
+                <p className="text-xs mt-1 opacity-70">
+                  Try different keywords or clear the search.
+                </p>
+              </div>
             ) : (
-              <div className="text-center py-8 text-muted-foreground font-body">
+              <div
+                data-ocid="evidence.empty_state"
+                className="text-center py-8 text-muted-foreground font-body"
+              >
                 <MessageSquare className="h-8 w-8 mx-auto mb-2 opacity-40" />
                 <p className="text-sm">No evidence submitted yet.</p>
                 <p className="text-xs mt-1 opacity-70">

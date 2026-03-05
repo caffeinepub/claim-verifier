@@ -33,7 +33,11 @@ export interface backendInterface {
     getClaimById(id: bigint): Promise<Claim>;
     getClaimsByCategory(category: string): Promise<Array<Claim>>;
     getEvidenceForClaim(claimId: bigint): Promise<Array<Evidence>>;
+    getEvidenceVoteTally(evidenceId: bigint): Promise<{
+        netScore: bigint;
+    }>;
     getSessionVoteForClaim(claimId: bigint, sessionId: string): Promise<string | null>;
+    getSessionVoteForEvidence(evidenceId: bigint, sessionId: string): Promise<string | null>;
     getVoteTally(claimId: bigint): Promise<{
         trueCount: bigint;
         falseCount: bigint;
@@ -41,4 +45,5 @@ export interface backendInterface {
     }>;
     submitEvidence(claimId: bigint, sessionId: string, text: string, imageUrls: Array<string>, urls: Array<string>): Promise<void>;
     submitVote(claimId: bigint, sessionId: string, verdict: string): Promise<void>;
+    voteEvidence(evidenceId: bigint, sessionId: string, direction: string): Promise<void>;
 }

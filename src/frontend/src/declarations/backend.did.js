@@ -83,7 +83,17 @@ export const idlService = IDL.Service({
   'getClaimById' : IDL.Func([IDL.Nat], [Claim], ['query']),
   'getClaimsByCategory' : IDL.Func([IDL.Text], [IDL.Vec(Claim)], ['query']),
   'getEvidenceForClaim' : IDL.Func([IDL.Nat], [IDL.Vec(Evidence)], ['query']),
+  'getEvidenceVoteTally' : IDL.Func(
+      [IDL.Nat],
+      [IDL.Record({ 'netScore' : IDL.Int })],
+      ['query'],
+    ),
   'getSessionVoteForClaim' : IDL.Func(
+      [IDL.Nat, IDL.Text],
+      [IDL.Opt(IDL.Text)],
+      ['query'],
+    ),
+  'getSessionVoteForEvidence' : IDL.Func(
       [IDL.Nat, IDL.Text],
       [IDL.Opt(IDL.Text)],
       ['query'],
@@ -105,6 +115,7 @@ export const idlService = IDL.Service({
       [],
     ),
   'submitVote' : IDL.Func([IDL.Nat, IDL.Text, IDL.Text], [], []),
+  'voteEvidence' : IDL.Func([IDL.Nat, IDL.Text, IDL.Text], [], []),
 });
 
 export const idlInitArgs = [];
@@ -185,7 +196,17 @@ export const idlFactory = ({ IDL }) => {
     'getClaimById' : IDL.Func([IDL.Nat], [Claim], ['query']),
     'getClaimsByCategory' : IDL.Func([IDL.Text], [IDL.Vec(Claim)], ['query']),
     'getEvidenceForClaim' : IDL.Func([IDL.Nat], [IDL.Vec(Evidence)], ['query']),
+    'getEvidenceVoteTally' : IDL.Func(
+        [IDL.Nat],
+        [IDL.Record({ 'netScore' : IDL.Int })],
+        ['query'],
+      ),
     'getSessionVoteForClaim' : IDL.Func(
+        [IDL.Nat, IDL.Text],
+        [IDL.Opt(IDL.Text)],
+        ['query'],
+      ),
+    'getSessionVoteForEvidence' : IDL.Func(
         [IDL.Nat, IDL.Text],
         [IDL.Opt(IDL.Text)],
         ['query'],
@@ -207,6 +228,7 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'submitVote' : IDL.Func([IDL.Nat, IDL.Text, IDL.Text], [], []),
+    'voteEvidence' : IDL.Func([IDL.Nat, IDL.Text, IDL.Text], [], []),
   });
 };
 

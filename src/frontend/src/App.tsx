@@ -17,6 +17,9 @@ const CATEGORIES = [
   "Politics",
   "Health",
   "Technology",
+  "Sports",
+  "Entertainment",
+  "Religion",
   "Other",
 ];
 

@@ -210,3 +210,79 @@ export function useSubmitEvidence() {
     },
   });
 }
+
+// ── Evidence Votes ────────────────────────────────────────────────────────────
+
+export function useEvidenceVoteTally(evidenceId: bigint | null) {
+  const { actor, isFetching } = useActor();
+  return useQuery<{ netScore: bigint }>({
+    queryKey: ["evidence-tally", evidenceId?.toString()],
+    queryFn: async () => {
+      if (!actor || evidenceId === null) throw new Error("No actor or id");
+      return actor.getEvidenceVoteTally(evidenceId);
+    },
+    enabled: !!actor && !isFetching && evidenceId !== null,
+  });
+}
+
+export function useSessionVoteForEvidence(
+  evidenceId: bigint | null,
+  sessionId: string | null,
+) {
+  const { actor, isFetching } = useActor();
+  return useQuery<string | null>({
+    queryKey: ["evidence-vote", evidenceId?.toString(), sessionId],
+    queryFn: async () => {
+      if (!actor || evidenceId === null || !sessionId) return null;
+      return actor.getSessionVoteForEvidence(evidenceId, sessionId);
+    },
+    enabled: !!actor && !isFetching && evidenceId !== null && !!sessionId,
+  });
+}
+
+export function useAllEvidenceTallies(evidenceIds: bigint[]) {
+  const { actor, isFetching } = useActor();
+  return useQuery<Record<string, number>>({
+    queryKey: ["evidence-tallies-bulk", evidenceIds.map((id) => id.toString())],
+    queryFn: async () => {
+      if (!actor) return {};
+      const entries = await Promise.all(
+        evidenceIds.map(async (id) => {
+          const tally = await actor.getEvidenceVoteTally(id);
+          return [id.toString(), Number(tally.netScore)] as [string, number];
+        }),
+      );
+      return Object.fromEntries(entries);
+    },
+    enabled: !!actor && !isFetching && evidenceIds.length > 0,
+    staleTime: 10_000,
+  });
+}
+
+export function useVoteEvidence() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      evidenceId,
+      sessionId,
+      direction,
+    }: {
+      evidenceId: bigint;
+      sessionId: string;
+      direction: string;
+    }) => {
+      if (!actor) throw new Error("No actor");
+      return actor.voteEvidence(evidenceId, sessionId, direction);
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: ["evidence-tally", variables.evidenceId.toString()],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["evidence-vote", variables.evidenceId.toString()],
+      });
+    },
+  });
+}

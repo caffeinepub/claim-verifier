@@ -25,7 +25,16 @@ import { toast } from "sonner";
 import { ImageUploader } from "./ImageUploader";
 import { UrlInputList } from "./UrlInputList";
 
-const CATEGORIES = ["Science", "Politics", "Health", "Technology", "Other"];
+const CATEGORIES = [
+  "Science",
+  "Politics",
+  "Health",
+  "Technology",
+  "Sports",
+  "Entertainment",
+  "Religion",
+  "Other",
+];
 
 interface SubmitClaimDialogProps {
   sessionId: string;

@@ -57,9 +57,22 @@ actor {
     };
   };
 
+  type EvidenceVote = {
+    evidenceId : Nat;
+    sessionId : Text;
+    direction : Text;
+  };
+
+  module EvidenceVote {
+    public func compareByEvidenceId(a : EvidenceVote, b : EvidenceVote) : Order.Order {
+      Nat.compare(a.evidenceId, b.evidenceId);
+    };
+  };
+
   var claimsArray : [Claim] = [];
   var votesArray : [Vote] = [];
   var evidencesArray : [Evidence] = [];
+  var evidenceVotesArray : [EvidenceVote] = [];
   var claimCount : Nat = 0;
   var evidenceCount : Nat = 0;
 
@@ -101,7 +114,7 @@ actor {
     }, Claim>(
       func(seedClaim) {
         {
-          id = 0; // Will be assigned properly later
+          id = 0;
           title = seedClaim.title;
           description = seedClaim.description;
           category = seedClaim.category;
@@ -222,5 +235,78 @@ actor {
 
   public query ({ caller }) func getEvidenceForClaim(claimId : Nat) : async [Evidence] {
     evidencesArray.filter(func(evidence) { evidence.claimId == claimId });
+  };
+
+  public shared ({ caller }) func voteEvidence(evidenceId : Nat, sessionId : Text, direction : Text) : async () {
+    let evidenceIndex = evidenceVotesArray.findIndex(
+      func(vote) { vote.evidenceId == evidenceId and vote.sessionId == sessionId }
+    );
+
+    switch (evidenceIndex) {
+      case (null) {
+        let vote : EvidenceVote = {
+          evidenceId;
+          sessionId;
+          direction;
+        };
+        let evidenceVotesList = List.fromArray<EvidenceVote>(evidenceVotesArray);
+        evidenceVotesList.add(vote);
+        evidenceVotesArray := evidenceVotesList.toArray();
+      };
+      case (?index) {
+        let existingVote = evidenceVotesArray[index];
+        if (existingVote.direction == direction) {
+          let filteredVotes = evidenceVotesArray.filter(
+            func(vote) {
+              not (vote.evidenceId == evidenceId and vote.sessionId == sessionId);
+            }
+          );
+          evidenceVotesArray := filteredVotes;
+        } else {
+          let updatedVotes = evidenceVotesArray.map(
+            func(vote) {
+              if (vote.evidenceId == evidenceId and vote.sessionId == sessionId) {
+                {
+                  evidenceId = vote.evidenceId;
+                  sessionId = vote.sessionId;
+                  direction;
+                };
+              } else {
+                vote;
+              };
+            }
+          );
+          evidenceVotesArray := updatedVotes;
+        };
+      };
+    };
+  };
+
+  public query ({ caller }) func getEvidenceVoteTally(evidenceId : Nat) : async {
+    netScore : Int;
+  } {
+    var upvotes = 0;
+    var downvotes = 0;
+
+    for (vote in evidenceVotesArray.values()) {
+      if (vote.evidenceId == evidenceId) {
+        switch (vote.direction) {
+          case ("up") { upvotes += 1 };
+          case ("down") { downvotes += 1 };
+          case (_) {};
+        };
+      };
+    };
+
+    {
+      netScore = upvotes - downvotes : Int;
+    };
+  };
+
+  public query ({ caller }) func getSessionVoteForEvidence(evidenceId : Nat, sessionId : Text) : async ?Text {
+    switch (evidenceVotesArray.find(func(vote) { (vote.evidenceId == evidenceId and vote.sessionId == sessionId) })) {
+      case (null) { null };
+      case (?vote) { ?vote.direction };
+    };
   };
 };

@@ -65,7 +65,9 @@ export interface _SERVICE {
   'getClaimById' : ActorMethod<[bigint], Claim>,
   'getClaimsByCategory' : ActorMethod<[string], Array<Claim>>,
   'getEvidenceForClaim' : ActorMethod<[bigint], Array<Evidence>>,
+  'getEvidenceVoteTally' : ActorMethod<[bigint], { 'netScore' : bigint }>,
   'getSessionVoteForClaim' : ActorMethod<[bigint, string], [] | [string]>,
+  'getSessionVoteForEvidence' : ActorMethod<[bigint, string], [] | [string]>,
   'getVoteTally' : ActorMethod<
     [bigint],
     { 'trueCount' : bigint, 'falseCount' : bigint, 'unverifiedCount' : bigint }
@@ -75,6 +77,7 @@ export interface _SERVICE {
     undefined
   >,
   'submitVote' : ActorMethod<[bigint, string, string], undefined>,
+  'voteEvidence' : ActorMethod<[bigint, string, string], undefined>,
 }
 export declare const idlService: IDL.ServiceClass;
 export declare const idlInitArgs: IDL.Type[];
