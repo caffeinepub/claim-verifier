@@ -29,6 +29,15 @@ export interface Evidence {
   'timestamp' : bigint,
   'sessionId' : string,
 }
+export interface Reply {
+  'id' : bigint,
+  'authorUsername' : string,
+  'text' : string,
+  'timestamp' : bigint,
+  'parentReplyId' : bigint,
+  'sessionId' : string,
+  'evidenceId' : bigint,
+}
 export interface _CaffeineStorageCreateCertificateResult {
   'method' : string,
   'blob_hash' : string,
@@ -56,9 +65,30 @@ export interface _SERVICE {
     _CaffeineStorageRefillResult
   >,
   '_caffeineStorageUpdateGatewayPrincipals' : ActorMethod<[], undefined>,
+  'addReply' : ActorMethod<
+    [bigint, bigint, string, string, string],
+    { 'ok' : null } |
+      { 'err' : string }
+  >,
+  'adminDeleteClaim' : ActorMethod<
+    [bigint, string],
+    { 'ok' : null } |
+      { 'err' : string }
+  >,
+  'adminDeleteEvidence' : ActorMethod<
+    [bigint, string],
+    { 'ok' : null } |
+      { 'err' : string }
+  >,
+  'adminDeleteReply' : ActorMethod<
+    [bigint, string],
+    { 'ok' : null } |
+      { 'err' : string }
+  >,
   'createClaim' : ActorMethod<
     [string, string, string, string, Array<string>, Array<string>],
-    undefined
+    { 'ok' : null } |
+      { 'err' : string }
   >,
   'generateSessionId' : ActorMethod<[], string>,
   'getAllClaims' : ActorMethod<[], Array<Claim>>,
@@ -66,18 +96,52 @@ export interface _SERVICE {
   'getClaimsByCategory' : ActorMethod<[string], Array<Claim>>,
   'getEvidenceForClaim' : ActorMethod<[bigint], Array<Evidence>>,
   'getEvidenceVoteTally' : ActorMethod<[bigint], { 'netScore' : bigint }>,
+  'getHiddenClaims' : ActorMethod<[string], Array<Claim>>,
+  'getHiddenEvidence' : ActorMethod<[string], Array<Evidence>>,
+  'getHiddenReplies' : ActorMethod<[string], Array<Reply>>,
+  'getReplies' : ActorMethod<[bigint], Array<Reply>>,
+  'getReplyVoteTally' : ActorMethod<[bigint], { 'netScore' : bigint }>,
+  'getReportCount' : ActorMethod<[bigint, string], bigint>,
   'getSessionVoteForClaim' : ActorMethod<[bigint, string], [] | [string]>,
   'getSessionVoteForEvidence' : ActorMethod<[bigint, string], [] | [string]>,
+  'getSessionVoteForReply' : ActorMethod<[bigint, string], [] | [string]>,
   'getVoteTally' : ActorMethod<
     [bigint],
     { 'trueCount' : bigint, 'falseCount' : bigint, 'unverifiedCount' : bigint }
   >,
+  'reportContent' : ActorMethod<
+    [bigint, string, string],
+    { 'ok' : null } |
+      { 'err' : string }
+  >,
+  'reportReply' : ActorMethod<
+    [bigint, string],
+    { 'ok' : null } |
+      { 'err' : string }
+  >,
+  'restoreClaim' : ActorMethod<
+    [bigint, string],
+    { 'ok' : null } |
+      { 'err' : string }
+  >,
+  'restoreEvidence' : ActorMethod<
+    [bigint, string],
+    { 'ok' : null } |
+      { 'err' : string }
+  >,
+  'restoreReply' : ActorMethod<
+    [bigint, string],
+    { 'ok' : null } |
+      { 'err' : string }
+  >,
   'submitEvidence' : ActorMethod<
     [bigint, string, string, Array<string>, Array<string>],
-    undefined
+    { 'ok' : null } |
+      { 'err' : string }
   >,
   'submitVote' : ActorMethod<[bigint, string, string], undefined>,
   'voteEvidence' : ActorMethod<[bigint, string, string], undefined>,
+  'voteReply' : ActorMethod<[bigint, string, string], undefined>,
 }
 export declare const idlService: IDL.ServiceClass;
 export declare const idlInitArgs: IDL.Type[];

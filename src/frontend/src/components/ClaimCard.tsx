@@ -1,7 +1,21 @@
 import { Skeleton } from "@/components/ui/skeleton";
-import { useVoteTally } from "@/hooks/useQueries";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
+  useReportContent,
+  useUsername,
+  useVoteTally,
+} from "@/hooks/useQueries";
+import { cn } from "@/lib/utils";
 import { formatRelativeTime } from "@/utils/time";
+import { Flag } from "lucide-react";
 import { motion } from "motion/react";
+import { useState } from "react";
+import { toast } from "sonner";
 import type { Claim } from "../backend.d";
 import { CategoryBadge } from "./CategoryBadge";
 import { VerdictBar } from "./VerdictBar";
@@ -10,12 +24,42 @@ interface ClaimCardProps {
   claim: Claim;
   index: number;
   onClick: () => void;
+  sessionId?: string;
 }
 
-export function ClaimCard({ claim, index, onClick }: ClaimCardProps) {
+export function ClaimCard({
+  claim,
+  index,
+  onClick,
+  sessionId,
+}: ClaimCardProps) {
   const { data: tally, isLoading: tallyLoading } = useVoteTally(claim.id);
+  const reportContent = useReportContent();
+  const username = useUsername();
+  const [reported, setReported] = useState(false);
 
   const ocid = `claim.item.${index}` as const;
+
+  async function handleReport(e: React.MouseEvent) {
+    e.stopPropagation();
+    if (!sessionId || reported) return;
+    try {
+      await reportContent.mutateAsync({
+        targetId: claim.id,
+        targetType: "claim",
+        sessionId,
+      });
+      setReported(true);
+      toast.success("Claim reported");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "";
+      if (msg.includes("Already reported") || msg.includes("already")) {
+        toast.info("Already reported");
+      } else {
+        toast.error("Failed to report claim");
+      }
+    }
+  }
 
   return (
     <motion.article
@@ -33,7 +77,43 @@ export function ClaimCard({ claim, index, onClick }: ClaimCardProps) {
           <span className="text-xs text-muted-foreground font-body">
             {formatRelativeTime(claim.timestamp)}
           </span>
+          <span className="text-xs text-muted-foreground font-body">
+            ·{" "}
+            {claim.sessionId === sessionId && claim.sessionId !== "seed"
+              ? username
+              : "Anonymous"}
+          </span>
         </div>
+
+        {/* Report button */}
+        {sessionId && (
+          <TooltipProvider delayDuration={300}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  data-ocid={`claim.report_button.${index}`}
+                  onClick={handleReport}
+                  disabled={reported || reportContent.isPending}
+                  aria-label="Report claim"
+                  className={cn(
+                    "flex-shrink-0 flex items-center justify-center w-6 h-6 rounded transition-all duration-150",
+                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60",
+                    "disabled:cursor-not-allowed",
+                    reported
+                      ? "text-amber-400 opacity-60"
+                      : "text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-destructive hover:bg-destructive/10",
+                  )}
+                >
+                  <Flag className="h-3 w-3" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="text-xs font-body">
+                {reported ? "Reported" : "Report claim"}
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )}
       </div>
 
       <h3 className="font-display text-lg font-semibold text-foreground leading-snug mb-2 group-hover:text-primary transition-colors">

@@ -1,10 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { Claim, Evidence } from "../backend.d";
+import type { Claim, Evidence, Reply } from "../backend.d";
 import { useActor } from "./useActor";
 
 // ── Session ──────────────────────────────────────────────────────────────────
 
 const SESSION_KEY = "claim_verifier_session_id";
+const USERNAME_KEY = "claim_verifier_username";
 
 export function getOrInitSessionId(): string | null {
   return localStorage.getItem(SESSION_KEY);
@@ -14,6 +15,29 @@ export function saveSessionId(id: string): void {
   localStorage.setItem(SESSION_KEY, id);
 }
 
+function generateUsername(): string {
+  const chars =
+    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  let result = "";
+  for (let i = 0; i < 8; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return result;
+}
+
+export function getOrInitUsername(): string {
+  const existing = localStorage.getItem(USERNAME_KEY);
+  if (existing) return existing;
+  const username = generateUsername();
+  localStorage.setItem(USERNAME_KEY, username);
+  return username;
+}
+
+export function useUsername(): string {
+  // Initialize once -- no reactive updates needed since username never changes mid-session
+  return getOrInitUsername();
+}
+
 export function useSessionId() {
   const { actor, isFetching } = useActor();
 
@@ -21,10 +45,16 @@ export function useSessionId() {
     queryKey: ["sessionId"],
     queryFn: async () => {
       const existing = localStorage.getItem(SESSION_KEY);
-      if (existing) return existing;
+      if (existing) {
+        // Ensure username is also initialized alongside session
+        getOrInitUsername();
+        return existing;
+      }
       if (!actor) throw new Error("No actor");
       const id = await actor.generateSessionId();
       localStorage.setItem(SESSION_KEY, id);
+      // Initialize username at the same time as session
+      getOrInitUsername();
       return id;
     },
     enabled: !!actor && !isFetching,
@@ -92,7 +122,7 @@ export function useCreateClaim() {
       urls?: string[];
     }) => {
       if (!actor) throw new Error("No actor");
-      return actor.createClaim(
+      const result = await (actor as any).createClaim(
         title,
         description,
         category,
@@ -100,6 +130,10 @@ export function useCreateClaim() {
         imageUrls,
         urls,
       );
+      if (result && "err" in result) {
+        throw new Error(result.err as string);
+      }
+      return result;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["claims"] });
@@ -201,7 +235,17 @@ export function useSubmitEvidence() {
       urls?: string[];
     }) => {
       if (!actor) throw new Error("No actor");
-      return actor.submitEvidence(claimId, sessionId, text, imageUrls, urls);
+      const result = await (actor as any).submitEvidence(
+        claimId,
+        sessionId,
+        text,
+        imageUrls,
+        urls,
+      );
+      if (result && "err" in result) {
+        throw new Error(result.err as string);
+      }
+      return result;
     },
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({
@@ -282,6 +326,371 @@ export function useVoteEvidence() {
       });
       queryClient.invalidateQueries({
         queryKey: ["evidence-vote", variables.evidenceId.toString()],
+      });
+    },
+  });
+}
+
+// ── Reporting ─────────────────────────────────────────────────────────────────
+
+export function useReportContent() {
+  const { actor } = useActor();
+
+  return useMutation({
+    mutationFn: async ({
+      targetId,
+      targetType,
+      sessionId,
+    }: {
+      targetId: bigint;
+      targetType: string;
+      sessionId: string;
+    }) => {
+      if (!actor) throw new Error("No actor");
+      const result = await actor.reportContent(targetId, targetType, sessionId);
+      if (result && "err" in result) {
+        throw new Error(result.err as string);
+      }
+      return result;
+    },
+  });
+}
+
+// ── Replies ───────────────────────────────────────────────────────────────────
+
+export type { Reply };
+
+export function useReplies(evidenceId: bigint | null) {
+  const { actor, isFetching } = useActor();
+  return useQuery<Reply[]>({
+    queryKey: ["replies", evidenceId?.toString()],
+    queryFn: async () => {
+      if (!actor || evidenceId === null) return [];
+      return actor.getReplies(evidenceId);
+    },
+    enabled: !!actor && !isFetching && evidenceId !== null,
+  });
+}
+
+export function useAddReply() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      evidenceId,
+      parentReplyId,
+      text,
+      authorUsername,
+      sessionId,
+    }: {
+      evidenceId: bigint;
+      parentReplyId: bigint;
+      text: string;
+      authorUsername: string;
+      sessionId: string;
+    }) => {
+      if (!actor) throw new Error("No actor");
+      const result = await actor.addReply(
+        evidenceId,
+        parentReplyId,
+        text,
+        authorUsername,
+        sessionId,
+      );
+      if (result && result.__kind__ === "err") {
+        throw new Error(result.err as string);
+      }
+      return result;
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: ["replies", variables.evidenceId.toString()],
+      });
+    },
+  });
+}
+
+export function useVoteReply() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      replyId,
+      sessionId,
+      direction,
+    }: {
+      replyId: bigint;
+      sessionId: string;
+      direction: string;
+    }) => {
+      if (!actor) throw new Error("No actor");
+      return actor.voteReply(replyId, sessionId, direction);
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: ["reply-tally", variables.replyId.toString()],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["reply-vote", variables.replyId.toString()],
+      });
+    },
+  });
+}
+
+export function useReplyVoteTally(replyId: bigint | null) {
+  const { actor, isFetching } = useActor();
+  return useQuery<{ netScore: bigint }>({
+    queryKey: ["reply-tally", replyId?.toString()],
+    queryFn: async () => {
+      if (!actor || replyId === null) throw new Error("No actor or id");
+      return actor.getReplyVoteTally(replyId);
+    },
+    enabled: !!actor && !isFetching && replyId !== null,
+  });
+}
+
+export function useSessionVoteForReply(
+  replyId: bigint | null,
+  sessionId: string | null,
+) {
+  const { actor, isFetching } = useActor();
+  return useQuery<string | null>({
+    queryKey: ["reply-vote", replyId?.toString(), sessionId],
+    queryFn: async () => {
+      if (!actor || replyId === null || !sessionId) return null;
+      return actor.getSessionVoteForReply(replyId, sessionId);
+    },
+    enabled: !!actor && !isFetching && replyId !== null && !!sessionId,
+  });
+}
+
+export function useReportReply() {
+  const { actor } = useActor();
+
+  return useMutation({
+    mutationFn: async ({
+      replyId,
+      sessionId,
+    }: {
+      replyId: bigint;
+      sessionId: string;
+    }) => {
+      if (!actor) throw new Error("No actor");
+      const result = await actor.reportReply(replyId, sessionId);
+      if (result && result.__kind__ === "err") {
+        throw new Error(result.err as string);
+      }
+      return result;
+    },
+  });
+}
+
+export function useGetHiddenReplies(password: string) {
+  const { actor, isFetching } = useActor();
+  return useQuery<Reply[]>({
+    queryKey: ["admin", "hidden-replies", password],
+    queryFn: async () => {
+      if (!actor || !password) return [];
+      return actor.getHiddenReplies(password);
+    },
+    enabled: !!actor && !isFetching && !!password,
+    retry: false,
+  });
+}
+
+export function useRestoreReply() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      id,
+      password,
+    }: {
+      id: bigint;
+      password: string;
+    }) => {
+      if (!actor) throw new Error("No actor");
+      const result = await actor.restoreReply(id, password);
+      if (result && result.__kind__ === "err") {
+        throw new Error(result.err as string);
+      }
+      return result;
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["replies"] });
+      queryClient.invalidateQueries({
+        queryKey: ["admin", "hidden-replies", variables.password],
+      });
+    },
+  });
+}
+
+export function useAdminDeleteReply() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      id,
+      password,
+    }: {
+      id: bigint;
+      password: string;
+    }) => {
+      if (!actor) throw new Error("No actor");
+      const result = await actor.adminDeleteReply(id, password);
+      if (result && result.__kind__ === "err") {
+        throw new Error(result.err as string);
+      }
+      return result;
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["replies"] });
+      queryClient.invalidateQueries({
+        queryKey: ["admin", "hidden-replies", variables.password],
+      });
+    },
+  });
+}
+
+// ── Admin ─────────────────────────────────────────────────────────────────────
+
+export function useGetHiddenClaims(password: string) {
+  const { actor, isFetching } = useActor();
+  return useQuery<Claim[]>({
+    queryKey: ["admin", "hidden-claims", password],
+    queryFn: async () => {
+      if (!actor || !password) return [];
+      return (actor as any).getHiddenClaims(password);
+    },
+    enabled: !!actor && !isFetching && !!password,
+    retry: false,
+  });
+}
+
+export function useGetHiddenEvidence(password: string) {
+  const { actor, isFetching } = useActor();
+  return useQuery<Evidence[]>({
+    queryKey: ["admin", "hidden-evidence", password],
+    queryFn: async () => {
+      if (!actor || !password) return [];
+      return (actor as any).getHiddenEvidence(password);
+    },
+    enabled: !!actor && !isFetching && !!password,
+    retry: false,
+  });
+}
+
+export function useRestoreClaim() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      id,
+      password,
+    }: {
+      id: bigint;
+      password: string;
+    }) => {
+      if (!actor) throw new Error("No actor");
+      const result = await (actor as any).restoreClaim(id, password);
+      if (result && "err" in result) {
+        throw new Error(result.err as string);
+      }
+      return result;
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["claims"] });
+      queryClient.invalidateQueries({
+        queryKey: ["admin", "hidden-claims", variables.password],
+      });
+    },
+  });
+}
+
+export function useRestoreEvidence() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      id,
+      password,
+    }: {
+      id: bigint;
+      password: string;
+    }) => {
+      if (!actor) throw new Error("No actor");
+      const result = await (actor as any).restoreEvidence(id, password);
+      if (result && "err" in result) {
+        throw new Error(result.err as string);
+      }
+      return result;
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["evidence"] });
+      queryClient.invalidateQueries({
+        queryKey: ["admin", "hidden-evidence", variables.password],
+      });
+    },
+  });
+}
+
+export function useAdminDeleteClaim() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      id,
+      password,
+    }: {
+      id: bigint;
+      password: string;
+    }) => {
+      if (!actor) throw new Error("No actor");
+      const result = await (actor as any).adminDeleteClaim(id, password);
+      if (result && "err" in result) {
+        throw new Error(result.err as string);
+      }
+      return result;
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["claims"] });
+      queryClient.invalidateQueries({
+        queryKey: ["admin", "hidden-claims", variables.password],
+      });
+    },
+  });
+}
+
+export function useAdminDeleteEvidence() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      id,
+      password,
+    }: {
+      id: bigint;
+      password: string;
+    }) => {
+      if (!actor) throw new Error("No actor");
+      const result = await (actor as any).adminDeleteEvidence(id, password);
+      if (result && "err" in result) {
+        throw new Error(result.err as string);
+      }
+      return result;
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["evidence"] });
+      queryClient.invalidateQueries({
+        queryKey: ["admin", "hidden-evidence", variables.password],
       });
     },
   });

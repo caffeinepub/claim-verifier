@@ -1,4 +1,4 @@
-import type { Evidence } from "@/backend.d";
+import type { Claim, Evidence } from "@/backend.d";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
@@ -17,6 +17,7 @@ import {
   useSessionVote,
   useSubmitEvidence,
   useSubmitVote,
+  useUsername,
   useVoteTally,
 } from "@/hooks/useQueries";
 import { cn } from "@/lib/utils";
@@ -25,17 +26,20 @@ import {
   ArrowLeft,
   ArrowUpDown,
   CheckCircle2,
+  Clock,
   ExternalLink,
+  Flag,
   HelpCircle,
   Link2,
   Loader2,
   MessageSquare,
   Search,
   Send,
+  Share2,
   XCircle,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 type SortOption = "most_upvotes" | "most_downvotes" | "newest" | "oldest";
@@ -64,16 +68,26 @@ function sortEvidence(
   }
 }
 import { Input } from "@/components/ui/input";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { useReportContent } from "@/hooks/useQueries";
+import { getClaimSlug } from "@/utils/slug";
 import { CategoryBadge } from "./CategoryBadge";
 import { EvidenceVoteButtons } from "./EvidenceVoteButtons";
 import { ImageUploader } from "./ImageUploader";
 import { Lightbox } from "./Lightbox";
+import { ReplyThread } from "./ReplyThread";
 import { UrlInputList } from "./UrlInputList";
 import { VerdictBar } from "./VerdictBar";
 
 interface ClaimDetailProps {
   claimId: bigint;
   sessionId: string;
+  allClaims: Claim[];
   onBack: () => void;
 }
 
@@ -154,17 +168,28 @@ function ImageGrid({
   );
 }
 
-export function ClaimDetail({ claimId, sessionId, onBack }: ClaimDetailProps) {
+export function ClaimDetail({
+  claimId,
+  sessionId,
+  allClaims,
+  onBack,
+}: ClaimDetailProps) {
   const [evidenceText, setEvidenceText] = useState("");
   const [evidenceImageUrls, setEvidenceImageUrls] = useState<string[]>([]);
   const [evidenceUrls, setEvidenceUrls] = useState<string[]>([]);
   const [sortOption, setSortOption] = useState<SortOption>("most_upvotes");
   const [evidenceSearch, setEvidenceSearch] = useState("");
+  const [evidenceCooldownLeft, setEvidenceCooldownLeft] = useState(0);
+  // Track reported evidence IDs locally (set of stringified bigints)
+  const [reportedEvidence, setReportedEvidence] = useState<Set<string>>(
+    new Set(),
+  );
 
   const { data: claim, isLoading: claimLoading } = useClaimById(claimId);
   const { data: tally, isLoading: tallyLoading } = useVoteTally(claimId);
   const { data: sessionVote } = useSessionVote(claimId, sessionId);
   const { data: evidence, isLoading: evidenceLoading } = useEvidence(claimId);
+  const username = useUsername();
 
   const evidenceIds = useMemo(
     () => (evidence ?? []).map((e) => e.id),
@@ -188,8 +213,42 @@ export function ClaimDetail({ claimId, sessionId, onBack }: ClaimDetailProps) {
   }, [sortedEvidence, evidenceSearch]);
   const submitVote = useSubmitVote();
   const submitEvidence = useSubmitEvidence();
+  const reportContent = useReportContent();
 
   const hasVoted = !!sessionVote;
+
+  // Evidence cooldown countdown
+  useEffect(() => {
+    if (evidenceCooldownLeft <= 0) return;
+    const timer = setInterval(() => {
+      setEvidenceCooldownLeft((prev) => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [evidenceCooldownLeft]);
+
+  function formatCountdown(seconds: number): string {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m}:${s.toString().padStart(2, "0")}`;
+  }
+
+  async function handleShare() {
+    if (!claim) return;
+    const slug = getClaimSlug(claim, allClaims);
+    const url = `${window.location.origin}/claim/${slug}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      toast.success("Link copied to clipboard");
+    } catch {
+      toast.error("Failed to copy link");
+    }
+  }
 
   async function handleVote(verdict: string) {
     if (!sessionId || hasVoted) return;
@@ -203,7 +262,7 @@ export function ClaimDetail({ claimId, sessionId, onBack }: ClaimDetailProps) {
 
   async function handleSubmitEvidence(e: React.FormEvent) {
     e.preventDefault();
-    if (!evidenceText.trim() || !sessionId) return;
+    if (!evidenceText.trim() || !sessionId || evidenceCooldownLeft > 0) return;
     try {
       await submitEvidence.mutateAsync({
         claimId,
@@ -216,8 +275,38 @@ export function ClaimDetail({ claimId, sessionId, onBack }: ClaimDetailProps) {
       setEvidenceText("");
       setEvidenceImageUrls([]);
       setEvidenceUrls([]);
-    } catch {
-      toast.error("Failed to submit evidence");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "";
+      if (msg.startsWith("cooldown:")) {
+        const secs = Number.parseInt(msg.split(":")[1], 10);
+        setEvidenceCooldownLeft(Number.isFinite(secs) ? secs : 120);
+      } else if (msg.startsWith("duplicate:")) {
+        const detail = msg.replace(/^duplicate:/, "").trim();
+        toast.error(detail || "Similar evidence already exists.");
+      } else {
+        toast.error("Failed to submit evidence");
+      }
+    }
+  }
+
+  async function handleReportEvidence(evidenceId: bigint) {
+    const key = evidenceId.toString();
+    if (reportedEvidence.has(key)) return;
+    try {
+      await reportContent.mutateAsync({
+        targetId: evidenceId,
+        targetType: "evidence",
+        sessionId,
+      });
+      setReportedEvidence((prev) => new Set([...prev, key]));
+      toast.success("Reported");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "";
+      if (msg.includes("Already reported") || msg.includes("already")) {
+        toast.info("Already reported");
+      } else {
+        toast.error("Failed to report");
+      }
     }
   }
 
@@ -230,16 +319,32 @@ export function ClaimDetail({ claimId, sessionId, onBack }: ClaimDetailProps) {
       transition={{ duration: 0.3 }}
       className="max-w-3xl mx-auto"
     >
-      {/* Back button */}
-      <Button
-        variant="ghost"
-        onClick={onBack}
-        data-ocid="nav.back_button"
-        className="mb-6 -ml-2 font-body text-muted-foreground hover:text-foreground gap-2"
-      >
-        <ArrowLeft className="h-4 w-4" />
-        Back to Claims
-      </Button>
+      {/* Back button row */}
+      <div className="flex items-center justify-between mb-6">
+        <Button
+          variant="ghost"
+          onClick={onBack}
+          data-ocid="nav.back_button"
+          className="-ml-2 font-body text-muted-foreground hover:text-foreground gap-2"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back to Claims
+        </Button>
+
+        {claim && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleShare}
+            data-ocid="claim_detail.share_button"
+            className="font-body gap-2 border-border text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors"
+            aria-label="Copy claim link to clipboard"
+          >
+            <Share2 className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Share</span>
+          </Button>
+        )}
+      </div>
 
       {claimLoading ? (
         <div className="space-y-4">
@@ -251,10 +356,16 @@ export function ClaimDetail({ claimId, sessionId, onBack }: ClaimDetailProps) {
         <article className="space-y-6">
           {/* Header */}
           <header>
-            <div className="flex items-center gap-2 mb-3">
+            <div className="flex items-center gap-2 mb-3 flex-wrap">
               <CategoryBadge category={claim.category} />
               <span className="text-xs text-muted-foreground font-body">
                 {formatRelativeTime(claim.timestamp)}
+              </span>
+              <span className="text-xs text-muted-foreground font-body">
+                ·{" "}
+                {claim.sessionId === sessionId && claim.sessionId !== "seed"
+                  ? username
+                  : "Anonymous"}
               </span>
             </div>
             <h1 className="font-display text-3xl font-bold leading-tight text-foreground mb-4">
@@ -476,6 +587,20 @@ export function ClaimDetail({ claimId, sessionId, onBack }: ClaimDetailProps) {
                   />
                 </div>
 
+                {evidenceCooldownLeft > 0 && (
+                  <div
+                    data-ocid="evidence.loading_state"
+                    className="flex items-center gap-2 text-xs text-amber-400 font-body bg-amber-400/10 border border-amber-400/20 rounded-sm px-3 py-2"
+                  >
+                    <Clock className="h-3.5 w-3.5 flex-shrink-0" />
+                    <span>
+                      You can add evidence again in{" "}
+                      <span className="font-mono font-bold">
+                        {formatCountdown(evidenceCooldownLeft)}
+                      </span>
+                    </span>
+                  </div>
+                )}
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-muted-foreground font-body">
                     {evidenceText.length}/1000
@@ -483,16 +608,22 @@ export function ClaimDetail({ claimId, sessionId, onBack }: ClaimDetailProps) {
                   <Button
                     type="submit"
                     data-ocid="evidence.submit_button"
-                    disabled={submitEvidence.isPending || !evidenceText.trim()}
+                    disabled={
+                      submitEvidence.isPending ||
+                      evidenceCooldownLeft > 0 ||
+                      !evidenceText.trim()
+                    }
                     size="sm"
                     className="font-body gap-2 bg-primary text-primary-foreground"
                   >
                     {submitEvidence.isPending ? (
                       <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : evidenceCooldownLeft > 0 ? (
+                      <Clock className="h-3 w-3" />
                     ) : (
                       <Send className="h-3 w-3" />
                     )}
-                    Add Evidence
+                    {evidenceCooldownLeft > 0 ? "On Cooldown" : "Add Evidence"}
                   </Button>
                 </div>
               </div>
@@ -532,17 +663,66 @@ export function ClaimDetail({ claimId, sessionId, onBack }: ClaimDetailProps) {
                         <ImageGrid imageUrls={item.imageUrls ?? []} size="sm" />
                         {/* Evidence URLs */}
                         <UrlChips urls={item.urls ?? []} />
-                        {/* Footer: timestamp + vote buttons */}
+                        {/* Footer: timestamp + report + vote buttons */}
                         <div className="flex items-center justify-between mt-2 gap-2">
                           <p className="text-xs text-muted-foreground font-body">
-                            Anonymous · {formatRelativeTime(item.timestamp)}
+                            {item.sessionId === sessionId
+                              ? username
+                              : "Anonymous"}{" "}
+                            · {formatRelativeTime(item.timestamp)}
                           </p>
-                          <EvidenceVoteButtons
-                            evidenceId={item.id}
-                            sessionId={sessionId}
-                            index={idx + 1}
-                          />
+                          <div className="flex items-center gap-1">
+                            {/* Report button */}
+                            <TooltipProvider delayDuration={300}>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <button
+                                    type="button"
+                                    data-ocid={`evidence.report_button.${idx + 1}`}
+                                    onClick={() =>
+                                      handleReportEvidence(item.id)
+                                    }
+                                    disabled={
+                                      reportedEvidence.has(
+                                        item.id.toString(),
+                                      ) || reportContent.isPending
+                                    }
+                                    aria-label="Report evidence"
+                                    className={cn(
+                                      "flex items-center justify-center w-6 h-6 rounded transition-all duration-150",
+                                      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60",
+                                      "disabled:cursor-not-allowed",
+                                      reportedEvidence.has(item.id.toString())
+                                        ? "text-amber-400 opacity-60"
+                                        : "text-muted-foreground opacity-50 hover:opacity-100 hover:text-destructive hover:bg-destructive/10",
+                                    )}
+                                  >
+                                    <Flag className="h-3 w-3" />
+                                  </button>
+                                </TooltipTrigger>
+                                <TooltipContent
+                                  side="top"
+                                  className="text-xs font-body"
+                                >
+                                  {reportedEvidence.has(item.id.toString())
+                                    ? "Reported"
+                                    : "Report evidence"}
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                            <EvidenceVoteButtons
+                              evidenceId={item.id}
+                              sessionId={sessionId}
+                              index={idx + 1}
+                            />
+                          </div>
                         </div>
+                        {/* Threaded replies */}
+                        <ReplyThread
+                          evidenceId={item.id}
+                          sessionId={sessionId}
+                          evidenceIndex={idx + 1}
+                        />
                       </motion.div>
                     ))}
                   </AnimatePresence>

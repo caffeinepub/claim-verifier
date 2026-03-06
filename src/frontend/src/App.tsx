@@ -1,3 +1,4 @@
+import { AdminPanel } from "@/components/AdminPanel";
 import { ClaimCard } from "@/components/ClaimCard";
 import { ClaimDetail } from "@/components/ClaimDetail";
 import { SubmitClaimDialog } from "@/components/SubmitClaimDialog";
@@ -6,10 +7,12 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Toaster } from "@/components/ui/sonner";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useAllClaims, useSessionId } from "@/hooks/useQueries";
+import { useDocumentMeta } from "@/hooks/useDocumentMeta";
+import { useAllClaims, useSessionId, useUsername } from "@/hooks/useQueries";
+import { findClaimBySlug, getClaimSlug } from "@/utils/slug";
 import { Loader2, Plus, Search, Shield } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 const CATEGORIES = [
   "All",
@@ -87,9 +90,78 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedClaimId, setSelectedClaimId] = useState<bigint | null>(null);
   const [isSubmitOpen, setIsSubmitOpen] = useState(false);
+  const [isAdminOpen, setIsAdminOpen] = useState(false);
 
   const { data: sessionId, isLoading: sessionLoading } = useSessionId();
   const { data: claims, isLoading: claimsLoading } = useAllClaims();
+  const username = useUsername();
+
+  // Open Graph / document title meta
+  const selectedClaim =
+    selectedClaimId !== null
+      ? ((claims ?? []).find((c) => c.id === selectedClaimId) ?? null)
+      : null;
+  useDocumentMeta(
+    selectedClaim
+      ? {
+          title: selectedClaim.title,
+          description: selectedClaim.description,
+          url: `${window.location.origin}/claim/${getClaimSlug(selectedClaim, claims ?? [])}`,
+        }
+      : null,
+  );
+
+  // On mount: check if URL matches /claim/<slug> and open that claim
+  useEffect(() => {
+    if (!claims || claims.length === 0) return;
+    const match = window.location.pathname.match(/^\/claim\/(.+)$/);
+    if (match) {
+      const slug = match[1];
+      const found = findClaimBySlug(slug, claims);
+      if (found) {
+        setSelectedClaimId(found.id);
+      }
+    }
+    // Only run when claims first loads
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [claims]);
+
+  // Listen to browser back/forward
+  useEffect(() => {
+    function handlePopState() {
+      const match = window.location.pathname.match(/^\/claim\/(.+)$/);
+      if (match) {
+        if (claims && claims.length > 0) {
+          const found = findClaimBySlug(match[1], claims);
+          if (found) {
+            setSelectedClaimId(found.id);
+            return;
+          }
+        }
+      }
+      setSelectedClaimId(null);
+    }
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, [claims]);
+
+  function openClaim(id: bigint) {
+    setSelectedClaimId(id);
+    if (claims && claims.length > 0) {
+      const claim = claims.find((c) => c.id === id);
+      if (claim) {
+        const slug = getClaimSlug(claim, claims);
+        window.history.pushState({}, "", `/claim/${slug}`);
+        return;
+      }
+    }
+    window.history.pushState({}, "", "/");
+  }
+
+  function goBack() {
+    setSelectedClaimId(null);
+    window.history.pushState({}, "", "/");
+  }
 
   const displayClaims = (
     claims && claims.length > 0 ? claims : SEED_CLAIMS_VISIBLE_EMPTY
@@ -118,7 +190,7 @@ export default function App() {
           <div className="flex items-center justify-between">
             <button
               type="button"
-              onClick={() => setSelectedClaimId(null)}
+              onClick={goBack}
               className="flex items-center gap-3 group"
               aria-label="Go to homepage"
             >
@@ -127,7 +199,7 @@ export default function App() {
               </div>
               <div className="text-left">
                 <h1 className="font-display text-xl font-bold text-foreground leading-none tracking-tight group-hover:text-primary transition-colors">
-                  Claim Verifier
+                  Rebunked
                 </h1>
                 <p className="text-xs text-muted-foreground font-body tracking-widest uppercase mt-0.5">
                   Community Fact-Checking
@@ -146,10 +218,6 @@ export default function App() {
                     Initializing session…
                   </span>
                 </div>
-              ) : sessionId ? (
-                <span className="text-xs text-muted-foreground font-body hidden sm:inline">
-                  Session: {sessionId.slice(0, 8)}…
-                </span>
               ) : null}
               <Button
                 data-ocid="submit_claim.open_modal_button"
@@ -176,7 +244,8 @@ export default function App() {
               key="detail"
               claimId={selectedClaimId}
               sessionId={sessionId}
-              onBack={() => setSelectedClaimId(null)}
+              allClaims={claims ?? []}
+              onBack={goBack}
             />
           ) : (
             <motion.div
@@ -292,7 +361,8 @@ export default function App() {
                       key={claim.id.toString()}
                       claim={claim}
                       index={index + 1}
-                      onClick={() => setSelectedClaimId(claim.id)}
+                      onClick={() => openClaim(claim.id)}
+                      sessionId={sessionId}
                     />
                   ))}
                 </div>
@@ -312,17 +382,36 @@ export default function App() {
                 Anonymous · Decentralized · Community-Verified
               </span>
             </div>
-            <p className="text-xs text-muted-foreground font-body">
-              © {new Date().getFullYear()}.{" "}
-              <a
-                href={`https://caffeine.ai?utm_source=caffeine-footer&utm_medium=referral&utm_content=${encodeURIComponent(window.location.hostname)}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="hover:text-foreground transition-colors"
+            {username && (
+              <span
+                data-ocid="session.username"
+                className="text-xs text-muted-foreground font-body"
               >
-                Built with ❤ using caffeine.ai
-              </a>
-            </p>
+                Connected as: {username}
+              </span>
+            )}
+            <div className="flex items-center gap-3">
+              <p className="text-xs text-muted-foreground font-body">
+                © {new Date().getFullYear()}.{" "}
+                <a
+                  href={`https://caffeine.ai?utm_source=caffeine-footer&utm_medium=referral&utm_content=${encodeURIComponent(window.location.hostname)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:text-foreground transition-colors"
+                >
+                  Built with ❤ using caffeine.ai
+                </a>
+              </p>
+              <button
+                type="button"
+                data-ocid="admin.open_modal_button"
+                onClick={() => setIsAdminOpen(true)}
+                className="text-xs text-muted-foreground/30 hover:text-muted-foreground/60 font-body transition-colors select-none"
+                aria-label="Admin"
+              >
+                Admin
+              </button>
+            </div>
           </div>
         </div>
       </footer>
@@ -335,6 +424,9 @@ export default function App() {
           onOpenChange={setIsSubmitOpen}
         />
       )}
+
+      {/* Admin Panel */}
+      {isAdminOpen && <AdminPanel onClose={() => setIsAdminOpen(false)} />}
     </div>
   );
 }

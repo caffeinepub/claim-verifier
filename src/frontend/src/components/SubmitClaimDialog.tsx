@@ -19,8 +19,8 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useCreateClaim } from "@/hooks/useQueries";
-import { Loader2, Plus } from "lucide-react";
-import { useState } from "react";
+import { Clock, Loader2, Plus } from "lucide-react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ImageUploader } from "./ImageUploader";
 import { UrlInputList } from "./UrlInputList";
@@ -42,6 +42,12 @@ interface SubmitClaimDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
+function formatCountdown(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
 export function SubmitClaimDialog({
   sessionId,
   open,
@@ -52,7 +58,24 @@ export function SubmitClaimDialog({
   const [category, setCategory] = useState("");
   const [claimImageUrls, setClaimImageUrls] = useState<string[]>([]);
   const [claimUrls, setClaimUrls] = useState<string[]>([]);
+  const [cooldownSecondsLeft, setCooldownSecondsLeft] = useState(0);
+
   const createClaim = useCreateClaim();
+
+  // Countdown timer
+  useEffect(() => {
+    if (cooldownSecondsLeft <= 0) return;
+    const timer = setInterval(() => {
+      setCooldownSecondsLeft((prev) => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [cooldownSecondsLeft]);
 
   function handleClose() {
     onOpenChange(false);
@@ -61,11 +84,13 @@ export function SubmitClaimDialog({
     setCategory("");
     setClaimImageUrls([]);
     setClaimUrls([]);
+    // Don't reset cooldown — it persists across dialog open/close
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!title.trim() || !description.trim() || !category) return;
+    if (cooldownSecondsLeft > 0) return;
 
     try {
       await createClaim.mutateAsync({
@@ -78,14 +103,28 @@ export function SubmitClaimDialog({
       });
       toast.success("Claim submitted for community review");
       handleClose();
-    } catch {
-      toast.error("Failed to submit claim. Please try again.");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "";
+      if (msg.startsWith("cooldown:")) {
+        const secs = Number.parseInt(msg.split(":")[1], 10);
+        setCooldownSecondsLeft(Number.isFinite(secs) ? secs : 300);
+      } else if (msg.startsWith("duplicate:")) {
+        const detail = msg.replace(/^duplicate:/, "").trim();
+        toast.error(detail || "A similar claim already exists.");
+      } else {
+        toast.error("Failed to submit claim. Please try again.");
+      }
     }
   }
 
+  const isCoolingDown = cooldownSecondsLeft > 0;
+
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-lg bg-card border-border flex flex-col max-h-[90vh]">
+      <DialogContent
+        data-ocid="submit_claim.dialog"
+        className="sm:max-w-lg bg-card border-border flex flex-col max-h-[90vh]"
+      >
         <DialogHeader className="flex-shrink-0">
           <DialogTitle className="font-display text-xl">
             Submit a Claim
@@ -205,40 +244,63 @@ export function SubmitClaimDialog({
           </form>
         </ScrollArea>
 
-        <DialogFooter className="gap-2 mt-2 flex-shrink-0">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={handleClose}
-            data-ocid="submit_claim.cancel_button"
-            className="font-body border-border"
-          >
-            Cancel
-          </Button>
-          <Button
-            type="submit"
-            form="submit-claim-form"
-            data-ocid="submit_claim.submit_button"
-            disabled={
-              createClaim.isPending ||
-              !title.trim() ||
-              !description.trim() ||
-              !category
-            }
-            className="font-body bg-primary text-primary-foreground hover:bg-primary/90"
-          >
-            {createClaim.isPending ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Submitting…
-              </>
-            ) : (
-              <>
-                <Plus className="mr-2 h-4 w-4" />
-                Submit Claim
-              </>
-            )}
-          </Button>
+        <DialogFooter className="gap-2 mt-2 flex-shrink-0 flex-col items-stretch sm:items-center">
+          {/* Cooldown message */}
+          {isCoolingDown && (
+            <div
+              data-ocid="submit_claim.loading_state"
+              className="flex items-center gap-2 text-xs text-amber-400 font-body bg-amber-400/10 border border-amber-400/20 rounded-sm px-3 py-2 w-full"
+            >
+              <Clock className="h-3.5 w-3.5 flex-shrink-0" />
+              <span>
+                You can submit again in{" "}
+                <span className="font-mono font-bold">
+                  {formatCountdown(cooldownSecondsLeft)}
+                </span>
+              </span>
+            </div>
+          )}
+          <div className="flex gap-2 w-full sm:w-auto">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleClose}
+              data-ocid="submit_claim.cancel_button"
+              className="font-body border-border flex-1 sm:flex-none"
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              form="submit-claim-form"
+              data-ocid="submit_claim.submit_button"
+              disabled={
+                createClaim.isPending ||
+                isCoolingDown ||
+                !title.trim() ||
+                !description.trim() ||
+                !category
+              }
+              className="font-body bg-primary text-primary-foreground hover:bg-primary/90 flex-1 sm:flex-none"
+            >
+              {createClaim.isPending ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Submitting…
+                </>
+              ) : isCoolingDown ? (
+                <>
+                  <Clock className="mr-2 h-4 w-4" />
+                  On Cooldown
+                </>
+              ) : (
+                <>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Submit Claim
+                </>
+              )}
+            </Button>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>

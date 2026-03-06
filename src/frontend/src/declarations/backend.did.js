@@ -38,6 +38,15 @@ export const Evidence = IDL.Record({
   'timestamp' : IDL.Int,
   'sessionId' : IDL.Text,
 });
+export const Reply = IDL.Record({
+  'id' : IDL.Nat,
+  'authorUsername' : IDL.Text,
+  'text' : IDL.Text,
+  'timestamp' : IDL.Int,
+  'parentReplyId' : IDL.Nat,
+  'sessionId' : IDL.Text,
+  'evidenceId' : IDL.Nat,
+});
 
 export const idlService = IDL.Service({
   '_caffeineStorageBlobIsLive' : IDL.Func(
@@ -66,6 +75,26 @@ export const idlService = IDL.Service({
       [],
     ),
   '_caffeineStorageUpdateGatewayPrincipals' : IDL.Func([], [], []),
+  'addReply' : IDL.Func(
+      [IDL.Nat, IDL.Nat, IDL.Text, IDL.Text, IDL.Text],
+      [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
+      [],
+    ),
+  'adminDeleteClaim' : IDL.Func(
+      [IDL.Nat, IDL.Text],
+      [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
+      [],
+    ),
+  'adminDeleteEvidence' : IDL.Func(
+      [IDL.Nat, IDL.Text],
+      [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
+      [],
+    ),
+  'adminDeleteReply' : IDL.Func(
+      [IDL.Nat, IDL.Text],
+      [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
+      [],
+    ),
   'createClaim' : IDL.Func(
       [
         IDL.Text,
@@ -75,7 +104,7 @@ export const idlService = IDL.Service({
         IDL.Vec(IDL.Text),
         IDL.Vec(IDL.Text),
       ],
-      [],
+      [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
       [],
     ),
   'generateSessionId' : IDL.Func([], [IDL.Text], []),
@@ -88,12 +117,27 @@ export const idlService = IDL.Service({
       [IDL.Record({ 'netScore' : IDL.Int })],
       ['query'],
     ),
+  'getHiddenClaims' : IDL.Func([IDL.Text], [IDL.Vec(Claim)], ['query']),
+  'getHiddenEvidence' : IDL.Func([IDL.Text], [IDL.Vec(Evidence)], ['query']),
+  'getHiddenReplies' : IDL.Func([IDL.Text], [IDL.Vec(Reply)], ['query']),
+  'getReplies' : IDL.Func([IDL.Nat], [IDL.Vec(Reply)], ['query']),
+  'getReplyVoteTally' : IDL.Func(
+      [IDL.Nat],
+      [IDL.Record({ 'netScore' : IDL.Int })],
+      ['query'],
+    ),
+  'getReportCount' : IDL.Func([IDL.Nat, IDL.Text], [IDL.Nat], ['query']),
   'getSessionVoteForClaim' : IDL.Func(
       [IDL.Nat, IDL.Text],
       [IDL.Opt(IDL.Text)],
       ['query'],
     ),
   'getSessionVoteForEvidence' : IDL.Func(
+      [IDL.Nat, IDL.Text],
+      [IDL.Opt(IDL.Text)],
+      ['query'],
+    ),
+  'getSessionVoteForReply' : IDL.Func(
       [IDL.Nat, IDL.Text],
       [IDL.Opt(IDL.Text)],
       ['query'],
@@ -109,13 +153,39 @@ export const idlService = IDL.Service({
       ],
       ['query'],
     ),
+  'reportContent' : IDL.Func(
+      [IDL.Nat, IDL.Text, IDL.Text],
+      [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
+      [],
+    ),
+  'reportReply' : IDL.Func(
+      [IDL.Nat, IDL.Text],
+      [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
+      [],
+    ),
+  'restoreClaim' : IDL.Func(
+      [IDL.Nat, IDL.Text],
+      [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
+      [],
+    ),
+  'restoreEvidence' : IDL.Func(
+      [IDL.Nat, IDL.Text],
+      [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
+      [],
+    ),
+  'restoreReply' : IDL.Func(
+      [IDL.Nat, IDL.Text],
+      [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
+      [],
+    ),
   'submitEvidence' : IDL.Func(
       [IDL.Nat, IDL.Text, IDL.Text, IDL.Vec(IDL.Text), IDL.Vec(IDL.Text)],
-      [],
+      [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
       [],
     ),
   'submitVote' : IDL.Func([IDL.Nat, IDL.Text, IDL.Text], [], []),
   'voteEvidence' : IDL.Func([IDL.Nat, IDL.Text, IDL.Text], [], []),
+  'voteReply' : IDL.Func([IDL.Nat, IDL.Text, IDL.Text], [], []),
 });
 
 export const idlInitArgs = [];
@@ -151,6 +221,15 @@ export const idlFactory = ({ IDL }) => {
     'timestamp' : IDL.Int,
     'sessionId' : IDL.Text,
   });
+  const Reply = IDL.Record({
+    'id' : IDL.Nat,
+    'authorUsername' : IDL.Text,
+    'text' : IDL.Text,
+    'timestamp' : IDL.Int,
+    'parentReplyId' : IDL.Nat,
+    'sessionId' : IDL.Text,
+    'evidenceId' : IDL.Nat,
+  });
   
   return IDL.Service({
     '_caffeineStorageBlobIsLive' : IDL.Func(
@@ -179,6 +258,26 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     '_caffeineStorageUpdateGatewayPrincipals' : IDL.Func([], [], []),
+    'addReply' : IDL.Func(
+        [IDL.Nat, IDL.Nat, IDL.Text, IDL.Text, IDL.Text],
+        [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
+        [],
+      ),
+    'adminDeleteClaim' : IDL.Func(
+        [IDL.Nat, IDL.Text],
+        [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
+        [],
+      ),
+    'adminDeleteEvidence' : IDL.Func(
+        [IDL.Nat, IDL.Text],
+        [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
+        [],
+      ),
+    'adminDeleteReply' : IDL.Func(
+        [IDL.Nat, IDL.Text],
+        [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
+        [],
+      ),
     'createClaim' : IDL.Func(
         [
           IDL.Text,
@@ -188,7 +287,7 @@ export const idlFactory = ({ IDL }) => {
           IDL.Vec(IDL.Text),
           IDL.Vec(IDL.Text),
         ],
-        [],
+        [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
         [],
       ),
     'generateSessionId' : IDL.Func([], [IDL.Text], []),
@@ -201,12 +300,27 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Record({ 'netScore' : IDL.Int })],
         ['query'],
       ),
+    'getHiddenClaims' : IDL.Func([IDL.Text], [IDL.Vec(Claim)], ['query']),
+    'getHiddenEvidence' : IDL.Func([IDL.Text], [IDL.Vec(Evidence)], ['query']),
+    'getHiddenReplies' : IDL.Func([IDL.Text], [IDL.Vec(Reply)], ['query']),
+    'getReplies' : IDL.Func([IDL.Nat], [IDL.Vec(Reply)], ['query']),
+    'getReplyVoteTally' : IDL.Func(
+        [IDL.Nat],
+        [IDL.Record({ 'netScore' : IDL.Int })],
+        ['query'],
+      ),
+    'getReportCount' : IDL.Func([IDL.Nat, IDL.Text], [IDL.Nat], ['query']),
     'getSessionVoteForClaim' : IDL.Func(
         [IDL.Nat, IDL.Text],
         [IDL.Opt(IDL.Text)],
         ['query'],
       ),
     'getSessionVoteForEvidence' : IDL.Func(
+        [IDL.Nat, IDL.Text],
+        [IDL.Opt(IDL.Text)],
+        ['query'],
+      ),
+    'getSessionVoteForReply' : IDL.Func(
         [IDL.Nat, IDL.Text],
         [IDL.Opt(IDL.Text)],
         ['query'],
@@ -222,13 +336,39 @@ export const idlFactory = ({ IDL }) => {
         ],
         ['query'],
       ),
+    'reportContent' : IDL.Func(
+        [IDL.Nat, IDL.Text, IDL.Text],
+        [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
+        [],
+      ),
+    'reportReply' : IDL.Func(
+        [IDL.Nat, IDL.Text],
+        [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
+        [],
+      ),
+    'restoreClaim' : IDL.Func(
+        [IDL.Nat, IDL.Text],
+        [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
+        [],
+      ),
+    'restoreEvidence' : IDL.Func(
+        [IDL.Nat, IDL.Text],
+        [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
+        [],
+      ),
+    'restoreReply' : IDL.Func(
+        [IDL.Nat, IDL.Text],
+        [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
+        [],
+      ),
     'submitEvidence' : IDL.Func(
         [IDL.Nat, IDL.Text, IDL.Text, IDL.Vec(IDL.Text), IDL.Vec(IDL.Text)],
-        [],
+        [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
         [],
       ),
     'submitVote' : IDL.Func([IDL.Nat, IDL.Text, IDL.Text], [], []),
     'voteEvidence' : IDL.Func([IDL.Nat, IDL.Text, IDL.Text], [], []),
+    'voteReply' : IDL.Func([IDL.Nat, IDL.Text, IDL.Text], [], []),
   });
 };
 

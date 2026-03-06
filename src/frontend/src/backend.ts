@@ -108,6 +108,15 @@ export interface Evidence {
     timestamp: bigint;
     sessionId: string;
 }
+export interface Reply {
+    id: bigint;
+    authorUsername: string;
+    text: string;
+    timestamp: bigint;
+    parentReplyId: bigint;
+    sessionId: string;
+    evidenceId: bigint;
+}
 export interface _CaffeineStorageCreateCertificateResult {
     method: string;
     blob_hash: string;
@@ -126,7 +135,41 @@ export interface backendInterface {
     _caffeineStorageCreateCertificate(blobHash: string): Promise<_CaffeineStorageCreateCertificateResult>;
     _caffeineStorageRefillCashier(refillInformation: _CaffeineStorageRefillInformation | null): Promise<_CaffeineStorageRefillResult>;
     _caffeineStorageUpdateGatewayPrincipals(): Promise<void>;
-    createClaim(title: string, description: string, category: string, sessionId: string, imageUrls: Array<string>, urls: Array<string>): Promise<void>;
+    addReply(evidenceId: bigint, parentReplyId: bigint, text: string, authorUsername: string, sessionId: string): Promise<{
+        __kind__: "ok";
+        ok: null;
+    } | {
+        __kind__: "err";
+        err: string;
+    }>;
+    adminDeleteClaim(id: bigint, password: string): Promise<{
+        __kind__: "ok";
+        ok: null;
+    } | {
+        __kind__: "err";
+        err: string;
+    }>;
+    adminDeleteEvidence(id: bigint, password: string): Promise<{
+        __kind__: "ok";
+        ok: null;
+    } | {
+        __kind__: "err";
+        err: string;
+    }>;
+    adminDeleteReply(id: bigint, password: string): Promise<{
+        __kind__: "ok";
+        ok: null;
+    } | {
+        __kind__: "err";
+        err: string;
+    }>;
+    createClaim(title: string, description: string, category: string, sessionId: string, imageUrls: Array<string>, urls: Array<string>): Promise<{
+        __kind__: "ok";
+        ok: null;
+    } | {
+        __kind__: "err";
+        err: string;
+    }>;
     generateSessionId(): Promise<string>;
     getAllClaims(): Promise<Array<Claim>>;
     getClaimById(id: bigint): Promise<Claim>;
@@ -135,16 +178,67 @@ export interface backendInterface {
     getEvidenceVoteTally(evidenceId: bigint): Promise<{
         netScore: bigint;
     }>;
+    getHiddenClaims(password: string): Promise<Array<Claim>>;
+    getHiddenEvidence(password: string): Promise<Array<Evidence>>;
+    getHiddenReplies(password: string): Promise<Array<Reply>>;
+    getReplies(evidenceId: bigint): Promise<Array<Reply>>;
+    getReplyVoteTally(replyId: bigint): Promise<{
+        netScore: bigint;
+    }>;
+    getReportCount(targetId: bigint, targetType: string): Promise<bigint>;
     getSessionVoteForClaim(claimId: bigint, sessionId: string): Promise<string | null>;
     getSessionVoteForEvidence(evidenceId: bigint, sessionId: string): Promise<string | null>;
+    getSessionVoteForReply(replyId: bigint, sessionId: string): Promise<string | null>;
     getVoteTally(claimId: bigint): Promise<{
         trueCount: bigint;
         falseCount: bigint;
         unverifiedCount: bigint;
     }>;
-    submitEvidence(claimId: bigint, sessionId: string, text: string, imageUrls: Array<string>, urls: Array<string>): Promise<void>;
+    reportContent(targetId: bigint, targetType: string, sessionId: string): Promise<{
+        __kind__: "ok";
+        ok: null;
+    } | {
+        __kind__: "err";
+        err: string;
+    }>;
+    reportReply(replyId: bigint, sessionId: string): Promise<{
+        __kind__: "ok";
+        ok: null;
+    } | {
+        __kind__: "err";
+        err: string;
+    }>;
+    restoreClaim(id: bigint, password: string): Promise<{
+        __kind__: "ok";
+        ok: null;
+    } | {
+        __kind__: "err";
+        err: string;
+    }>;
+    restoreEvidence(id: bigint, password: string): Promise<{
+        __kind__: "ok";
+        ok: null;
+    } | {
+        __kind__: "err";
+        err: string;
+    }>;
+    restoreReply(id: bigint, password: string): Promise<{
+        __kind__: "ok";
+        ok: null;
+    } | {
+        __kind__: "err";
+        err: string;
+    }>;
+    submitEvidence(claimId: bigint, sessionId: string, text: string, imageUrls: Array<string>, urls: Array<string>): Promise<{
+        __kind__: "ok";
+        ok: null;
+    } | {
+        __kind__: "err";
+        err: string;
+    }>;
     submitVote(claimId: bigint, sessionId: string, verdict: string): Promise<void>;
     voteEvidence(evidenceId: bigint, sessionId: string, direction: string): Promise<void>;
+    voteReply(replyId: bigint, sessionId: string, direction: string): Promise<void>;
 }
 import type { _CaffeineStorageRefillInformation as __CaffeineStorageRefillInformation, _CaffeineStorageRefillResult as __CaffeineStorageRefillResult } from "./declarations/backend.did.d.ts";
 export class Backend implements backendInterface {
@@ -233,18 +327,104 @@ export class Backend implements backendInterface {
             return result;
         }
     }
-    async createClaim(arg0: string, arg1: string, arg2: string, arg3: string, arg4: Array<string>, arg5: Array<string>): Promise<void> {
+    async addReply(arg0: bigint, arg1: bigint, arg2: string, arg3: string, arg4: string): Promise<{
+        __kind__: "ok";
+        ok: null;
+    } | {
+        __kind__: "err";
+        err: string;
+    }> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.addReply(arg0, arg1, arg2, arg3, arg4);
+                return from_candid_variant_n8(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.addReply(arg0, arg1, arg2, arg3, arg4);
+            return from_candid_variant_n8(this._uploadFile, this._downloadFile, result);
+        }
+    }
+    async adminDeleteClaim(arg0: bigint, arg1: string): Promise<{
+        __kind__: "ok";
+        ok: null;
+    } | {
+        __kind__: "err";
+        err: string;
+    }> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.adminDeleteClaim(arg0, arg1);
+                return from_candid_variant_n8(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.adminDeleteClaim(arg0, arg1);
+            return from_candid_variant_n8(this._uploadFile, this._downloadFile, result);
+        }
+    }
+    async adminDeleteEvidence(arg0: bigint, arg1: string): Promise<{
+        __kind__: "ok";
+        ok: null;
+    } | {
+        __kind__: "err";
+        err: string;
+    }> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.adminDeleteEvidence(arg0, arg1);
+                return from_candid_variant_n8(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.adminDeleteEvidence(arg0, arg1);
+            return from_candid_variant_n8(this._uploadFile, this._downloadFile, result);
+        }
+    }
+    async adminDeleteReply(arg0: bigint, arg1: string): Promise<{
+        __kind__: "ok";
+        ok: null;
+    } | {
+        __kind__: "err";
+        err: string;
+    }> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.adminDeleteReply(arg0, arg1);
+                return from_candid_variant_n8(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.adminDeleteReply(arg0, arg1);
+            return from_candid_variant_n8(this._uploadFile, this._downloadFile, result);
+        }
+    }
+    async createClaim(arg0: string, arg1: string, arg2: string, arg3: string, arg4: Array<string>, arg5: Array<string>): Promise<{
+        __kind__: "ok";
+        ok: null;
+    } | {
+        __kind__: "err";
+        err: string;
+    }> {
         if (this.processError) {
             try {
                 const result = await this.actor.createClaim(arg0, arg1, arg2, arg3, arg4, arg5);
-                return result;
+                return from_candid_variant_n8(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
             const result = await this.actor.createClaim(arg0, arg1, arg2, arg3, arg4, arg5);
-            return result;
+            return from_candid_variant_n8(this._uploadFile, this._downloadFile, result);
         }
     }
     async generateSessionId(): Promise<string> {
@@ -333,32 +513,132 @@ export class Backend implements backendInterface {
             return result;
         }
     }
+    async getHiddenClaims(arg0: string): Promise<Array<Claim>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getHiddenClaims(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getHiddenClaims(arg0);
+            return result;
+        }
+    }
+    async getHiddenEvidence(arg0: string): Promise<Array<Evidence>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getHiddenEvidence(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getHiddenEvidence(arg0);
+            return result;
+        }
+    }
+    async getHiddenReplies(arg0: string): Promise<Array<Reply>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getHiddenReplies(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getHiddenReplies(arg0);
+            return result;
+        }
+    }
+    async getReplies(arg0: bigint): Promise<Array<Reply>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getReplies(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getReplies(arg0);
+            return result;
+        }
+    }
+    async getReplyVoteTally(arg0: bigint): Promise<{
+        netScore: bigint;
+    }> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getReplyVoteTally(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getReplyVoteTally(arg0);
+            return result;
+        }
+    }
+    async getReportCount(arg0: bigint, arg1: string): Promise<bigint> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getReportCount(arg0, arg1);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getReportCount(arg0, arg1);
+            return result;
+        }
+    }
     async getSessionVoteForClaim(arg0: bigint, arg1: string): Promise<string | null> {
         if (this.processError) {
             try {
                 const result = await this.actor.getSessionVoteForClaim(arg0, arg1);
-                return from_candid_opt_n8(this._uploadFile, this._downloadFile, result);
+                return from_candid_opt_n9(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
             const result = await this.actor.getSessionVoteForClaim(arg0, arg1);
-            return from_candid_opt_n8(this._uploadFile, this._downloadFile, result);
+            return from_candid_opt_n9(this._uploadFile, this._downloadFile, result);
         }
     }
     async getSessionVoteForEvidence(arg0: bigint, arg1: string): Promise<string | null> {
         if (this.processError) {
             try {
                 const result = await this.actor.getSessionVoteForEvidence(arg0, arg1);
-                return from_candid_opt_n8(this._uploadFile, this._downloadFile, result);
+                return from_candid_opt_n9(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
             const result = await this.actor.getSessionVoteForEvidence(arg0, arg1);
-            return from_candid_opt_n8(this._uploadFile, this._downloadFile, result);
+            return from_candid_opt_n9(this._uploadFile, this._downloadFile, result);
+        }
+    }
+    async getSessionVoteForReply(arg0: bigint, arg1: string): Promise<string | null> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getSessionVoteForReply(arg0, arg1);
+                return from_candid_opt_n9(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getSessionVoteForReply(arg0, arg1);
+            return from_candid_opt_n9(this._uploadFile, this._downloadFile, result);
         }
     }
     async getVoteTally(arg0: bigint): Promise<{
@@ -379,18 +659,124 @@ export class Backend implements backendInterface {
             return result;
         }
     }
-    async submitEvidence(arg0: bigint, arg1: string, arg2: string, arg3: Array<string>, arg4: Array<string>): Promise<void> {
+    async reportContent(arg0: bigint, arg1: string, arg2: string): Promise<{
+        __kind__: "ok";
+        ok: null;
+    } | {
+        __kind__: "err";
+        err: string;
+    }> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.reportContent(arg0, arg1, arg2);
+                return from_candid_variant_n8(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.reportContent(arg0, arg1, arg2);
+            return from_candid_variant_n8(this._uploadFile, this._downloadFile, result);
+        }
+    }
+    async reportReply(arg0: bigint, arg1: string): Promise<{
+        __kind__: "ok";
+        ok: null;
+    } | {
+        __kind__: "err";
+        err: string;
+    }> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.reportReply(arg0, arg1);
+                return from_candid_variant_n8(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.reportReply(arg0, arg1);
+            return from_candid_variant_n8(this._uploadFile, this._downloadFile, result);
+        }
+    }
+    async restoreClaim(arg0: bigint, arg1: string): Promise<{
+        __kind__: "ok";
+        ok: null;
+    } | {
+        __kind__: "err";
+        err: string;
+    }> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.restoreClaim(arg0, arg1);
+                return from_candid_variant_n8(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.restoreClaim(arg0, arg1);
+            return from_candid_variant_n8(this._uploadFile, this._downloadFile, result);
+        }
+    }
+    async restoreEvidence(arg0: bigint, arg1: string): Promise<{
+        __kind__: "ok";
+        ok: null;
+    } | {
+        __kind__: "err";
+        err: string;
+    }> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.restoreEvidence(arg0, arg1);
+                return from_candid_variant_n8(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.restoreEvidence(arg0, arg1);
+            return from_candid_variant_n8(this._uploadFile, this._downloadFile, result);
+        }
+    }
+    async restoreReply(arg0: bigint, arg1: string): Promise<{
+        __kind__: "ok";
+        ok: null;
+    } | {
+        __kind__: "err";
+        err: string;
+    }> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.restoreReply(arg0, arg1);
+                return from_candid_variant_n8(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.restoreReply(arg0, arg1);
+            return from_candid_variant_n8(this._uploadFile, this._downloadFile, result);
+        }
+    }
+    async submitEvidence(arg0: bigint, arg1: string, arg2: string, arg3: Array<string>, arg4: Array<string>): Promise<{
+        __kind__: "ok";
+        ok: null;
+    } | {
+        __kind__: "err";
+        err: string;
+    }> {
         if (this.processError) {
             try {
                 const result = await this.actor.submitEvidence(arg0, arg1, arg2, arg3, arg4);
-                return result;
+                return from_candid_variant_n8(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
             const result = await this.actor.submitEvidence(arg0, arg1, arg2, arg3, arg4);
-            return result;
+            return from_candid_variant_n8(this._uploadFile, this._downloadFile, result);
         }
     }
     async submitVote(arg0: bigint, arg1: string, arg2: string): Promise<void> {
@@ -421,6 +807,20 @@ export class Backend implements backendInterface {
             return result;
         }
     }
+    async voteReply(arg0: bigint, arg1: string, arg2: string): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.voteReply(arg0, arg1, arg2);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.voteReply(arg0, arg1, arg2);
+            return result;
+        }
+    }
 }
 function from_candid__CaffeineStorageRefillResult_n4(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: __CaffeineStorageRefillResult): _CaffeineStorageRefillResult {
     return from_candid_record_n5(_uploadFile, _downloadFile, value);
@@ -431,7 +831,7 @@ function from_candid_opt_n6(_uploadFile: (file: ExternalBlob) => Promise<Uint8Ar
 function from_candid_opt_n7(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [bigint]): bigint | null {
     return value.length === 0 ? null : value[0];
 }
-function from_candid_opt_n8(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [string]): string | null {
+function from_candid_opt_n9(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [string]): string | null {
     return value.length === 0 ? null : value[0];
 }
 function from_candid_record_n5(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
@@ -445,6 +845,25 @@ function from_candid_record_n5(_uploadFile: (file: ExternalBlob) => Promise<Uint
         success: record_opt_to_undefined(from_candid_opt_n6(_uploadFile, _downloadFile, value.success)),
         topped_up_amount: record_opt_to_undefined(from_candid_opt_n7(_uploadFile, _downloadFile, value.topped_up_amount))
     };
+}
+function from_candid_variant_n8(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
+    ok: null;
+} | {
+    err: string;
+}): {
+    __kind__: "ok";
+    ok: null;
+} | {
+    __kind__: "err";
+    err: string;
+} {
+    return "ok" in value ? {
+        __kind__: "ok",
+        ok: value.ok
+    } : "err" in value ? {
+        __kind__: "err",
+        err: value.err
+    } : value;
 }
 function to_candid__CaffeineStorageRefillInformation_n2(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _CaffeineStorageRefillInformation): __CaffeineStorageRefillInformation {
     return to_candid_record_n3(_uploadFile, _downloadFile, value);

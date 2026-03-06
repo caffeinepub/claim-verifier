@@ -1,0 +1,94 @@
+type _CaffeineStorageRefillResult = 
+ record {
+   success: opt bool;
+   topped_up_amount: opt nat;
+ };
+type _CaffeineStorageRefillInformation = record {
+                                           proposed_top_up_amount: opt nat;};
+type _CaffeineStorageCreateCertificateResult = 
+ record {
+   blob_hash: text;
+   method: text;
+ };
+type Evidence = 
+ record {
+   claimId: nat;
+   id: nat;
+   imageUrls: vec text;
+   sessionId: text;
+   "text": text;
+   timestamp: int;
+   urls: vec text;
+ };
+type Claim = 
+ record {
+   category: text;
+   description: text;
+   id: nat;
+   imageUrls: vec text;
+   sessionId: text;
+   timestamp: int;
+   title: text;
+   urls: vec text;
+ };
+service : {
+  _caffeineStorageBlobIsLive: (hash: blob) -> (bool) query;
+  _caffeineStorageBlobsToDelete: () -> (vec blob) query;
+  _caffeineStorageConfirmBlobDeletion: (blobs: vec blob) -> ();
+  _caffeineStorageCreateCertificate: (blobHash: text) ->
+   (_CaffeineStorageCreateCertificateResult);
+  _caffeineStorageRefillCashier: (refillInformation:
+   opt _CaffeineStorageRefillInformation) -> (_CaffeineStorageRefillResult);
+  _caffeineStorageUpdateGatewayPrincipals: () -> ();
+  adminDeleteClaim: (id: nat, password: text) -> (variant {
+                                                    err: text;
+                                                    ok;
+                                                  });
+  adminDeleteEvidence: (id: nat, password: text) -> (variant {
+                                                       err: text;
+                                                       ok;
+                                                     });
+  createClaim: (title: text, description: text, category: text, sessionId:
+   text, imageUrls: vec text, urls: vec text) -> (variant {
+                                                    err: text;
+                                                    ok;
+                                                  });
+  generateSessionId: () -> (text);
+  getAllClaims: () -> (vec Claim) query;
+  getClaimById: (id: nat) -> (Claim) query;
+  getClaimsByCategory: (category: text) -> (vec Claim) query;
+  getEvidenceForClaim: (claimId: nat) -> (vec Evidence) query;
+  getEvidenceVoteTally: (evidenceId: nat) -> (record {netScore: int;}) query;
+  getHiddenClaims: (password: text) -> (vec Claim) query;
+  getHiddenEvidence: (password: text) -> (vec Evidence) query;
+  getReportCount: (targetId: nat, targetType: text) -> (nat) query;
+  getSessionVoteForClaim: (claimId: nat, sessionId: text) -> (opt text) query;
+  getSessionVoteForEvidence: (evidenceId: nat, sessionId: text) ->
+   (opt text) query;
+  getVoteTally: (claimId: nat) ->
+   (record {
+      falseCount: nat;
+      trueCount: nat;
+      unverifiedCount: nat;
+    }) query;
+  reportContent: (targetId: nat, targetType: text, sessionId: text) ->
+   (variant {
+      err: text;
+      ok;
+    });
+  restoreClaim: (id: nat, password: text) -> (variant {
+                                                err: text;
+                                                ok;
+                                              });
+  restoreEvidence: (id: nat, password: text) -> (variant {
+                                                   err: text;
+                                                   ok;
+                                                 });
+  submitEvidence: (claimId: nat, sessionId: text, "text": text, imageUrls:
+   vec text, urls: vec text) -> (variant {
+                                   err: text;
+                                   ok;
+                                 });
+  submitVote: (claimId: nat, sessionId: text, verdict: text) -> ();
+  voteEvidence: (evidenceId: nat, sessionId: text, direction: text) -> ();
+}
