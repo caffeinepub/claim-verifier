@@ -14,6 +14,8 @@ const categoryStyles: Record<string, string> = {
   Sports: "bg-orange-950 text-orange-300 border-orange-800",
   Entertainment: "bg-pink-950 text-pink-300 border-pink-800",
   Religion: "bg-amber-950 text-amber-300 border-amber-800",
+  Art: "bg-rose-950 text-rose-300 border-rose-800",
+  Finance: "bg-emerald-950 text-emerald-300 border-emerald-800",
   Other: "bg-secondary text-secondary-foreground border-border",
 };
 

@@ -1,3 +1,4 @@
+import { ReportDialog } from "@/components/ReportDialog";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -10,17 +11,13 @@ import {
   type Reply,
   useAddReply,
   useReplies,
-  useReplyVoteTally,
   useReportReply,
-  useSessionVoteForReply,
   useUsername,
-  useVoteReply,
 } from "@/hooks/useQueries";
 import { cn } from "@/lib/utils";
 import { formatRelativeTime } from "@/utils/time";
 import {
   ChevronDown,
-  ChevronUp,
   Clock,
   CornerDownRight,
   Flag,
@@ -31,148 +28,6 @@ import {
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-
-// ── Reply Vote Buttons ────────────────────────────────────────────────────────
-
-interface ReplyVoteButtonsProps {
-  replyId: bigint;
-  sessionId: string;
-  index: number;
-}
-
-function ReplyVoteButtons({
-  replyId,
-  sessionId,
-  index,
-}: ReplyVoteButtonsProps) {
-  const { data: tally } = useReplyVoteTally(replyId);
-  const { data: sessionVote } = useSessionVoteForReply(replyId, sessionId);
-  const voteReply = useVoteReply();
-
-  const [optimisticVote, setOptimisticVote] = useState<
-    string | null | undefined
-  >(undefined);
-  const [optimisticScore, setOptimisticScore] = useState<number | undefined>(
-    undefined,
-  );
-
-  const currentVote =
-    optimisticVote !== undefined ? optimisticVote : (sessionVote ?? null);
-  const serverScore = tally ? Number(tally.netScore) : 0;
-  const displayScore =
-    optimisticScore !== undefined ? optimisticScore : serverScore;
-
-  async function handleVote(direction: "up" | "down") {
-    if (voteReply.isPending) return;
-
-    const prevVote = currentVote;
-    const prevScore = displayScore;
-
-    let nextVote: string | null;
-    let scoreDelta = 0;
-
-    if (prevVote === direction) {
-      nextVote = null;
-      scoreDelta = direction === "up" ? -1 : 1;
-    } else {
-      nextVote = direction;
-      if (prevVote === null || prevVote === undefined) {
-        scoreDelta = direction === "up" ? 1 : -1;
-      } else {
-        scoreDelta = direction === "up" ? 2 : -2;
-      }
-    }
-
-    setOptimisticVote(nextVote);
-    setOptimisticScore(prevScore + scoreDelta);
-
-    try {
-      await voteReply.mutateAsync({ replyId, sessionId, direction });
-      setOptimisticVote(undefined);
-      setOptimisticScore(undefined);
-    } catch {
-      setOptimisticVote(prevVote ?? undefined);
-      setOptimisticScore(prevScore);
-      toast.error("Failed to record vote");
-    }
-  }
-
-  const isVoting = voteReply.isPending;
-
-  const scoreColor =
-    displayScore > 0
-      ? "text-amber-400"
-      : displayScore < 0
-        ? "text-blue-400"
-        : "text-muted-foreground";
-
-  return (
-    <div
-      className="flex items-center gap-0.5 select-none"
-      aria-label="Vote on this reply"
-    >
-      <button
-        type="button"
-        data-ocid={`reply.upvote_button.${index}`}
-        onClick={() => handleVote("up")}
-        disabled={isVoting}
-        aria-label="Upvote reply"
-        aria-pressed={currentVote === "up"}
-        className={cn(
-          "flex items-center justify-center w-6 h-6 rounded transition-all duration-150",
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60",
-          "disabled:cursor-not-allowed disabled:opacity-60",
-          currentVote === "up"
-            ? "text-amber-400 bg-amber-400/10 hover:bg-amber-400/20"
-            : "text-muted-foreground hover:text-amber-400 hover:bg-amber-400/10",
-        )}
-      >
-        <ChevronUp
-          className={cn(
-            "h-3.5 w-3.5 transition-transform duration-150",
-            currentVote === "up" && "scale-110",
-          )}
-          strokeWidth={currentVote === "up" ? 2.5 : 2}
-        />
-      </button>
-
-      <span
-        data-ocid={`reply.score.${index}`}
-        className={cn(
-          "text-xs font-mono font-semibold tabular-nums min-w-[1.2rem] text-center transition-colors duration-150",
-          scoreColor,
-        )}
-      >
-        {displayScore}
-      </span>
-
-      <button
-        type="button"
-        data-ocid={`reply.downvote_button.${index}`}
-        onClick={() => handleVote("down")}
-        disabled={isVoting}
-        aria-label="Downvote reply"
-        aria-pressed={currentVote === "down"}
-        className={cn(
-          "flex items-center justify-center w-6 h-6 rounded transition-all duration-150",
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60",
-          "disabled:cursor-not-allowed disabled:opacity-60",
-          currentVote === "down"
-            ? "text-blue-400 bg-blue-400/10 hover:bg-blue-400/20"
-            : "text-muted-foreground hover:text-blue-400 hover:bg-blue-400/10",
-        )}
-      >
-        <ChevronDown
-          className={cn(
-            "h-3.5 w-3.5 transition-transform duration-150",
-            currentVote === "down" && "scale-110",
-          )}
-          strokeWidth={currentVote === "down" ? 2.5 : 2}
-        />
-      </button>
-    </div>
-  );
-}
 
 // ── Reply Form ────────────────────────────────────────────────────────────────
 
@@ -345,6 +200,7 @@ function ReplyCard({
   const isOwnReply = reply.sessionId === sessionId;
   const displayAuthor = isOwnReply ? username : reply.authorUsername;
   const isReplying = replyingToId === reply.id;
+  const [reportDialogOpen, setReportDialogOpen] = useState(false);
 
   return (
     <div
@@ -372,12 +228,6 @@ function ReplyCard({
 
         {/* Actions row */}
         <div className="flex items-center gap-2">
-          <ReplyVoteButtons
-            replyId={reply.id}
-            sessionId={sessionId}
-            index={index}
-          />
-
           {/* Reply button */}
           <button
             type="button"
@@ -402,7 +252,7 @@ function ReplyCard({
                 <button
                   type="button"
                   data-ocid={`reply.report_button.${index}`}
-                  onClick={() => onReport(reply.id)}
+                  onClick={() => setReportDialogOpen(true)}
                   disabled={reportedIds.has(reply.id.toString())}
                   aria-label="Report reply"
                   className={cn(
@@ -425,6 +275,16 @@ function ReplyCard({
             </Tooltip>
           </TooltipProvider>
         </div>
+
+        {/* Report dialog */}
+        <ReportDialog
+          isOpen={reportDialogOpen}
+          onClose={() => setReportDialogOpen(false)}
+          onConfirm={async (_reason) => {
+            await onReport(reply.id);
+          }}
+          title="Report Reply"
+        />
 
         {/* Inline reply form */}
         <AnimatePresence>

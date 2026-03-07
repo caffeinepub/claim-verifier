@@ -37,6 +37,7 @@ export const Evidence = IDL.Record({
   'claimId' : IDL.Nat,
   'timestamp' : IDL.Int,
   'sessionId' : IDL.Text,
+  'evidenceType' : IDL.Text,
 });
 export const Reply = IDL.Record({
   'id' : IDL.Nat,
@@ -111,6 +112,23 @@ export const idlService = IDL.Service({
   'getAllClaims' : IDL.Func([], [IDL.Vec(Claim)], ['query']),
   'getClaimById' : IDL.Func([IDL.Nat], [Claim], ['query']),
   'getClaimsByCategory' : IDL.Func([IDL.Text], [IDL.Vec(Claim)], ['query']),
+  'getEnhancedVoteTally' : IDL.Func(
+      [IDL.Nat],
+      [
+        IDL.Record({
+          'trueFromEvidence' : IDL.Int,
+          'unverifiedFromEvidence' : IDL.Int,
+          'falseDirect' : IDL.Int,
+          'trueCount' : IDL.Int,
+          'unverifiedDirect' : IDL.Int,
+          'falseFromEvidence' : IDL.Int,
+          'trueDirect' : IDL.Int,
+          'falseCount' : IDL.Int,
+          'unverifiedCount' : IDL.Int,
+        }),
+      ],
+      ['query'],
+    ),
   'getEvidenceForClaim' : IDL.Func([IDL.Nat], [IDL.Vec(Evidence)], ['query']),
   'getEvidenceVoteTally' : IDL.Func(
       [IDL.Nat],
@@ -179,7 +197,14 @@ export const idlService = IDL.Service({
       [],
     ),
   'submitEvidence' : IDL.Func(
-      [IDL.Nat, IDL.Text, IDL.Text, IDL.Vec(IDL.Text), IDL.Vec(IDL.Text)],
+      [
+        IDL.Nat,
+        IDL.Text,
+        IDL.Text,
+        IDL.Vec(IDL.Text),
+        IDL.Vec(IDL.Text),
+        IDL.Text,
+      ],
       [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
       [],
     ),
@@ -220,6 +245,7 @@ export const idlFactory = ({ IDL }) => {
     'claimId' : IDL.Nat,
     'timestamp' : IDL.Int,
     'sessionId' : IDL.Text,
+    'evidenceType' : IDL.Text,
   });
   const Reply = IDL.Record({
     'id' : IDL.Nat,
@@ -294,6 +320,23 @@ export const idlFactory = ({ IDL }) => {
     'getAllClaims' : IDL.Func([], [IDL.Vec(Claim)], ['query']),
     'getClaimById' : IDL.Func([IDL.Nat], [Claim], ['query']),
     'getClaimsByCategory' : IDL.Func([IDL.Text], [IDL.Vec(Claim)], ['query']),
+    'getEnhancedVoteTally' : IDL.Func(
+        [IDL.Nat],
+        [
+          IDL.Record({
+            'trueFromEvidence' : IDL.Int,
+            'unverifiedFromEvidence' : IDL.Int,
+            'falseDirect' : IDL.Int,
+            'trueCount' : IDL.Int,
+            'unverifiedDirect' : IDL.Int,
+            'falseFromEvidence' : IDL.Int,
+            'trueDirect' : IDL.Int,
+            'falseCount' : IDL.Int,
+            'unverifiedCount' : IDL.Int,
+          }),
+        ],
+        ['query'],
+      ),
     'getEvidenceForClaim' : IDL.Func([IDL.Nat], [IDL.Vec(Evidence)], ['query']),
     'getEvidenceVoteTally' : IDL.Func(
         [IDL.Nat],
@@ -362,7 +405,14 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'submitEvidence' : IDL.Func(
-        [IDL.Nat, IDL.Text, IDL.Text, IDL.Vec(IDL.Text), IDL.Vec(IDL.Text)],
+        [
+          IDL.Nat,
+          IDL.Text,
+          IDL.Text,
+          IDL.Vec(IDL.Text),
+          IDL.Vec(IDL.Text),
+          IDL.Text,
+        ],
         [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
         [],
       ),

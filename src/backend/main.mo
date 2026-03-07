@@ -8,8 +8,6 @@ import Char "mo:core/Char";
 import Float "mo:core/Float";
 import MixinStorage "blob-storage/Mixin";
 
-
-
 actor {
   include MixinStorage();
 
@@ -38,6 +36,7 @@ actor {
     timestamp : Int;
     imageUrls : [Text];
     urls : [Text];
+    evidenceType : Text; // Added evidenceType field
   };
 
   type EvidenceVote = {
@@ -92,6 +91,7 @@ actor {
   let REPORT_THRESHOLD : Nat = 10;
   let SIMILARITY_THRESHOLD : Float = 0.8;
   let ONE_DAY_NS : Int = 86_400_000_000_000;
+  let EVIDENCE_WEIGHT_MULTIPLIER = 3.0;
 
   func seedClaimsData() : [Claim] {
     let seeds = [
@@ -101,7 +101,7 @@ actor {
       { title = "Goldfish have a 3-second memory"; description = "Is this true about goldfish?"; category = "Animals" },
       { title = "Humans only use 10% of their brains"; description = "Is this a fact or myth?"; category = "Science" },
     ];
-    seeds.map<{ title : Text; description : Text; category : Text }, Claim>(
+    seeds.map(
       func(s) {
         {
           id = 0;
@@ -163,6 +163,10 @@ actor {
     var i = 0;
     while (i < n) { f := f + 1.0; i += 1 };
     f;
+  };
+
+  func intToFloat(i : Int) : Float {
+    if (i >= 0) { natToFloat(i.toNat()) } else { -natToFloat((-i).toNat()) };
   };
 
   func jaccardSimilarity(a : Text, b : Text) : Float {
@@ -304,12 +308,14 @@ actor {
     };
   };
 
+  // Updated submitEvidence to include evidenceType parameter
   public shared func submitEvidence(
     claimId : Nat,
     sessionId : Text,
     text : Text,
     imageUrls : [Text],
     urls : [Text],
+    evidenceType : Text, // New parameter
   ) : async {
     #ok;
     #err : Text;
@@ -342,6 +348,7 @@ actor {
       timestamp = now;
       imageUrls;
       urls;
+      evidenceType; // Set evidenceType field
     };
     let list = List.fromArray<Evidence>(evidencesArray);
     list.add(evidence);
@@ -496,8 +503,6 @@ actor {
     });
     #ok;
   };
-
-  // New reply functions
 
   public shared func addReply(
     evidenceId : Nat,
@@ -654,5 +659,69 @@ actor {
       not (r.targetId == id and r.targetType == "reply");
     });
     #ok;
+  };
+
+  public query func getEnhancedVoteTally(claimId : Nat) : async {
+    trueCount : Int;
+    falseCount : Int;
+    unverifiedCount : Int;
+    trueDirect : Int;
+    falseDirect : Int;
+    unverifiedDirect : Int;
+    trueFromEvidence : Int;
+    falseFromEvidence : Int;
+    unverifiedFromEvidence : Int;
+  } {
+    var trueDirect = 0;
+    var falseDirect = 0;
+    var unverifiedDirect = 0;
+
+    var trueFromEvidence : Float = 0.0;
+    var falseFromEvidence : Float = 0.0;
+    var unverifiedFromEvidence : Float = 0.0;
+
+    for (v in votesArray.values()) {
+      if (v.claimId == claimId) {
+        switch (v.verdict) {
+          case ("True") { trueDirect += 1 };
+          case ("False") { falseDirect += 1 };
+          case ("Unverified") { unverifiedDirect += 1 };
+          case (_) {};
+        };
+      };
+    };
+
+    let claimEvidence = evidencesArray.filter(func(e : Evidence) : Bool { e.claimId == claimId and not isHidden(e.id, "evidence") });
+
+    for (e in claimEvidence.values()) {
+      var netVotes = 0;
+      for (v in evidenceVotesArray.values()) {
+        if (v.evidenceId == e.id) {
+          switch (v.direction) {
+            case ("up") { netVotes += 1 };
+            case ("down") { netVotes -= 1 };
+            case (_) {};
+          };
+        };
+      };
+      let weightedScore = intToFloat(netVotes) * EVIDENCE_WEIGHT_MULTIPLIER;
+      switch (e.evidenceType) {
+        case ("True") { trueFromEvidence += weightedScore };
+        case ("False") { falseFromEvidence += weightedScore };
+        case (_) { unverifiedFromEvidence += weightedScore };
+      };
+    };
+
+    {
+      trueCount = trueDirect + trueFromEvidence.toInt();
+      falseCount = falseDirect + falseFromEvidence.toInt();
+      unverifiedCount = unverifiedDirect + unverifiedFromEvidence.toInt();
+      trueDirect;
+      falseDirect;
+      unverifiedDirect;
+      trueFromEvidence = trueFromEvidence.toInt();
+      falseFromEvidence = falseFromEvidence.toInt();
+      unverifiedFromEvidence = unverifiedFromEvidence.toInt();
+    };
   };
 };

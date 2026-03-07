@@ -1,28 +1,29 @@
-# Claim Verifier
+# Rebunked
 
 ## Current State
-- Full-stack app with Motoko backend and React frontend.
-- Users can submit claims, vote (True/False/Unverified), and submit evidence with images and links.
-- Sessions are tracked via a localStorage session ID for anonymous identity.
-- `submitVote` in the backend appends a new Vote record every call -- no deduplication, so a user can vote multiple times.
-- `getSessionVoteForClaim` returns the first matching vote, so the UI shows the right highlight, but extra votes accumulate in the tally.
-- Images on claims and evidence open in a new browser tab via an `<a href target="_blank">` link.
+
+The app is a community claim verification platform. Claims have direct votes (True/False/Unverified). Evidence has up/down votes tracked separately via `evidenceVotesArray`. The `getVoteTally` function currently only counts direct claim votes and returns `{ trueCount, falseCount, unverifiedCount }`. Evidence votes have no influence on the claim verdict tally.
 
 ## Requested Changes (Diff)
 
 ### Add
-- Lightbox component: clicking any image thumbnail opens a fullscreen overlay with the image centered, a close button, and keyboard (Escape) support.
-- Optional arrow navigation if multiple images are in the same grid.
+- New backend function `getEnhancedVoteTally(claimId)` that returns a breakdown of direct votes and evidence-weighted votes separately, plus combined totals.
+- Evidence vote aggregation logic: for each piece of evidence on a claim, compute its net evidence vote score (upvotes - downvotes), multiply by 3.0 (evidence weight multiplier), and add to the tally bucket matching the evidence's `evidenceType` (True/False/Unverified). Negative net scores subtract from the tally (can go below zero if evidence-weighted contribution is negative).
+- Response shape: `{ trueCount, falseCount, unverifiedCount, trueDirect, falseDirect, unverifiedDirect, trueFromEvidence, falseFromEvidence, unverifiedFromEvidence }` where `*Direct` = raw direct votes, `*FromEvidence` = evidence-weighted contribution (Float rounded to Int), and `trueCount/falseCount/unverifiedCount` = combined totals.
 
 ### Modify
-- Backend `submitVote`: change from append to upsert -- if a vote already exists for (claimId, sessionId), update the verdict in-place instead of adding a new record. This ensures one vote per session per claim.
-- Frontend `ImageGrid`: replace `<a href target="_blank">` with a button that opens the lightbox.
+- `getVoteTally` stays unchanged for backward compatibility (existing callers unaffected).
+- Frontend verdict display updated to use `getEnhancedVoteTally` and show breakdown: e.g. "42 direct + 90 from evidence" for each verdict category.
 
 ### Remove
-- The external-link behavior on image thumbnails (no more opening images in new tab).
+- Nothing removed.
 
 ## Implementation Plan
-1. Fix `submitVote` in `main.mo` to upsert: find existing vote for (claimId, sessionId), replace it if found, otherwise append.
-2. Create a `Lightbox` component in the frontend with a full-screen modal overlay, image display, close button, Escape key handler, and prev/next arrows for multi-image grids.
-3. Update `ImageGrid` in `ClaimDetail.tsx` to use the lightbox instead of `<a>` links.
-4. Validate and deploy.
+
+1. Add `getEnhancedVoteTally(claimId: Nat)` to `main.mo`:
+   - Count direct votes per verdict (same as `getVoteTally`).
+   - For each evidence on the claim, compute net evidence vote score.
+   - Multiply net score by 3.0, convert to Int (truncate), add to the matching verdict bucket.
+   - Return `{ trueCount, falseCount, unverifiedCount, trueDirect, falseDirect, unverifiedDirect, trueFromEvidence, falseFromEvidence, unverifiedFromEvidence }` all as Int.
+2. Update `backend.d.ts` to include the new `getEnhancedVoteTally` function signature.
+3. Update frontend `ClaimDetail` component to call `getEnhancedVoteTally` instead of (or alongside) `getVoteTally`, and render the breakdown display in the verdict tally section.

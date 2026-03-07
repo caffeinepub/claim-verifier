@@ -159,6 +159,28 @@ export function useVoteTally(claimId: bigint | null) {
   });
 }
 
+export function useEnhancedVoteTally(claimId: bigint | null) {
+  const { actor, isFetching } = useActor();
+  return useQuery<{
+    trueFromEvidence: bigint;
+    unverifiedFromEvidence: bigint;
+    falseDirect: bigint;
+    trueCount: bigint;
+    unverifiedDirect: bigint;
+    falseFromEvidence: bigint;
+    trueDirect: bigint;
+    falseCount: bigint;
+    unverifiedCount: bigint;
+  }>({
+    queryKey: ["enhanced-tally", claimId?.toString()],
+    queryFn: async () => {
+      if (!actor || claimId === null) throw new Error("No actor or id");
+      return actor.getEnhancedVoteTally(claimId);
+    },
+    enabled: !!actor && !isFetching && claimId !== null,
+  });
+}
+
 export function useSessionVote(
   claimId: bigint | null,
   sessionId: string | null,
@@ -196,6 +218,9 @@ export function useSubmitVote() {
         queryKey: ["tally", variables.claimId.toString()],
       });
       queryClient.invalidateQueries({
+        queryKey: ["enhanced-tally", variables.claimId.toString()],
+      });
+      queryClient.invalidateQueries({
         queryKey: ["vote", variables.claimId.toString()],
       });
     },
@@ -227,20 +252,23 @@ export function useSubmitEvidence() {
       text,
       imageUrls = [],
       urls = [],
+      evidenceType = "Unverified",
     }: {
       claimId: bigint;
       sessionId: string;
       text: string;
       imageUrls?: string[];
       urls?: string[];
+      evidenceType?: string;
     }) => {
       if (!actor) throw new Error("No actor");
-      const result = await (actor as any).submitEvidence(
+      const result = await actor.submitEvidence(
         claimId,
         sessionId,
         text,
         imageUrls,
         urls,
+        evidenceType ?? "Unverified",
       );
       if (result && "err" in result) {
         throw new Error(result.err as string);
@@ -312,10 +340,12 @@ export function useVoteEvidence() {
       evidenceId,
       sessionId,
       direction,
+      claimId: _claimId,
     }: {
       evidenceId: bigint;
       sessionId: string;
       direction: string;
+      claimId?: bigint;
     }) => {
       if (!actor) throw new Error("No actor");
       return actor.voteEvidence(evidenceId, sessionId, direction);
@@ -327,6 +357,12 @@ export function useVoteEvidence() {
       queryClient.invalidateQueries({
         queryKey: ["evidence-vote", variables.evidenceId.toString()],
       });
+      // Also refresh the enhanced claim tally since evidence votes affect it
+      if (variables.claimId != null) {
+        queryClient.invalidateQueries({
+          queryKey: ["enhanced-tally", variables.claimId.toString()],
+        });
+      }
     },
   });
 }

@@ -15,9 +15,9 @@ import { formatRelativeTime } from "@/utils/time";
 import { Flag } from "lucide-react";
 import { motion } from "motion/react";
 import { useState } from "react";
-import { toast } from "sonner";
 import type { Claim } from "../backend.d";
 import { CategoryBadge } from "./CategoryBadge";
+import { ReportDialog } from "./ReportDialog";
 import { VerdictBar } from "./VerdictBar";
 
 interface ClaimCardProps {
@@ -37,28 +37,18 @@ export function ClaimCard({
   const reportContent = useReportContent();
   const username = useUsername();
   const [reported, setReported] = useState(false);
+  const [reportDialogOpen, setReportDialogOpen] = useState(false);
 
   const ocid = `claim.item.${index}` as const;
 
-  async function handleReport(e: React.MouseEvent) {
-    e.stopPropagation();
+  async function handleReportConfirm(_reason: string) {
     if (!sessionId || reported) return;
-    try {
-      await reportContent.mutateAsync({
-        targetId: claim.id,
-        targetType: "claim",
-        sessionId,
-      });
-      setReported(true);
-      toast.success("Claim reported");
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "";
-      if (msg.includes("Already reported") || msg.includes("already")) {
-        toast.info("Already reported");
-      } else {
-        toast.error("Failed to report claim");
-      }
-    }
+    await reportContent.mutateAsync({
+      targetId: claim.id,
+      targetType: "claim",
+      sessionId,
+    });
+    setReported(true);
   }
 
   return (
@@ -93,8 +83,11 @@ export function ClaimCard({
                 <button
                   type="button"
                   data-ocid={`claim.report_button.${index}`}
-                  onClick={handleReport}
-                  disabled={reported || reportContent.isPending}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setReportDialogOpen(true);
+                  }}
+                  disabled={reported}
                   aria-label="Report claim"
                   className={cn(
                     "flex-shrink-0 flex items-center justify-center w-6 h-6 rounded transition-all duration-150",
@@ -141,6 +134,17 @@ export function ClaimCard({
           compact
         />
       ) : null}
+
+      {/* Report dialog -- stopPropagation prevents card click */}
+      {/* biome-ignore lint/a11y/useKeyWithClickEvents: dialog handles keyboard */}
+      <div onClick={(e) => e.stopPropagation()}>
+        <ReportDialog
+          isOpen={reportDialogOpen}
+          onClose={() => setReportDialogOpen(false)}
+          onConfirm={handleReportConfirm}
+          title="Report Claim"
+        />
+      </div>
     </motion.article>
   );
 }

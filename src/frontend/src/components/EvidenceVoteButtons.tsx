@@ -13,12 +13,15 @@ interface EvidenceVoteButtonsProps {
   sessionId: string;
   /** Deterministic 1-based index for ocid markers */
   index: number;
+  /** Optional claimId so evidence votes can also refresh the claim's enhanced tally */
+  claimId?: bigint;
 }
 
 export function EvidenceVoteButtons({
   evidenceId,
   sessionId,
   index,
+  claimId,
 }: EvidenceVoteButtonsProps) {
   const { data: tally } = useEvidenceVoteTally(evidenceId);
   const { data: sessionVote } = useSessionVoteForEvidence(
@@ -70,7 +73,12 @@ export function EvidenceVoteButtons({
     setOptimisticScore(prevScore + scoreDelta);
 
     try {
-      await voteEvidence.mutateAsync({ evidenceId, sessionId, direction });
+      await voteEvidence.mutateAsync({
+        evidenceId,
+        sessionId,
+        direction,
+        claimId,
+      });
       // Server synced — clear optimistic overrides so React Query data takes over
       setOptimisticVote(undefined);
       setOptimisticScore(undefined);

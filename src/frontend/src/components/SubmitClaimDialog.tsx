@@ -33,6 +33,8 @@ const CATEGORIES = [
   "Sports",
   "Entertainment",
   "Religion",
+  "Art",
+  "Finance",
   "Other",
 ];
 

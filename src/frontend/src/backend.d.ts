@@ -25,6 +25,7 @@ export interface Evidence {
     claimId: bigint;
     timestamp: bigint;
     sessionId: string;
+    evidenceType: string;
 }
 export interface Reply {
     id: bigint;
@@ -75,6 +76,17 @@ export interface backendInterface {
     getAllClaims(): Promise<Array<Claim>>;
     getClaimById(id: bigint): Promise<Claim>;
     getClaimsByCategory(category: string): Promise<Array<Claim>>;
+    getEnhancedVoteTally(claimId: bigint): Promise<{
+        trueFromEvidence: bigint;
+        unverifiedFromEvidence: bigint;
+        falseDirect: bigint;
+        trueCount: bigint;
+        unverifiedDirect: bigint;
+        falseFromEvidence: bigint;
+        trueDirect: bigint;
+        falseCount: bigint;
+        unverifiedCount: bigint;
+    }>;
     getEvidenceForClaim(claimId: bigint): Promise<Array<Evidence>>;
     getEvidenceVoteTally(evidenceId: bigint): Promise<{
         netScore: bigint;
@@ -130,7 +142,7 @@ export interface backendInterface {
         __kind__: "err";
         err: string;
     }>;
-    submitEvidence(claimId: bigint, sessionId: string, text: string, imageUrls: Array<string>, urls: Array<string>): Promise<{
+    submitEvidence(claimId: bigint, sessionId: string, text: string, imageUrls: Array<string>, urls: Array<string>, evidenceType: string): Promise<{
         __kind__: "ok";
         ok: null;
     } | {

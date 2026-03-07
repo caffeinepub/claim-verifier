@@ -28,6 +28,7 @@ export interface Evidence {
   'claimId' : bigint,
   'timestamp' : bigint,
   'sessionId' : string,
+  'evidenceType' : string,
 }
 export interface Reply {
   'id' : bigint,
@@ -94,6 +95,20 @@ export interface _SERVICE {
   'getAllClaims' : ActorMethod<[], Array<Claim>>,
   'getClaimById' : ActorMethod<[bigint], Claim>,
   'getClaimsByCategory' : ActorMethod<[string], Array<Claim>>,
+  'getEnhancedVoteTally' : ActorMethod<
+    [bigint],
+    {
+      'trueFromEvidence' : bigint,
+      'unverifiedFromEvidence' : bigint,
+      'falseDirect' : bigint,
+      'trueCount' : bigint,
+      'unverifiedDirect' : bigint,
+      'falseFromEvidence' : bigint,
+      'trueDirect' : bigint,
+      'falseCount' : bigint,
+      'unverifiedCount' : bigint,
+    }
+  >,
   'getEvidenceForClaim' : ActorMethod<[bigint], Array<Evidence>>,
   'getEvidenceVoteTally' : ActorMethod<[bigint], { 'netScore' : bigint }>,
   'getHiddenClaims' : ActorMethod<[string], Array<Claim>>,
@@ -135,7 +150,7 @@ export interface _SERVICE {
       { 'err' : string }
   >,
   'submitEvidence' : ActorMethod<
-    [bigint, string, string, Array<string>, Array<string>],
+    [bigint, string, string, Array<string>, Array<string>, string],
     { 'ok' : null } |
       { 'err' : string }
   >,
