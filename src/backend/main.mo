@@ -2,11 +2,13 @@ import List "mo:core/List";
 import Nat "mo:core/Nat";
 import Int "mo:core/Int";
 import Time "mo:core/Time";
-import Runtime "mo:core/Runtime";
 import Text "mo:core/Text";
 import Char "mo:core/Char";
 import Float "mo:core/Float";
+import Runtime "mo:core/Runtime";
 import MixinStorage "blob-storage/Mixin";
+
+
 
 actor {
   include MixinStorage();
@@ -20,6 +22,7 @@ actor {
     timestamp : Int;
     imageUrls : [Text];
     urls : [Text];
+    ogThumbnailUrl : Text;
   };
 
   type Vote = {
@@ -36,7 +39,7 @@ actor {
     timestamp : Int;
     imageUrls : [Text];
     urls : [Text];
-    evidenceType : Text; // Added evidenceType field
+    evidenceType : Text;
   };
 
   type EvidenceVote = {
@@ -112,6 +115,7 @@ actor {
           timestamp = Time.now();
           imageUrls = [];
           urls = [];
+          ogThumbnailUrl = "";
         };
       }
     );
@@ -119,7 +123,6 @@ actor {
 
   system func postupgrade() {
     if (claimCount == 0) {
-      claimsArray := [];
       claimsArray := seedClaimsData();
       claimCount := 5;
     };
@@ -128,7 +131,9 @@ actor {
   func getReportCountFor(targetId : Nat, targetType : Text) : Nat {
     var count = 0;
     for (r in reportsArray.values()) {
-      if (r.targetId == targetId and r.targetType == targetType) { count += 1 };
+      if (r.targetId == targetId and r.targetType == targetType) {
+        count += 1;
+      };
     };
     count;
   };
@@ -209,6 +214,7 @@ actor {
     sessionId : Text,
     imageUrls : [Text],
     urls : [Text],
+    ogThumbnailUrl : Text,
   ) : async {
     #ok;
     #err : Text;
@@ -245,6 +251,7 @@ actor {
       timestamp = now;
       imageUrls;
       urls;
+      ogThumbnailUrl;
     };
     let list = List.fromArray<Claim>(claimsArray);
     list.add(claim);
@@ -308,7 +315,6 @@ actor {
     };
   };
 
-  // Updated submitEvidence to include evidenceType parameter
   public shared func submitEvidence(
     claimId : Nat,
     sessionId : Text,

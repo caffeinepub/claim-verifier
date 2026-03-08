@@ -16,6 +16,7 @@ export interface Claim {
   'imageUrls' : Array<string>,
   'urls' : Array<string>,
   'description' : string,
+  'ogThumbnailUrl' : string,
   'timestamp' : bigint,
   'category' : string,
   'sessionId' : string,
@@ -87,7 +88,7 @@ export interface _SERVICE {
       { 'err' : string }
   >,
   'createClaim' : ActorMethod<
-    [string, string, string, string, Array<string>, Array<string>],
+    [string, string, string, string, Array<string>, Array<string>, string],
     { 'ok' : null } |
       { 'err' : string }
   >,

@@ -10,7 +10,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
 import { useAllClaims, useSessionId, useUsername } from "@/hooks/useQueries";
 import { findClaimBySlug, getClaimSlug } from "@/utils/slug";
-import { Loader2, Plus, Search, Shield } from "lucide-react";
+import { Loader2, Plus, RotateCcw, Search } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useState } from "react";
 
@@ -39,6 +39,7 @@ const SEED_CLAIMS_VISIBLE_EMPTY = [
     sessionId: "seed",
     imageUrls: [],
     urls: [],
+    ogThumbnailUrl: "",
   },
   {
     id: 2n,
@@ -50,6 +51,7 @@ const SEED_CLAIMS_VISIBLE_EMPTY = [
     sessionId: "seed",
     imageUrls: [],
     urls: [],
+    ogThumbnailUrl: "",
   },
   {
     id: 3n,
@@ -61,6 +63,7 @@ const SEED_CLAIMS_VISIBLE_EMPTY = [
     sessionId: "seed",
     imageUrls: [],
     urls: [],
+    ogThumbnailUrl: "",
   },
   {
     id: 4n,
@@ -72,6 +75,7 @@ const SEED_CLAIMS_VISIBLE_EMPTY = [
     sessionId: "seed",
     imageUrls: [],
     urls: [],
+    ogThumbnailUrl: "",
   },
   {
     id: 5n,
@@ -84,6 +88,7 @@ const SEED_CLAIMS_VISIBLE_EMPTY = [
     sessionId: "seed",
     imageUrls: [],
     urls: [],
+    ogThumbnailUrl: "",
   },
 ];
 
@@ -197,7 +202,7 @@ export default function App() {
               aria-label="Go to homepage"
             >
               <div className="w-8 h-8 rounded-sm bg-primary flex items-center justify-center">
-                <Shield className="h-4 w-4 text-primary-foreground" />
+                <RotateCcw className="h-4 w-4 text-primary-foreground" />
               </div>
               <div className="text-left">
                 <h1 className="font-display text-xl font-bold text-foreground leading-none tracking-tight group-hover:text-primary transition-colors">
@@ -336,7 +341,7 @@ export default function App() {
                   data-ocid="claim.empty_state"
                   className="text-center py-20 text-muted-foreground"
                 >
-                  <Shield className="h-12 w-12 mx-auto mb-4 opacity-20" />
+                  <RotateCcw className="h-12 w-12 mx-auto mb-4 opacity-20" />
                   <p className="font-display text-xl font-semibold mb-1">
                     No claims found
                   </p>
@@ -379,7 +384,7 @@ export default function App() {
         <div className="max-w-5xl mx-auto px-4 py-6">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-2">
             <div className="flex items-center gap-2">
-              <Shield className="h-3.5 w-3.5 text-muted-foreground" />
+              <RotateCcw className="h-3.5 w-3.5 text-muted-foreground" />
               <span className="text-xs text-muted-foreground font-body">
                 Anonymous · Decentralized · Community-Verified
               </span>

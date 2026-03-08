@@ -11,8 +11,8 @@
 }
 
 @font-face {
-  font-family: "Outfit";
-  src: url("/assets/fonts/Outfit.woff2") format("woff2");
+  font-family: "Figtree";
+  src: url("/assets/fonts/Figtree.woff2") format("woff2");
   font-weight: 100 900;
   font-style: normal;
   font-display: swap;
@@ -20,53 +20,53 @@
 
 @layer base {
   :root {
-    --radius: 0.25rem;
+    --radius: 0.5rem;
 
-    /* Editorial dark theme — ink & newsprint */
-    --background: 0.13 0.008 260;
-    --foreground: 0.92 0.01 80;
-    --card: 0.17 0.01 260;
-    --card-foreground: 0.92 0.01 80;
-    --popover: 0.19 0.01 260;
-    --popover-foreground: 0.92 0.01 80;
-    --primary: 0.82 0.12 75;
-    --primary-foreground: 0.12 0.008 260;
-    --secondary: 0.22 0.012 260;
-    --secondary-foreground: 0.85 0.01 80;
-    --muted: 0.22 0.012 260;
-    --muted-foreground: 0.58 0.015 260;
-    --accent: 0.82 0.12 75;
-    --accent-foreground: 0.12 0.008 260;
-    --destructive: 0.58 0.22 22;
+    /* Clean light theme — editorial credibility */
+    --background: 0.98 0.004 260;
+    --foreground: 0.15 0.012 260;
+    --card: 0.995 0.002 260;
+    --card-foreground: 0.15 0.012 260;
+    --popover: 0.995 0.002 260;
+    --popover-foreground: 0.15 0.012 260;
+    --primary: 0.42 0.09 240;
+    --primary-foreground: 0.97 0.004 240;
+    --secondary: 0.93 0.008 260;
+    --secondary-foreground: 0.25 0.015 260;
+    --muted: 0.93 0.008 260;
+    --muted-foreground: 0.52 0.02 260;
+    --accent: 0.93 0.008 260;
+    --accent-foreground: 0.25 0.015 260;
+    --destructive: 0.52 0.22 22;
     --destructive-foreground: 0.98 0 0;
-    --border: 0.28 0.015 260;
-    --input: 0.28 0.015 260;
-    --ring: 0.82 0.12 75;
+    --border: 0.88 0.008 260;
+    --input: 0.88 0.008 260;
+    --ring: 0.42 0.09 240;
 
     /* Verdict colors */
-    --verdict-true: 0.68 0.18 145;
-    --verdict-true-bg: 0.22 0.06 145;
-    --verdict-false: 0.58 0.22 22;
-    --verdict-false-bg: 0.22 0.08 22;
-    --verdict-unverified: 0.75 0.15 75;
-    --verdict-unverified-bg: 0.22 0.06 75;
+    --verdict-true: 0.52 0.18 145;
+    --verdict-true-bg: 0.94 0.06 145;
+    --verdict-false: 0.52 0.22 22;
+    --verdict-false-bg: 0.95 0.07 22;
+    --verdict-unverified: 0.58 0.13 75;
+    --verdict-unverified-bg: 0.95 0.07 75;
 
     /* Chart */
-    --chart-1: 0.68 0.18 145;
-    --chart-2: 0.58 0.22 22;
-    --chart-3: 0.75 0.15 75;
-    --chart-4: 0.65 0.15 260;
-    --chart-5: 0.72 0.12 200;
+    --chart-1: 0.52 0.18 145;
+    --chart-2: 0.52 0.22 22;
+    --chart-3: 0.58 0.13 75;
+    --chart-4: 0.42 0.09 240;
+    --chart-5: 0.55 0.12 200;
 
     /* Sidebar */
-    --sidebar: 0.15 0.01 260;
-    --sidebar-foreground: 0.92 0.01 80;
-    --sidebar-primary: 0.82 0.12 75;
-    --sidebar-primary-foreground: 0.12 0.008 260;
-    --sidebar-accent: 0.22 0.012 260;
-    --sidebar-accent-foreground: 0.85 0.01 80;
-    --sidebar-border: 0.28 0.015 260;
-    --sidebar-ring: 0.82 0.12 75;
+    --sidebar: 0.97 0.005 260;
+    --sidebar-foreground: 0.15 0.012 260;
+    --sidebar-primary: 0.42 0.09 240;
+    --sidebar-primary-foreground: 0.97 0.004 240;
+    --sidebar-accent: 0.93 0.008 260;
+    --sidebar-accent-foreground: 0.25 0.015 260;
+    --sidebar-border: 0.88 0.008 260;
+    --sidebar-ring: 0.42 0.09 240;
   }
 
   * {

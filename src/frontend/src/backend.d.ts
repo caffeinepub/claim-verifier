@@ -13,6 +13,7 @@ export interface Claim {
     imageUrls: Array<string>;
     urls: Array<string>;
     description: string;
+    ogThumbnailUrl: string;
     timestamp: bigint;
     category: string;
     sessionId: string;
@@ -65,7 +66,7 @@ export interface backendInterface {
         __kind__: "err";
         err: string;
     }>;
-    createClaim(title: string, description: string, category: string, sessionId: string, imageUrls: Array<string>, urls: Array<string>): Promise<{
+    createClaim(title: string, description: string, category: string, sessionId: string, imageUrls: Array<string>, urls: Array<string>, ogThumbnailUrl: string): Promise<{
         __kind__: "ok";
         ok: null;
     } | {

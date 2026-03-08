@@ -62,6 +62,28 @@ export function useSessionId() {
   });
 }
 
+// ── OG Image Helper ───────────────────────────────────────────────────────────
+
+async function fetchOgImageFromUrl(url: string): Promise<string> {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    const response = await fetch(url, { signal: controller.signal });
+    clearTimeout(timeout);
+    const html = await response.text();
+    const match =
+      html.match(
+        /<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i,
+      ) ??
+      html.match(
+        /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i,
+      );
+    return match?.[1] ?? "";
+  } catch {
+    return "";
+  }
+}
+
 // ── Claims ────────────────────────────────────────────────────────────────────
 
 export function useAllClaims() {
@@ -122,13 +144,21 @@ export function useCreateClaim() {
       urls?: string[];
     }) => {
       if (!actor) throw new Error("No actor");
-      const result = await (actor as any).createClaim(
+
+      // Attempt OG image extraction from first URL if no images uploaded
+      let ogThumbnailUrl = "";
+      if (imageUrls.length === 0 && urls.length > 0 && urls[0]) {
+        ogThumbnailUrl = await fetchOgImageFromUrl(urls[0]);
+      }
+
+      const result = await actor.createClaim(
         title,
         description,
         category,
         sessionId,
         imageUrls,
         urls,
+        ogThumbnailUrl,
       );
       if (result && "err" in result) {
         throw new Error(result.err as string);

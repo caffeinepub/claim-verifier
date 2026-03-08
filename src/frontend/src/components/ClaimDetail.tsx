@@ -8,7 +8,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -795,106 +794,104 @@ export function ClaimDetail({
                 ))}
               </div>
             ) : filteredEvidence.length > 0 ? (
-              <ScrollArea className="max-h-[600px]">
-                <div className="space-y-3 pr-4">
-                  <AnimatePresence>
-                    {filteredEvidence.map((item, idx) => (
-                      <motion.div
-                        key={item.id.toString()}
-                        data-ocid={`evidence.item.${idx + 1}`}
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: idx * 0.05 }}
-                        className="p-4 bg-secondary border border-border rounded-sm"
-                      >
-                        {/* Line 1: username · timestamp [evidence type badge] */}
-                        <div className="flex items-center gap-2 mb-1 flex-wrap">
-                          <span className="text-xs font-semibold text-foreground font-mono">
-                            {item.sessionId === sessionId
-                              ? username
-                              : "Anonymous"}
-                          </span>
-                          <span className="text-xs text-muted-foreground font-body">
-                            · {formatRelativeTime(item.timestamp)}
-                          </span>
-                          <EvidenceTypeBadge
-                            data-ocid={`evidence.badge.${idx + 1}`}
-                            evidenceType={
-                              item.evidenceType && item.evidenceType !== ""
-                                ? item.evidenceType
-                                : "Unverified"
-                            }
-                          />
-                        </div>
+              <div className="space-y-3">
+                <AnimatePresence>
+                  {filteredEvidence.map((item, idx) => (
+                    <motion.div
+                      key={item.id.toString()}
+                      data-ocid={`evidence.item.${idx + 1}`}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: idx * 0.05 }}
+                      className="p-4 bg-secondary border border-border rounded-sm"
+                    >
+                      {/* Line 1: username · timestamp [evidence type badge] */}
+                      <div className="flex items-center gap-2 mb-1 flex-wrap">
+                        <span className="text-xs font-semibold text-foreground font-mono">
+                          {item.sessionId === sessionId
+                            ? username
+                            : "Anonymous"}
+                        </span>
+                        <span className="text-xs text-muted-foreground font-body">
+                          · {formatRelativeTime(item.timestamp)}
+                        </span>
+                        <EvidenceTypeBadge
+                          data-ocid={`evidence.badge.${idx + 1}`}
+                          evidenceType={
+                            item.evidenceType && item.evidenceType !== ""
+                              ? item.evidenceType
+                              : "Unverified"
+                          }
+                        />
+                      </div>
 
-                        {/* Line 2: evidence text */}
-                        <p className="text-sm text-foreground font-body leading-relaxed mb-1">
-                          {item.text}
-                        </p>
+                      {/* Line 2: evidence text */}
+                      <p className="text-sm text-foreground font-body leading-relaxed mb-1">
+                        {item.text}
+                      </p>
 
-                        {/* Evidence images */}
-                        <ImageGrid imageUrls={item.imageUrls ?? []} size="sm" />
-                        {/* Evidence URLs */}
-                        <UrlChips urls={item.urls ?? []} />
+                      {/* Evidence images */}
+                      <ImageGrid imageUrls={item.imageUrls ?? []} size="sm" />
+                      {/* Evidence URLs */}
+                      <UrlChips urls={item.urls ?? []} />
 
-                        {/* Bottom row: vote buttons (left) + report (right) */}
-                        <div className="flex items-center justify-between mt-2 gap-2">
-                          <EvidenceVoteButtons
-                            evidenceId={item.id}
-                            sessionId={sessionId}
-                            index={idx + 1}
-                            claimId={claimId}
-                          />
-                          <div className="flex items-center gap-1">
-                            {/* Report button */}
-                            <TooltipProvider delayDuration={300}>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <button
-                                    type="button"
-                                    data-ocid={`evidence.report_button.${idx + 1}`}
-                                    onClick={() =>
-                                      setReportingEvidenceId(item.id)
-                                    }
-                                    disabled={reportedEvidence.has(
-                                      item.id.toString(),
-                                    )}
-                                    aria-label="Report evidence"
-                                    className={cn(
-                                      "flex items-center justify-center w-6 h-6 rounded transition-all duration-150",
-                                      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60",
-                                      "disabled:cursor-not-allowed",
-                                      reportedEvidence.has(item.id.toString())
-                                        ? "text-amber-400 opacity-60"
-                                        : "text-muted-foreground opacity-50 hover:opacity-100 hover:text-destructive hover:bg-destructive/10",
-                                    )}
-                                  >
-                                    <Flag className="h-3 w-3" />
-                                  </button>
-                                </TooltipTrigger>
-                                <TooltipContent
-                                  side="top"
-                                  className="text-xs font-body"
-                                >
-                                  {reportedEvidence.has(item.id.toString())
-                                    ? "Reported"
-                                    : "Report evidence"}
-                                </TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                          </div>
-                        </div>
-                        {/* Threaded replies */}
-                        <ReplyThread
+                      {/* Bottom row: vote buttons (left) + report (right) */}
+                      <div className="flex items-center justify-between mt-2 gap-2">
+                        <EvidenceVoteButtons
                           evidenceId={item.id}
                           sessionId={sessionId}
-                          evidenceIndex={idx + 1}
+                          index={idx + 1}
+                          claimId={claimId}
                         />
-                      </motion.div>
-                    ))}
-                  </AnimatePresence>
-                </div>
-              </ScrollArea>
+                        <div className="flex items-center gap-1">
+                          {/* Report button */}
+                          <TooltipProvider delayDuration={300}>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <button
+                                  type="button"
+                                  data-ocid={`evidence.report_button.${idx + 1}`}
+                                  onClick={() =>
+                                    setReportingEvidenceId(item.id)
+                                  }
+                                  disabled={reportedEvidence.has(
+                                    item.id.toString(),
+                                  )}
+                                  aria-label="Report evidence"
+                                  className={cn(
+                                    "flex items-center justify-center w-6 h-6 rounded transition-all duration-150",
+                                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60",
+                                    "disabled:cursor-not-allowed",
+                                    reportedEvidence.has(item.id.toString())
+                                      ? "text-amber-400 opacity-60"
+                                      : "text-muted-foreground opacity-50 hover:opacity-100 hover:text-destructive hover:bg-destructive/10",
+                                  )}
+                                >
+                                  <Flag className="h-3 w-3" />
+                                </button>
+                              </TooltipTrigger>
+                              <TooltipContent
+                                side="top"
+                                className="text-xs font-body"
+                              >
+                                {reportedEvidence.has(item.id.toString())
+                                  ? "Reported"
+                                  : "Report evidence"}
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        </div>
+                      </div>
+                      {/* Threaded replies */}
+                      <ReplyThread
+                        evidenceId={item.id}
+                        sessionId={sessionId}
+                        evidenceIndex={idx + 1}
+                      />
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
+              </div>
             ) : evidenceSearch.trim() ? (
               <div
                 data-ocid="evidence.empty_state"

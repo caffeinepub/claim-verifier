@@ -24,6 +24,7 @@ import {
   Loader2,
   MessageSquare,
   Send,
+  X,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useState } from "react";
@@ -286,7 +287,7 @@ function ReplyCard({
           title="Report Reply"
         />
 
-        {/* Inline reply form */}
+        {/* Inline reply form — shown only when replying to this specific reply */}
         <AnimatePresence>
           {isReplying && (
             <motion.div
@@ -296,6 +297,23 @@ function ReplyCard({
               transition={{ duration: 0.18 }}
               className="overflow-hidden"
             >
+              {/* "Replying to @username" banner */}
+              <div className="flex items-center justify-between mt-2 mb-1 px-1 py-0.5 rounded bg-primary/8 border border-primary/20">
+                <span className="text-xs font-body text-primary">
+                  Replying to{" "}
+                  <span className="font-mono font-semibold">
+                    @{displayAuthor}
+                  </span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => onToggleReply(null)}
+                  aria-label="Cancel reply"
+                  className="w-4 h-4 flex items-center justify-center rounded text-primary/60 hover:text-primary hover:bg-primary/10 transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/60"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
               <ReplyForm
                 evidenceId={evidenceId}
                 parentReplyId={reply.id}
@@ -507,16 +525,27 @@ export function ReplyThread({
                 </div>
               ) : null}
 
-              {/* Top-level reply form (always shown when expanded) */}
-              <div className="mt-2">
-                <ReplyForm
-                  evidenceId={evidenceId}
-                  parentReplyId={0n}
-                  sessionId={sessionId}
-                  authorUsername={username}
-                  ocidPrefix={`reply.toplevel.${evidenceIndex}`}
-                />
-              </div>
+              {/* Default top-level reply form — hidden when replying to a specific reply */}
+              <AnimatePresence>
+                {replyingToId === null && (
+                  <motion.div
+                    key="toplevel-form"
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: "auto" }}
+                    exit={{ opacity: 0, height: 0 }}
+                    transition={{ duration: 0.18 }}
+                    className="mt-2 overflow-hidden"
+                  >
+                    <ReplyForm
+                      evidenceId={evidenceId}
+                      parentReplyId={0n}
+                      sessionId={sessionId}
+                      authorUsername={username}
+                      ocidPrefix={`reply.toplevel.${evidenceIndex}`}
+                    />
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           </motion.div>
         )}

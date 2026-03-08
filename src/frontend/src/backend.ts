@@ -95,6 +95,7 @@ export interface Claim {
     imageUrls: Array<string>;
     urls: Array<string>;
     description: string;
+    ogThumbnailUrl: string;
     timestamp: bigint;
     category: string;
     sessionId: string;
@@ -164,7 +165,7 @@ export interface backendInterface {
         __kind__: "err";
         err: string;
     }>;
-    createClaim(title: string, description: string, category: string, sessionId: string, imageUrls: Array<string>, urls: Array<string>): Promise<{
+    createClaim(title: string, description: string, category: string, sessionId: string, imageUrls: Array<string>, urls: Array<string>, ogThumbnailUrl: string): Promise<{
         __kind__: "ok";
         ok: null;
     } | {
@@ -419,7 +420,7 @@ export class Backend implements backendInterface {
             return from_candid_variant_n8(this._uploadFile, this._downloadFile, result);
         }
     }
-    async createClaim(arg0: string, arg1: string, arg2: string, arg3: string, arg4: Array<string>, arg5: Array<string>): Promise<{
+    async createClaim(arg0: string, arg1: string, arg2: string, arg3: string, arg4: Array<string>, arg5: Array<string>, arg6: string): Promise<{
         __kind__: "ok";
         ok: null;
     } | {
@@ -428,14 +429,14 @@ export class Backend implements backendInterface {
     }> {
         if (this.processError) {
             try {
-                const result = await this.actor.createClaim(arg0, arg1, arg2, arg3, arg4, arg5);
+                const result = await this.actor.createClaim(arg0, arg1, arg2, arg3, arg4, arg5, arg6);
                 return from_candid_variant_n8(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.createClaim(arg0, arg1, arg2, arg3, arg4, arg5);
+            const result = await this.actor.createClaim(arg0, arg1, arg2, arg3, arg4, arg5, arg6);
             return from_candid_variant_n8(this._uploadFile, this._downloadFile, result);
         }
     }
