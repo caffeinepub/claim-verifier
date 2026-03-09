@@ -3,16 +3,16 @@
 @tailwind utilities;
 
 @font-face {
-  font-family: "Fraunces";
-  src: url("/assets/fonts/Fraunces.woff2") format("woff2");
-  font-weight: 100 900;
+  font-family: "Bricolage Grotesque";
+  src: url("/assets/fonts/BricolageGrotesque.woff2") format("woff2");
+  font-weight: 200 800;
   font-style: normal;
   font-display: swap;
 }
 
 @font-face {
-  font-family: "Figtree";
-  src: url("/assets/fonts/Figtree.woff2") format("woff2");
+  font-family: "Outfit";
+  src: url("/assets/fonts/Outfit.woff2") format("woff2");
   font-weight: 100 900;
   font-style: normal;
   font-display: swap;
@@ -20,53 +20,56 @@
 
 @layer base {
   :root {
-    --radius: 0.5rem;
+    --radius: 0.75rem;
 
-    /* Clean light theme — editorial credibility */
-    --background: 0.98 0.004 260;
-    --foreground: 0.15 0.012 260;
-    --card: 0.995 0.002 260;
-    --card-foreground: 0.15 0.012 260;
-    --popover: 0.995 0.002 260;
-    --popover-foreground: 0.15 0.012 260;
-    --primary: 0.42 0.09 240;
-    --primary-foreground: 0.97 0.004 240;
-    --secondary: 0.93 0.008 260;
+    /* Social fun light theme — white background, coral-orange primary, violet accent */
+    --background: 1 0 0;
+    --foreground: 0.18 0.018 260;
+    --card: 1 0 0;
+    --card-foreground: 0.18 0.018 260;
+    --popover: 1 0 0;
+    --popover-foreground: 0.18 0.018 260;
+    /* Coral-orange primary */
+    --primary: 0.62 0.21 32;
+    --primary-foreground: 1 0 0;
+    /* Light warm gray secondary */
+    --secondary: 0.95 0.008 50;
     --secondary-foreground: 0.25 0.015 260;
-    --muted: 0.93 0.008 260;
+    --muted: 0.95 0.006 50;
     --muted-foreground: 0.52 0.02 260;
-    --accent: 0.93 0.008 260;
-    --accent-foreground: 0.25 0.015 260;
+    /* Electric violet accent */
+    --accent: 0.93 0.04 300;
+    --accent-foreground: 0.35 0.12 300;
     --destructive: 0.52 0.22 22;
     --destructive-foreground: 0.98 0 0;
-    --border: 0.88 0.008 260;
-    --input: 0.88 0.008 260;
-    --ring: 0.42 0.09 240;
+    --border: 0.90 0.008 50;
+    --input: 0.90 0.008 50;
+    --ring: 0.62 0.21 32;
 
-    /* Verdict colors */
-    --verdict-true: 0.52 0.18 145;
-    --verdict-true-bg: 0.94 0.06 145;
-    --verdict-false: 0.52 0.22 22;
-    --verdict-false-bg: 0.95 0.07 22;
-    --verdict-unverified: 0.58 0.13 75;
-    --verdict-unverified-bg: 0.95 0.07 75;
+    /* Verdict colors — vivid for social feel */
+    --verdict-true: 0.55 0.20 145;
+    --verdict-true-bg: 0.94 0.07 145;
+    --verdict-false: 0.55 0.24 22;
+    --verdict-false-bg: 0.95 0.08 22;
+    --verdict-unverified: 0.60 0.15 75;
+    --verdict-unverified-bg: 0.95 0.08 75;
 
     /* Chart */
-    --chart-1: 0.52 0.18 145;
-    --chart-2: 0.52 0.22 22;
-    --chart-3: 0.58 0.13 75;
-    --chart-4: 0.42 0.09 240;
-    --chart-5: 0.55 0.12 200;
+    --chart-1: 0.62 0.21 32;
+    --chart-2: 0.55 0.20 145;
+    --chart-3: 0.55 0.24 22;
+    --chart-4: 0.58 0.18 300;
+    --chart-5: 0.55 0.15 200;
 
     /* Sidebar */
-    --sidebar: 0.97 0.005 260;
-    --sidebar-foreground: 0.15 0.012 260;
-    --sidebar-primary: 0.42 0.09 240;
-    --sidebar-primary-foreground: 0.97 0.004 240;
-    --sidebar-accent: 0.93 0.008 260;
+    --sidebar: 1 0 0;
+    --sidebar-foreground: 0.18 0.018 260;
+    --sidebar-primary: 0.62 0.21 32;
+    --sidebar-primary-foreground: 1 0 0;
+    --sidebar-accent: 0.95 0.006 50;
     --sidebar-accent-foreground: 0.25 0.015 260;
-    --sidebar-border: 0.88 0.008 260;
-    --sidebar-ring: 0.42 0.09 240;
+    --sidebar-border: 0.90 0.008 50;
+    --sidebar-ring: 0.62 0.21 32;
   }
 
   * {

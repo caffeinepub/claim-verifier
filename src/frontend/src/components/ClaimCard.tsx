@@ -6,17 +6,19 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
+  useEnhancedVoteTally,
   useReportContent,
   useUsername,
-  useVoteTally,
 } from "@/hooks/useQueries";
 import { cn } from "@/lib/utils";
 import { formatRelativeTime } from "@/utils/time";
+import { computeOverallVerdict } from "@/utils/verdict";
 import { Flag } from "lucide-react";
 import { motion } from "motion/react";
 import { useState } from "react";
 import type { Claim } from "../backend.d";
 import { CategoryBadge } from "./CategoryBadge";
+import { OverallVerdictBadge } from "./OverallVerdictBadge";
 import { ReportDialog } from "./ReportDialog";
 import { VerdictBar } from "./VerdictBar";
 
@@ -33,7 +35,9 @@ export function ClaimCard({
   onClick,
   sessionId,
 }: ClaimCardProps) {
-  const { data: tally, isLoading: tallyLoading } = useVoteTally(claim.id);
+  const { data: tally, isLoading: tallyLoading } = useEnhancedVoteTally(
+    claim.id,
+  );
   const reportContent = useReportContent();
   const username = useUsername();
   const [reported, setReported] = useState(false);
@@ -54,6 +58,14 @@ export function ClaimCard({
   const thumbnailSrc =
     claim.imageUrls?.[0] ||
     (claim.ogThumbnailUrl ? claim.ogThumbnailUrl : null);
+
+  const verdict = tally
+    ? computeOverallVerdict(
+        Number(tally.trueCount),
+        Number(tally.falseCount),
+        Number(tally.unverifiedCount),
+      )
+    : null;
 
   return (
     <motion.article
@@ -131,9 +143,17 @@ export function ClaimCard({
             )}
           </div>
 
-          <h3 className="font-display text-lg font-semibold text-foreground leading-snug mb-2 group-hover:text-primary transition-colors">
-            {claim.title}
-          </h3>
+          <div className="flex items-start gap-2 mb-2">
+            <h3 className="font-display text-lg font-semibold text-foreground leading-snug group-hover:text-primary transition-colors flex-1">
+              {claim.title}
+            </h3>
+            {verdict && !tallyLoading && (
+              <OverallVerdictBadge
+                verdict={verdict}
+                className="flex-shrink-0 mt-0.5"
+              />
+            )}
+          </div>
 
           <p className="text-sm text-muted-foreground font-body leading-relaxed line-clamp-2 mb-4">
             {claim.description}

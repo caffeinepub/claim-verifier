@@ -77,11 +77,13 @@ import {
 } from "@/components/ui/tooltip";
 import { useReportContent } from "@/hooks/useQueries";
 import { getClaimSlug } from "@/utils/slug";
+import { computeOverallVerdict } from "@/utils/verdict";
 import { CategoryBadge } from "./CategoryBadge";
 import { EvidenceTypeBadge } from "./EvidenceTypeBadge";
 import { EvidenceVoteButtons } from "./EvidenceVoteButtons";
 import { ImageUploader } from "./ImageUploader";
 import { Lightbox } from "./Lightbox";
+import { OverallVerdictBanner } from "./OverallVerdictBanner";
 import { ReplyThread } from "./ReplyThread";
 import { ReportDialog } from "./ReportDialog";
 import { UrlInputList } from "./UrlInputList";
@@ -437,19 +439,28 @@ export function ClaimDetail({
                 </div>
               </div>
             ) : tally ? (
-              <VerdictBar
-                trueCount={tally.trueCount}
-                falseCount={tally.falseCount}
-                unverifiedCount={tally.unverifiedCount}
-                breakdown={{
-                  trueDirect: tally.trueDirect,
-                  trueFromEvidence: tally.trueFromEvidence,
-                  falseDirect: tally.falseDirect,
-                  falseFromEvidence: tally.falseFromEvidence,
-                  unverifiedDirect: tally.unverifiedDirect,
-                  unverifiedFromEvidence: tally.unverifiedFromEvidence,
-                }}
-              />
+              <div className="space-y-4">
+                <OverallVerdictBanner
+                  verdict={computeOverallVerdict(
+                    Number(tally.trueCount),
+                    Number(tally.falseCount),
+                    Number(tally.unverifiedCount),
+                  )}
+                />
+                <VerdictBar
+                  trueCount={tally.trueCount}
+                  falseCount={tally.falseCount}
+                  unverifiedCount={tally.unverifiedCount}
+                  breakdown={{
+                    trueDirect: tally.trueDirect,
+                    trueFromEvidence: tally.trueFromEvidence,
+                    falseDirect: tally.falseDirect,
+                    falseFromEvidence: tally.falseFromEvidence,
+                    unverifiedDirect: tally.unverifiedDirect,
+                    unverifiedFromEvidence: tally.unverifiedFromEvidence,
+                  }}
+                />
+              </div>
             ) : null}
           </section>
 
