@@ -29,6 +29,14 @@ interface ClaimCardProps {
   sessionId?: string;
 }
 
+const verdictBorderClass: Record<string, string> = {
+  True: "border-l-emerald-500",
+  False: "border-l-red-500",
+  Contested: "border-l-amber-500",
+  Unverified: "border-l-slate-400",
+  "Insufficient Data": "border-l-border",
+};
+
 export function ClaimCard({
   claim,
   index,
@@ -67,6 +75,37 @@ export function ClaimCard({
       )
     : null;
 
+  // Confidence meter calculation
+  const totalVotes = tally
+    ? Math.max(0, Number(tally.trueCount)) +
+      Math.max(0, Number(tally.falseCount)) +
+      Math.max(0, Number(tally.unverifiedCount))
+    : 0;
+  const truePercent =
+    totalVotes >= 5 && tally
+      ? Math.round((Math.max(0, Number(tally.trueCount)) / totalVotes) * 100)
+      : null;
+  const falsePercent =
+    totalVotes >= 5 && tally
+      ? Math.round((Math.max(0, Number(tally.falseCount)) / totalVotes) * 100)
+      : null;
+
+  // Meter bar color based on verdict
+  const meterBarColor =
+    verdict === "True"
+      ? "bg-emerald-500"
+      : verdict === "False"
+        ? "bg-red-500"
+        : verdict === "Contested"
+          ? "bg-amber-500"
+          : "bg-slate-400";
+
+  // Meter fill % (true % for positive verdicts, false % for false verdict)
+  const meterFill =
+    verdict === "False" ? (falsePercent ?? 0) : (truePercent ?? 0);
+
+  const borderClass = verdict ? verdictBorderClass[verdict] : "border-l-border";
+
   return (
     <motion.article
       initial={{ opacity: 0, y: 20 }}
@@ -75,7 +114,10 @@ export function ClaimCard({
       whileHover={{ y: -2 }}
       data-ocid={ocid}
       onClick={onClick}
-      className="group cursor-pointer bg-card border border-border hover:border-primary/40 rounded-sm p-5 transition-colors duration-200"
+      className={cn(
+        "group cursor-pointer bg-card border border-border border-l-4 hover:border-primary/40 rounded-sm p-5 transition-colors duration-200",
+        borderClass,
+      )}
     >
       <div className="flex gap-4">
         {/* Thumbnail */}
@@ -169,12 +211,43 @@ export function ClaimCard({
               </div>
             </div>
           ) : tally ? (
-            <VerdictBar
-              trueCount={tally.trueCount}
-              falseCount={tally.falseCount}
-              unverifiedCount={tally.unverifiedCount}
-              compact
-            />
+            <div className="space-y-3">
+              <VerdictBar
+                trueCount={tally.trueCount}
+                falseCount={tally.falseCount}
+                unverifiedCount={tally.unverifiedCount}
+                compact
+              />
+              {/* Confidence meter */}
+              {totalVotes >= 5 && truePercent !== null ? (
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold font-body text-foreground">
+                      {verdict === "False"
+                        ? `${falsePercent}% False`
+                        : verdict === "True"
+                          ? `${truePercent}% True`
+                          : `${truePercent}% True`}
+                    </span>
+                    <span className="text-xs text-muted-foreground font-body">
+                      {totalVotes} vote{totalVotes !== 1 ? "s" : ""}
+                    </span>
+                  </div>
+                  <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
+                    <motion.div
+                      initial={{ width: 0 }}
+                      animate={{ width: `${meterFill}%` }}
+                      transition={{ duration: 0.6, ease: "easeOut" }}
+                      className={cn("h-full rounded-full", meterBarColor)}
+                    />
+                  </div>
+                </div>
+              ) : totalVotes > 0 ? (
+                <p className="text-xs text-muted-foreground font-body italic">
+                  Not enough votes yet ({totalVotes}/5 needed)
+                </p>
+              ) : null}
+            </div>
           ) : null}
         </div>
       </div>

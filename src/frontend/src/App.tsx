@@ -10,22 +10,40 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
 import { useAllClaims, useSessionId, useUsername } from "@/hooks/useQueries";
 import { findClaimBySlug, getClaimSlug } from "@/utils/slug";
-import { Loader2, Plus, RotateCcw, Search } from "lucide-react";
+import {
+  BookOpen,
+  Clapperboard,
+  Cpu,
+  FlaskConical,
+  Globe,
+  HeartPulse,
+  Landmark,
+  Layers,
+  Loader2,
+  Palette,
+  Plus,
+  RotateCcw,
+  Search,
+  TrendingUp,
+  Trophy,
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useState } from "react";
 
-const CATEGORIES = [
-  "All",
-  "Science",
-  "Politics",
-  "Health",
-  "Technology",
-  "Sports",
-  "Entertainment",
-  "Religion",
-  "Art",
-  "Finance",
-  "Other",
+const CATEGORIES: { label: string; icon: LucideIcon }[] = [
+  { label: "All", icon: Layers },
+  { label: "Science", icon: FlaskConical },
+  { label: "Politics", icon: Landmark },
+  { label: "Health", icon: HeartPulse },
+  { label: "Technology", icon: Cpu },
+  { label: "Sports", icon: Trophy },
+  { label: "Entertainment", icon: Clapperboard },
+  { label: "Religion", icon: BookOpen },
+  { label: "Art", icon: Palette },
+  { label: "Finance", icon: TrendingUp },
+  { label: "General", icon: Globe },
+  { label: "Other", icon: Globe },
 ];
 
 const SEED_CLAIMS_VISIBLE_EMPTY = [
@@ -297,14 +315,15 @@ export default function App() {
                 className="mb-6"
               >
                 <TabsList className="bg-secondary border border-border h-auto flex-wrap gap-1 p-1">
-                  {CATEGORIES.map((cat) => (
+                  {CATEGORIES.map(({ label, icon: CatIcon }) => (
                     <TabsTrigger
-                      key={cat}
-                      value={cat}
+                      key={label}
+                      value={label}
                       data-ocid="category.tab"
-                      className="font-body text-xs data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+                      className="font-body text-xs gap-1.5 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
                     >
-                      {cat}
+                      <CatIcon className="w-3 h-3" />
+                      {label}
                     </TabsTrigger>
                   ))}
                 </TabsList>

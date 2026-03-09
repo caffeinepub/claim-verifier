@@ -1,12 +1,6 @@
 import { cn } from "@/lib/utils";
 import type { OverallVerdict } from "@/utils/verdict";
-import {
-  AlertCircle,
-  CheckCircle2,
-  HelpCircle,
-  Scale,
-  XCircle,
-} from "lucide-react";
+import { BarChart2, CheckCircle2, Search, Swords, XCircle } from "lucide-react";
 
 interface OverallVerdictBannerProps {
   verdict: OverallVerdict;
@@ -27,33 +21,33 @@ const config: Record<
     label: "TRUE",
     icon: CheckCircle2,
     bannerClass: "bg-emerald-50 border-emerald-200",
-    iconClass: "text-emerald-600",
+    iconClass: "text-emerald-500",
     labelClass: "text-emerald-800",
   },
   False: {
     label: "FALSE",
     icon: XCircle,
     bannerClass: "bg-red-50 border-red-200",
-    iconClass: "text-red-600",
+    iconClass: "text-red-500",
     labelClass: "text-red-800",
   },
   Unverified: {
     label: "UNVERIFIED",
-    icon: HelpCircle,
+    icon: Search,
     bannerClass: "bg-amber-50 border-amber-200",
-    iconClass: "text-amber-600",
+    iconClass: "text-amber-500",
     labelClass: "text-amber-800",
   },
   Contested: {
     label: "CONTESTED",
-    icon: Scale,
+    icon: Swords,
     bannerClass: "bg-slate-50 border-slate-200",
-    iconClass: "text-slate-600",
+    iconClass: "text-slate-500",
     labelClass: "text-slate-800",
   },
   "Insufficient Data": {
     label: "INSUFFICIENT DATA",
-    icon: AlertCircle,
+    icon: BarChart2,
     bannerClass: "bg-muted border-border",
     iconClass: "text-muted-foreground",
     labelClass: "text-muted-foreground",

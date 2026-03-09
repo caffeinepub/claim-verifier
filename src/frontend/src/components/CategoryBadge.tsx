@@ -1,35 +1,84 @@
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import {
+  BookOpen,
+  Clapperboard,
+  Cpu,
+  FlaskConical,
+  Globe,
+  HeartPulse,
+  Landmark,
+  Palette,
+  TrendingUp,
+  Trophy,
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 
 interface CategoryBadgeProps {
   category: string;
   className?: string;
 }
 
-const categoryStyles: Record<string, string> = {
-  Science: "bg-blue-950 text-blue-300 border-blue-800",
-  Politics: "bg-purple-950 text-purple-300 border-purple-800",
-  Health: "bg-green-950 text-green-300 border-green-800",
-  Technology: "bg-cyan-950 text-cyan-300 border-cyan-800",
-  Sports: "bg-orange-950 text-orange-300 border-orange-800",
-  Entertainment: "bg-pink-950 text-pink-300 border-pink-800",
-  Religion: "bg-amber-950 text-amber-300 border-amber-800",
-  Art: "bg-rose-950 text-rose-300 border-rose-800",
-  Finance: "bg-emerald-950 text-emerald-300 border-emerald-800",
-  Other: "bg-secondary text-secondary-foreground border-border",
+const categoryConfig: Record<string, { style: string; icon: LucideIcon }> = {
+  Science: {
+    style: "bg-blue-950 text-blue-300 border-blue-800",
+    icon: FlaskConical,
+  },
+  Politics: {
+    style: "bg-purple-950 text-purple-300 border-purple-800",
+    icon: Landmark,
+  },
+  Health: {
+    style: "bg-green-950 text-green-300 border-green-800",
+    icon: HeartPulse,
+  },
+  Technology: {
+    style: "bg-cyan-950 text-cyan-300 border-cyan-800",
+    icon: Cpu,
+  },
+  Sports: {
+    style: "bg-orange-950 text-orange-300 border-orange-800",
+    icon: Trophy,
+  },
+  Entertainment: {
+    style: "bg-pink-950 text-pink-300 border-pink-800",
+    icon: Clapperboard,
+  },
+  Religion: {
+    style: "bg-amber-950 text-amber-300 border-amber-800",
+    icon: BookOpen,
+  },
+  Art: {
+    style: "bg-rose-950 text-rose-300 border-rose-800",
+    icon: Palette,
+  },
+  Finance: {
+    style: "bg-emerald-950 text-emerald-300 border-emerald-800",
+    icon: TrendingUp,
+  },
+  General: {
+    style: "bg-secondary text-secondary-foreground border-border",
+    icon: Globe,
+  },
+  Other: {
+    style: "bg-secondary text-secondary-foreground border-border",
+    icon: Globe,
+  },
 };
 
 export function CategoryBadge({ category, className }: CategoryBadgeProps) {
-  const style = categoryStyles[category] ?? categoryStyles.Other;
+  const config = categoryConfig[category] ?? categoryConfig.Other;
+  const Icon = config.icon;
   return (
     <Badge
       variant="outline"
       className={cn(
-        "text-xs font-body font-medium tracking-wide uppercase border",
-        style,
+        "text-xs font-body font-medium tracking-wide uppercase border gap-1.5",
+        config.style,
         className,
       )}
     >
+      <Icon className="w-3 h-3 flex-shrink-0" />
       {category}
     </Badge>
   );

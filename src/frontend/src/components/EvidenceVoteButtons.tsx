@@ -5,7 +5,7 @@ import {
 } from "@/hooks/useQueries";
 import { cn } from "@/lib/utils";
 import { ChevronDown, ChevronUp } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 interface EvidenceVoteButtonsProps {
@@ -37,6 +37,8 @@ export function EvidenceVoteButtons({
   const [optimisticScore, setOptimisticScore] = useState<number | undefined>(
     undefined,
   );
+  const [justVotedUp, setJustVotedUp] = useState(false);
+  const [justVotedDown, setJustVotedDown] = useState(false);
 
   const currentVote =
     optimisticVote !== undefined ? optimisticVote : (sessionVote ?? null);
@@ -44,8 +46,27 @@ export function EvidenceVoteButtons({
   const displayScore =
     optimisticScore !== undefined ? optimisticScore : serverScore;
 
+  // Reset bounce animation flags after 350ms
+  useEffect(() => {
+    if (justVotedUp) {
+      const t = setTimeout(() => setJustVotedUp(false), 350);
+      return () => clearTimeout(t);
+    }
+  }, [justVotedUp]);
+
+  useEffect(() => {
+    if (justVotedDown) {
+      const t = setTimeout(() => setJustVotedDown(false), 350);
+      return () => clearTimeout(t);
+    }
+  }, [justVotedDown]);
+
   async function handleVote(direction: "up" | "down") {
     if (voteEvidence.isPending) return;
+
+    // Trigger bounce
+    if (direction === "up") setJustVotedUp(true);
+    else setJustVotedDown(true);
 
     // Compute optimistic next state
     const prevVote = currentVote;
@@ -101,7 +122,7 @@ export function EvidenceVoteButtons({
 
   return (
     <div
-      className="flex items-center gap-0.5 select-none"
+      className="flex items-center gap-1 select-none"
       aria-label="Vote on this evidence"
     >
       {/* Upvote */}
@@ -113,17 +134,18 @@ export function EvidenceVoteButtons({
         aria-label="Upvote evidence"
         aria-pressed={currentVote === "up"}
         className={cn(
-          "flex items-center justify-center w-7 h-7 rounded transition-all duration-150",
+          "flex items-center justify-center w-9 h-9 rounded-lg transition-all duration-150",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60",
           "disabled:cursor-not-allowed disabled:opacity-60",
+          justVotedUp && "vote-bounce",
           currentVote === "up"
-            ? "text-amber-400 bg-amber-400/10 hover:bg-amber-400/20"
+            ? "text-amber-400 bg-amber-400/15 hover:bg-amber-400/25 shadow-sm"
             : "text-muted-foreground hover:text-amber-400 hover:bg-amber-400/10",
         )}
       >
         <ChevronUp
           className={cn(
-            "h-4 w-4 transition-transform duration-150",
+            "h-5 w-5 transition-transform duration-150",
             currentVote === "up" && "scale-110",
           )}
           strokeWidth={currentVote === "up" ? 2.5 : 2}
@@ -134,7 +156,7 @@ export function EvidenceVoteButtons({
       <span
         data-ocid={`evidence.score.${index}`}
         className={cn(
-          "text-xs font-mono font-semibold tabular-nums min-w-[1.5rem] text-center transition-colors duration-150",
+          "text-sm font-mono font-bold tabular-nums min-w-[2rem] text-center transition-colors duration-150",
           scoreColor,
         )}
       >
@@ -150,17 +172,18 @@ export function EvidenceVoteButtons({
         aria-label="Downvote evidence"
         aria-pressed={currentVote === "down"}
         className={cn(
-          "flex items-center justify-center w-7 h-7 rounded transition-all duration-150",
+          "flex items-center justify-center w-9 h-9 rounded-lg transition-all duration-150",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60",
           "disabled:cursor-not-allowed disabled:opacity-60",
+          justVotedDown && "vote-bounce",
           currentVote === "down"
-            ? "text-blue-400 bg-blue-400/10 hover:bg-blue-400/20"
+            ? "text-blue-400 bg-blue-400/15 hover:bg-blue-400/25 shadow-sm"
             : "text-muted-foreground hover:text-blue-400 hover:bg-blue-400/10",
         )}
       >
         <ChevronDown
           className={cn(
-            "h-4 w-4 transition-transform duration-150",
+            "h-5 w-5 transition-transform duration-150",
             currentVote === "down" && "scale-110",
           )}
           strokeWidth={currentVote === "down" ? 2.5 : 2}
