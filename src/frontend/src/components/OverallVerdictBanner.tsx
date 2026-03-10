@@ -18,14 +18,14 @@ const config: Record<
   }
 > = {
   True: {
-    label: "TRUE",
+    label: "REBUNKED",
     icon: CheckCircle2,
     bannerClass: "bg-emerald-50 border-emerald-200",
     iconClass: "text-emerald-500",
     labelClass: "text-emerald-800",
   },
   False: {
-    label: "FALSE",
+    label: "DEBUNKED",
     icon: XCircle,
     bannerClass: "bg-red-50 border-red-200",
     iconClass: "text-red-500",

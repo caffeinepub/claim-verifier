@@ -3,6 +3,14 @@
 @tailwind utilities;
 
 @font-face {
+  font-family: "Cabinet Grotesk";
+  src: url("/assets/fonts/CabinetGrotesk.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
   font-family: "Bricolage Grotesque";
   src: url("/assets/fonts/BricolageGrotesque.woff2") format("woff2");
   font-weight: 200 800;
@@ -87,6 +95,10 @@
 }
 
 @layer utilities {
+  .font-logo {
+    font-family: 'Darker Grotesque', 'Cabinet Grotesk', sans-serif;
+  }
+
   .verdict-true {
     color: oklch(var(--verdict-true));
   }

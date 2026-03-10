@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Toaster } from "@/components/ui/sonner";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
 import { useAllClaims, useSessionId, useUsername } from "@/hooks/useQueries";
 import { findClaimBySlug, getClaimSlug } from "@/utils/slug";
@@ -210,7 +209,7 @@ export default function App() {
       <Toaster theme="dark" />
 
       {/* Masthead Header */}
-      <header className="border-b border-border sticky top-0 z-40 bg-background/95 backdrop-blur-sm">
+      <header className="border-b border-border sticky top-0 z-40 bg-background">
         <div className="max-w-5xl mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <button
@@ -219,12 +218,16 @@ export default function App() {
               className="flex items-center gap-3 group"
               aria-label="Go to homepage"
             >
-              <div className="w-8 h-8 rounded-sm bg-primary flex items-center justify-center">
-                <RotateCcw className="h-4 w-4 text-primary-foreground" />
-              </div>
-              <div className="text-left">
-                <h1 className="font-display text-xl font-bold text-foreground leading-none tracking-tight group-hover:text-primary transition-colors">
-                  Rebunked
+              <div className="flex flex-col items-start">
+                <h1
+                  style={{
+                    fontWeight: 800,
+                    fontSize: "2rem",
+                    lineHeight: 1,
+                  }}
+                  className="font-logo text-foreground leading-none"
+                >
+                  Rebunk<span className="text-primary">.</span>
                 </h1>
                 <p className="text-xs text-muted-foreground font-body tracking-widest uppercase mt-0.5">
                   Community Fact-Checking
@@ -308,26 +311,31 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Category tabs */}
-              <Tabs
-                value={selectedCategory}
-                onValueChange={setSelectedCategory}
-                className="mb-6"
-              >
-                <TabsList className="bg-secondary border border-border h-auto flex-wrap gap-1 p-1">
-                  {CATEGORIES.map(({ label, icon: CatIcon }) => (
-                    <TabsTrigger
+              {/* Category icon grid */}
+              <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-12 gap-2 mb-6">
+                {CATEGORIES.map(({ label, icon: CatIcon }) => {
+                  const isActive = selectedCategory === label;
+                  return (
+                    <button
                       key={label}
-                      value={label}
+                      type="button"
                       data-ocid="category.tab"
-                      className="font-body text-xs gap-1.5 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+                      onClick={() => setSelectedCategory(label)}
+                      className={[
+                        "flex flex-col items-center justify-center gap-1.5 rounded-lg border py-2.5 px-1 transition-all duration-150 cursor-pointer",
+                        isActive
+                          ? "bg-primary text-primary-foreground border-primary shadow-sm"
+                          : "bg-secondary text-muted-foreground border-border hover:border-primary/40 hover:text-foreground hover:bg-secondary/80",
+                      ].join(" ")}
                     >
-                      <CatIcon className="w-3 h-3" />
-                      {label}
-                    </TabsTrigger>
-                  ))}
-                </TabsList>
-              </Tabs>
+                      <CatIcon className="w-5 h-5 flex-shrink-0" />
+                      <span className="text-[10px] font-body font-medium leading-none text-center">
+                        {label}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
 
               {/* Claims grid */}
               {claimsLoading ? (

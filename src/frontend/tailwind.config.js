@@ -18,6 +18,7 @@ export default {
       fontFamily: {
         display: ["Bricolage Grotesque", "system-ui", "sans-serif"],
         body: ["Outfit", "system-ui", "sans-serif"],
+        logo: ["'Darker Grotesque'", "'Cabinet Grotesk'", "sans-serif"],
       },
       colors: {
         border: "oklch(var(--border))",

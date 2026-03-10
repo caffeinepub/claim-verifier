@@ -16,12 +16,12 @@ const config: Record<
   }
 > = {
   True: {
-    label: "TRUE",
+    label: "REBUNKED",
     className: "bg-emerald-100 text-emerald-800 border-emerald-300",
     icon: CheckCircle2,
   },
   False: {
-    label: "FALSE",
+    label: "DEBUNKED",
     className: "bg-red-100 text-red-800 border-red-300",
     icon: XCircle,
   },
