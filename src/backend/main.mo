@@ -169,9 +169,16 @@ actor {
     tokens;
   };
 
-  // Float.fromInt is used directly instead of natToFloat
+  func natToFloat(n : Nat) : Float {
+    var f : Float = 0.0;
+    var i = 0;
+    while (i < n) { f := f + 1.0; i += 1 };
+    f;
+  };
 
-
+  func intToFloat(i : Int) : Float {
+    if (i >= 0) { natToFloat(i.toNat()) } else { -natToFloat((-i).toNat()) };
+  };
 
   func jaccardSimilarity(a : Text, b : Text) : Float {
     let tokensA = tokenize(a);
@@ -180,20 +187,16 @@ actor {
     let sizeB = tokensB.size();
     if (sizeA == 0 and sizeB == 0) return 1.0;
     if (sizeA == 0 or sizeB == 0) return 0.0;
-    var intersectionF : Float = 0.0;
-    var sizeAF : Float = 0.0;
+    var intersectionCount = 0;
     for (t in tokensA.values()) {
-      sizeAF += 1.0;
       switch (tokensB.find(func(u : Text) : Bool { u == t })) {
-        case (?_) { intersectionF += 1.0 };
+        case (?_) { intersectionCount += 1 };
         case null {};
       };
     };
-    var sizeBF : Float = 0.0;
-    for (_ in tokensB.values()) { sizeBF += 1.0 };
-    let unionF = sizeAF + sizeBF - intersectionF;
-    if (unionF == 0.0) return 0.0;
-    intersectionF / unionF;
+    let unionCount : Nat = sizeA + sizeB - intersectionCount;
+    if (unionCount == 0) return 0.0;
+    natToFloat(intersectionCount) / natToFloat(unionCount);
   };
 
   func getCooldown(cooldownList : List.List<(Text, Int)>, sessionId : Text) : ?Int {
@@ -402,8 +405,8 @@ actor {
   };
 
   public query func getEvidenceVoteTally(evidenceId : Nat) : async { netScore : Int } {
-    var up : Int = 0;
-    var down : Int = 0;
+    var up = 0;
+    var down = 0;
     for (v in evidenceVotesArray.values()) {
       if (v.evidenceId == evidenceId) {
         switch (v.direction) {
@@ -759,18 +762,17 @@ actor {
     let claimEvidence = evidencesArray.filter(func(e : Evidence) : Bool { e.claimId == claimId and not isHidden(e.id, "evidence") });
 
     for (e in claimEvidence.values()) {
-      var netVotesF : Float = 0.0;
+      var netVotes = 0;
       for (v in evidenceVotesArray.values()) {
         if (v.evidenceId == e.id) {
           switch (v.direction) {
-            case ("up") { netVotesF += 1.0 };
-            case ("down") { netVotesF -= 1.0 };
+            case ("up") { netVotes += 1 };
+            case ("down") { netVotes -= 1 };
             case (_) {};
           };
         };
       };
-      let rawScore = netVotesF * EVIDENCE_WEIGHT_MULTIPLIER;
-      let weightedScore = if (rawScore < 0.0) { 0.0 } else { rawScore };
+      let weightedScore = intToFloat(netVotes) * EVIDENCE_WEIGHT_MULTIPLIER;
       switch (e.evidenceType) {
         case ("True") { trueFromEvidence += weightedScore };
         case ("False") { falseFromEvidence += weightedScore };

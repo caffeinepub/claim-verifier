@@ -90,12 +90,9 @@ export function ClaimCard({
   sessionId,
   slug,
 }: ClaimCardProps) {
-  const {
-    data: tally,
-    isLoading: tallyLoading,
-    isError: tallyError,
-    refetch: refetchTally,
-  } = useEnhancedVoteTally(claim.id);
+  const { data: tally, isLoading: tallyLoading } = useEnhancedVoteTally(
+    claim.id,
+  );
   const reportContent = useReportContent();
   const username = useUsername();
   const [reported, setReported] = useState(false);
@@ -126,40 +123,27 @@ export function ClaimCard({
     claim.imageUrls?.[0] ||
     (claim.ogThumbnailUrl ? claim.ogThumbnailUrl : null);
 
-  // Floor evidence contributions at 0 (Option B: negative evidence can't subtract)
-  const flooredTrue = tally
-    ? Number(tally.trueDirect) + Math.max(0, Number(tally.trueFromEvidence))
-    : 0;
-  const flooredFalse = tally
-    ? Number(tally.falseDirect) + Math.max(0, Number(tally.falseFromEvidence))
-    : 0;
-  const flooredUnverified = tally
-    ? Number(tally.unverifiedDirect) +
-      Math.max(0, Number(tally.unverifiedFromEvidence))
-    : 0;
-
   const verdict = tally
     ? computeOverallVerdict(
-        flooredTrue,
-        flooredFalse,
-        flooredUnverified,
-        tally
-          ? Number(tally.trueDirect) +
-              Number(tally.falseDirect) +
-              Number(tally.unverifiedDirect)
-          : undefined,
+        Number(tally.trueCount),
+        Number(tally.falseCount),
+        Number(tally.unverifiedCount),
       )
     : null;
 
   // Confidence meter calculation
-  const totalVotes = flooredTrue + flooredFalse + flooredUnverified;
+  const totalVotes = tally
+    ? Math.max(0, Number(tally.trueCount)) +
+      Math.max(0, Number(tally.falseCount)) +
+      Math.max(0, Number(tally.unverifiedCount))
+    : 0;
   const truePercent =
     totalVotes >= 5 && tally
-      ? Math.round((flooredTrue / totalVotes) * 100)
+      ? Math.round((Math.max(0, Number(tally.trueCount)) / totalVotes) * 100)
       : null;
   const falsePercent =
     totalVotes >= 5 && tally
-      ? Math.round((flooredFalse / totalVotes) * 100)
+      ? Math.round((Math.max(0, Number(tally.falseCount)) / totalVotes) * 100)
       : null;
 
   // Meter bar color based on verdict
@@ -303,23 +287,6 @@ export function ClaimCard({
             <Skeleton className="h-3 w-24" />
           </div>
         </div>
-      ) : tallyError ? (
-        <div
-          data-ocid="claim_card.error_state"
-          className="flex items-center gap-2 text-xs text-muted-foreground font-body"
-        >
-          <span>Could not load verdict.</span>
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              refetchTally();
-            }}
-            className="text-primary underline hover:no-underline"
-          >
-            Retry
-          </button>
-        </div>
       ) : tally ? (
         <div className="space-y-3">
           {/* Inline verdict label flush to left border color */}
@@ -337,9 +304,9 @@ export function ClaimCard({
               );
             })()}
           <VerdictBar
-            trueCount={BigInt(flooredTrue)}
-            falseCount={BigInt(flooredFalse)}
-            unverifiedCount={BigInt(flooredUnverified)}
+            trueCount={tally.trueCount}
+            falseCount={tally.falseCount}
+            unverifiedCount={tally.unverifiedCount}
             compact
           />
           {/* Confidence meter */}

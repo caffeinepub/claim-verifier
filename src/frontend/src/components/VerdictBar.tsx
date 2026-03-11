@@ -32,12 +32,15 @@ export function VerdictBar({
   compact = false,
   breakdown,
 }: VerdictBarProps) {
-  // Values are pre-floored by callers (evidence floor at 0), safe to use directly
-  const total = trueCount + falseCount + unverifiedCount;
+  // For the progress bar we use absolute values to avoid negative-width issues
+  const absTrue = trueCount < 0n ? 0n : trueCount;
+  const absFalse = falseCount < 0n ? 0n : falseCount;
+  const absUnver = unverifiedCount < 0n ? 0n : unverifiedCount;
+  const total = absTrue + absFalse + absUnver;
 
-  const trueP = formatVerdictPercent(trueCount, total);
-  const falseP = formatVerdictPercent(falseCount, total);
-  const unverP = formatVerdictPercent(unverifiedCount, total);
+  const trueP = formatVerdictPercent(absTrue, total);
+  const falseP = formatVerdictPercent(absFalse, total);
+  const unverP = formatVerdictPercent(absUnver, total);
 
   const trueBreakdown = breakdown
     ? formatBreakdown(breakdown.trueDirect, breakdown.trueFromEvidence)

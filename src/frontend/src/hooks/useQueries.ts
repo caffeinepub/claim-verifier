@@ -205,19 +205,9 @@ export function useEnhancedVoteTally(claimId: bigint | null) {
     queryKey: ["enhanced-tally", claimId?.toString()],
     queryFn: async () => {
       if (!actor || claimId === null) throw new Error("No actor or id");
-      try {
-        return await actor.getEnhancedVoteTally(claimId);
-      } catch (err) {
-        console.error(
-          "[getEnhancedVoteTally] failed for claimId",
-          claimId?.toString(),
-          err,
-        );
-        throw err;
-      }
+      return actor.getEnhancedVoteTally(claimId);
     },
     enabled: !!actor && !isFetching && claimId !== null,
-    retry: 1,
   });
 }
 

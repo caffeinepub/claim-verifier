@@ -198,12 +198,8 @@ export function ClaimDetail({
   );
 
   const { data: claim, isLoading: claimLoading } = useClaimById(claimId);
-  const {
-    data: tally,
-    isLoading: tallyLoading,
-    isError: tallyError,
-    refetch: refetchTally,
-  } = useEnhancedVoteTally(claimId);
+  const { data: tally, isLoading: tallyLoading } =
+    useEnhancedVoteTally(claimId);
   const { data: sessionVote } = useSessionVote(claimId, sessionId);
   const { data: evidence, isLoading: evidenceLoading } = useEvidence(claimId);
   const username = useUsername();
@@ -437,72 +433,28 @@ export function ClaimDetail({
                   <Skeleton className="h-4 w-32" />
                 </div>
               </div>
-            ) : tallyError ? (
-              <div
-                data-ocid="claim_detail.tally_error_state"
-                className="flex items-center gap-3 p-4 rounded-lg bg-muted border border-border"
-              >
-                <span className="text-sm text-muted-foreground font-body">
-                  Could not load verdict data.
-                </span>
-                <button
-                  type="button"
-                  onClick={() => refetchTally()}
-                  className="text-sm text-primary underline hover:no-underline font-body"
-                >
-                  Retry
-                </button>
-              </div>
             ) : tally ? (
               <div className="space-y-4">
-                {(() => {
-                  // Floor evidence contributions at 0 (negative evidence can't subtract)
-                  const ft =
-                    Number(tally.trueDirect) +
-                    Math.max(0, Number(tally.trueFromEvidence));
-                  const ff =
-                    Number(tally.falseDirect) +
-                    Math.max(0, Number(tally.falseFromEvidence));
-                  const fu =
-                    Number(tally.unverifiedDirect) +
-                    Math.max(0, Number(tally.unverifiedFromEvidence));
-                  return (
-                    <>
-                      <OverallVerdictBanner
-                        verdict={computeOverallVerdict(
-                          ft,
-                          ff,
-                          fu,
-                          Number(tally.trueDirect) +
-                            Number(tally.falseDirect) +
-                            Number(tally.unverifiedDirect),
-                        )}
-                      />
-                      <VerdictBar
-                        trueCount={BigInt(ft)}
-                        falseCount={BigInt(ff)}
-                        unverifiedCount={BigInt(fu)}
-                        breakdown={{
-                          trueDirect: tally.trueDirect,
-                          trueFromEvidence:
-                            tally.trueFromEvidence < 0n
-                              ? 0n
-                              : tally.trueFromEvidence,
-                          falseDirect: tally.falseDirect,
-                          falseFromEvidence:
-                            tally.falseFromEvidence < 0n
-                              ? 0n
-                              : tally.falseFromEvidence,
-                          unverifiedDirect: tally.unverifiedDirect,
-                          unverifiedFromEvidence:
-                            tally.unverifiedFromEvidence < 0n
-                              ? 0n
-                              : tally.unverifiedFromEvidence,
-                        }}
-                      />
-                    </>
-                  );
-                })()}
+                <OverallVerdictBanner
+                  verdict={computeOverallVerdict(
+                    Number(tally.trueCount),
+                    Number(tally.falseCount),
+                    Number(tally.unverifiedCount),
+                  )}
+                />
+                <VerdictBar
+                  trueCount={tally.trueCount}
+                  falseCount={tally.falseCount}
+                  unverifiedCount={tally.unverifiedCount}
+                  breakdown={{
+                    trueDirect: tally.trueDirect,
+                    trueFromEvidence: tally.trueFromEvidence,
+                    falseDirect: tally.falseDirect,
+                    falseFromEvidence: tally.falseFromEvidence,
+                    unverifiedDirect: tally.unverifiedDirect,
+                    unverifiedFromEvidence: tally.unverifiedFromEvidence,
+                  }}
+                />
               </div>
             ) : null}
           </section>
