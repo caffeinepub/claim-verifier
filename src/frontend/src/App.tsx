@@ -187,9 +187,10 @@ export default function App() {
     window.history.pushState({}, "", "/");
   }
 
-  const displayClaims = (
-    claims && claims.length > 0 ? claims : SEED_CLAIMS_VISIBLE_EMPTY
-  )
+  const allClaims =
+    claims && claims.length > 0 ? claims : SEED_CLAIMS_VISIBLE_EMPTY;
+
+  const displayClaims = allClaims
     .filter((claim) => {
       const matchesCategory =
         selectedCategory === "All" || claim.category === selectedCategory;
@@ -397,6 +398,7 @@ export default function App() {
                       index={index + 1}
                       onClick={() => openClaim(claim.id)}
                       sessionId={sessionId}
+                      slug={getClaimSlug(claim, allClaims)}
                     />
                   ))}
                 </div>

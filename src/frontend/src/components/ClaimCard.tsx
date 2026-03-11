@@ -1,10 +1,10 @@
-import { Skeleton } from "@/components/ui/skeleton";
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   useEnhancedVoteTally,
   useReportContent,
@@ -13,9 +13,10 @@ import {
 import { cn } from "@/lib/utils";
 import { formatRelativeTime } from "@/utils/time";
 import { computeOverallVerdict } from "@/utils/verdict";
-import { Flag } from "lucide-react";
+import { Flag, MoreHorizontal, Share2 } from "lucide-react";
 import { motion } from "motion/react";
 import { useState } from "react";
+import { toast } from "sonner";
 import type { Claim } from "../backend.d";
 import { CategoryBadge } from "./CategoryBadge";
 import { OverallVerdictBadge } from "./OverallVerdictBadge";
@@ -27,6 +28,7 @@ interface ClaimCardProps {
   index: number;
   onClick: () => void;
   sessionId?: string;
+  slug?: string;
 }
 
 const verdictBorderClass: Record<string, string> = {
@@ -42,6 +44,7 @@ export function ClaimCard({
   index,
   onClick,
   sessionId,
+  slug,
 }: ClaimCardProps) {
   const { data: tally, isLoading: tallyLoading } = useEnhancedVoteTally(
     claim.id,
@@ -61,6 +64,15 @@ export function ClaimCard({
       sessionId,
     });
     setReported(true);
+  }
+
+  function handleShare(e: React.MouseEvent) {
+    e.stopPropagation();
+    const path = slug ? `/claim/${slug}` : "/";
+    const url = `${window.location.origin}${path}`;
+    navigator.clipboard.writeText(url).then(() => {
+      toast.success("Link copied!");
+    });
   }
 
   const thumbnailSrc =
@@ -119,7 +131,7 @@ export function ClaimCard({
         borderClass,
       )}
     >
-      {/* Row 1: meta + report button */}
+      {/* Row 1: meta + ellipsis menu */}
       <div className="flex items-start justify-between gap-3 mb-2">
         <div className="flex items-center gap-2 flex-wrap">
           <CategoryBadge category={claim.category} />
@@ -134,38 +146,46 @@ export function ClaimCard({
           </span>
         </div>
 
-        {/* Report button */}
-        {sessionId && (
-          <TooltipProvider delayDuration={300}>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  data-ocid={`claim.report_button.${index}`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setReportDialogOpen(true);
-                  }}
-                  disabled={reported}
-                  aria-label="Report claim"
-                  className={cn(
-                    "flex-shrink-0 flex items-center justify-center w-6 h-6 rounded transition-all duration-150",
-                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60",
-                    "disabled:cursor-not-allowed",
-                    reported
-                      ? "text-amber-400 opacity-60"
-                      : "text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-destructive hover:bg-destructive/10",
-                  )}
-                >
-                  <Flag className="h-3 w-3" />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent side="top" className="text-xs font-body">
-                {reported ? "Reported" : "Report claim"}
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        )}
+        {/* Ellipsis dropdown menu -- stopPropagation prevents card navigation */}
+        {/* biome-ignore lint/a11y/useKeyWithClickEvents: dropdown handles keyboard */}
+        <div onClick={(e) => e.stopPropagation()}>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                data-ocid={`claim.open_modal_button.${index}`}
+                aria-label="More options"
+                className={cn(
+                  "flex-shrink-0 flex items-center justify-center w-7 h-7 rounded transition-all duration-150",
+                  "text-muted-foreground hover:text-foreground hover:bg-muted",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60",
+                )}
+              >
+                <MoreHorizontal className="h-4 w-4" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-36">
+              <DropdownMenuItem
+                onClick={handleShare}
+                className="cursor-pointer gap-2"
+              >
+                <Share2 className="h-3.5 w-3.5" />
+                Share
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setReportDialogOpen(true);
+                }}
+                disabled={reported}
+                className="cursor-pointer gap-2 text-destructive focus:text-destructive"
+              >
+                <Flag className="h-3.5 w-3.5" />
+                {reported ? "Reported" : "Report"}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </div>
 
       {/* Row 2: title + verdict badge */}
