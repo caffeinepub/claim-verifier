@@ -48,49 +48,49 @@ const verdictBorderClass: Record<string, string> = {
   "Insufficient Data": "border-l-border",
 };
 
-const verdictBannerConfig: Record<
+const verdictBadgeConfig: Record<
   OverallVerdict,
   {
     label: string;
     bg: string;
-    border: string;
     text: string;
+    ring: string;
     icon: React.ComponentType<{ className?: string }>;
   }
 > = {
   True: {
     label: "REBUNKED",
-    bg: "bg-emerald-50",
-    border: "border-t-2 border-emerald-500",
-    text: "text-emerald-700",
+    bg: "bg-emerald-500",
+    text: "text-white",
+    ring: "ring-1 ring-emerald-600",
     icon: CheckCircle2,
   },
   False: {
     label: "DEBUNKED",
-    bg: "bg-red-50",
-    border: "border-t-2 border-red-500",
-    text: "text-red-700",
+    bg: "bg-red-500",
+    text: "text-white",
+    ring: "ring-1 ring-red-600",
     icon: XCircle,
   },
   Unverified: {
     label: "UNVERIFIED",
-    bg: "bg-amber-50",
-    border: "border-t-2 border-amber-500",
-    text: "text-amber-700",
+    bg: "bg-amber-500",
+    text: "text-white",
+    ring: "ring-1 ring-amber-600",
     icon: Search,
   },
   Contested: {
     label: "CONTESTED",
-    bg: "bg-amber-50",
-    border: "border-t-2 border-amber-500",
-    text: "text-amber-700",
+    bg: "bg-amber-500",
+    text: "text-white",
+    ring: "ring-1 ring-amber-600",
     icon: Swords,
   },
   "Insufficient Data": {
     label: "INSUFFICIENT DATA",
-    bg: "bg-muted/50",
-    border: "border-t-2 border-slate-300",
-    text: "text-muted-foreground",
+    bg: "bg-slate-400",
+    text: "text-white",
+    ring: "ring-1 ring-slate-500",
     icon: BarChart2,
   },
 };
@@ -183,35 +183,28 @@ export function ClaimCard({
       data-ocid={ocid}
       onClick={onClick}
       className={cn(
-        "group cursor-pointer bg-card border border-border border-l-4 hover:border-primary/40 rounded-sm p-5 transition-colors duration-200 overflow-hidden",
+        "group relative cursor-pointer bg-card border border-border border-l-4 hover:border-primary/40 rounded-sm p-5 transition-colors duration-200 overflow-hidden",
         borderClass,
       )}
     >
-      {/* Verdict banner strip at the very top */}
+      {/* Floating verdict badge -- top-left corner overlay (Option A) */}
       {tallyLoading ? (
-        <Skeleton
-          className="h-7 w-full rounded-t-sm -mx-5 -mt-5 mb-3"
-          style={{ width: "calc(100% + 2.5rem)" }}
-        />
+        <Skeleton className="absolute top-3 left-3 h-6 w-24 rounded-full" />
       ) : verdict ? (
         (() => {
-          const cfg = verdictBannerConfig[verdict];
+          const cfg = verdictBadgeConfig[verdict];
           const Icon = cfg.icon;
           return (
             <div
               className={cn(
-                "-mx-5 -mt-5 mb-3 px-5 py-2 flex items-center justify-center gap-1.5 rounded-t-sm",
+                "absolute top-3 left-3 flex items-center gap-1 px-2.5 py-0.5 rounded-full shadow-sm z-10",
                 cfg.bg,
-                cfg.border,
+                cfg.text,
+                cfg.ring,
               )}
             >
-              <Icon className={cn("w-3.5 h-3.5", cfg.text)} />
-              <span
-                className={cn(
-                  "text-xs font-bold tracking-wider font-body",
-                  cfg.text,
-                )}
-              >
+              <Icon className="w-3 h-3" />
+              <span className="text-[10px] font-bold tracking-wider font-body">
                 {cfg.label}
               </span>
             </div>
@@ -220,7 +213,7 @@ export function ClaimCard({
       ) : null}
 
       {/* Row 1: meta + ellipsis menu */}
-      <div className="flex items-start justify-between gap-3 mb-2">
+      <div className="flex items-start justify-between gap-3 mb-2 mt-7">
         <div className="flex items-center gap-2 flex-wrap">
           <CategoryBadge category={claim.category} />
           <span className="text-xs text-muted-foreground font-body">
