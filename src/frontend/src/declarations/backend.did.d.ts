@@ -158,6 +158,10 @@ export interface _SERVICE {
   'submitVote' : ActorMethod<[bigint, string, string], undefined>,
   'voteEvidence' : ActorMethod<[bigint, string, string], undefined>,
   'voteReply' : ActorMethod<[bigint, string, string], undefined>,
+  'likeReply' : ActorMethod<[bigint, string], undefined>,
+  'getReplyLikeCount' : ActorMethod<[bigint], bigint>,
+  'getSessionLikeForReply' : ActorMethod<[bigint, string], boolean>,
+  'getReplyLikeCounts' : ActorMethod<[bigint], Array<[bigint, bigint]>>,
 }
 export declare const idlService: IDL.ServiceClass;
 export declare const idlInitArgs: IDL.Type[];

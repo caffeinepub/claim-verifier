@@ -4,6 +4,7 @@ import {
   BookOpen,
   Clapperboard,
   Cpu,
+  Eye,
   FlaskConical,
   Globe,
   HeartPulse,
@@ -56,18 +57,18 @@ const categoryConfig: Record<string, { style: string; icon: LucideIcon }> = {
     style: "bg-emerald-950 text-emerald-300 border-emerald-800",
     icon: TrendingUp,
   },
-  General: {
-    style: "bg-secondary text-secondary-foreground border-border",
-    icon: Globe,
+  Conspiracy: {
+    style: "bg-violet-950 text-violet-300 border-violet-800",
+    icon: Eye,
   },
-  Other: {
+  General: {
     style: "bg-secondary text-secondary-foreground border-border",
     icon: Globe,
   },
 };
 
 export function CategoryBadge({ category, className }: CategoryBadgeProps) {
-  const config = categoryConfig[category] ?? categoryConfig.Other;
+  const config = categoryConfig[category] ?? categoryConfig.General;
   const Icon = config.icon;
   return (
     <Badge

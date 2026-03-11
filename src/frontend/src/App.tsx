@@ -13,6 +13,7 @@ import {
   BookOpen,
   Clapperboard,
   Cpu,
+  Eye,
   FlaskConical,
   Globe,
   HeartPulse,
@@ -41,8 +42,8 @@ const CATEGORIES: { label: string; icon: LucideIcon }[] = [
   { label: "Religion", icon: BookOpen },
   { label: "Art", icon: Palette },
   { label: "Finance", icon: TrendingUp },
+  { label: "Conspiracy", icon: Eye },
   { label: "General", icon: Globe },
-  { label: "Other", icon: Globe },
 ];
 
 const SEED_CLAIMS_VISIBLE_EMPTY = [

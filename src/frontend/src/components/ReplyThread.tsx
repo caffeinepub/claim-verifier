@@ -1,17 +1,20 @@
 import { ReportDialog } from "@/components/ReportDialog";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Textarea } from "@/components/ui/textarea";
 import {
   type Reply,
   useAddReply,
+  useLikeReply,
   useReplies,
+  useReplyLikeCounts,
   useReportReply,
+  useSessionLikeForReply,
   useUsername,
 } from "@/hooks/useQueries";
 import { cn } from "@/lib/utils";
@@ -21,9 +24,12 @@ import {
   Clock,
   CornerDownRight,
   Flag,
+  Heart,
   Loader2,
   MessageSquare,
+  MoreHorizontal,
   Send,
+  Share2,
   X,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
@@ -182,6 +188,7 @@ interface ReplyCardProps {
   onToggleReply: (replyId: bigint | null) => void;
   children?: React.ReactNode;
   evidenceIndex: number;
+  likeCounts: Record<string, number>;
 }
 
 function ReplyCard({
@@ -197,11 +204,30 @@ function ReplyCard({
   onToggleReply,
   children,
   evidenceIndex,
+  likeCounts,
 }: ReplyCardProps) {
   const isOwnReply = reply.sessionId === sessionId;
   const displayAuthor = isOwnReply ? username : reply.authorUsername;
   const isReplying = replyingToId === reply.id;
   const [reportDialogOpen, setReportDialogOpen] = useState(false);
+
+  const likeReply = useLikeReply();
+  const { data: isLiked = false } = useSessionLikeForReply(reply.id, sessionId);
+  const likeCount = likeCounts[reply.id.toString()] ?? 0;
+
+  async function handleLike() {
+    try {
+      await likeReply.mutateAsync({ replyId: reply.id, sessionId, evidenceId });
+    } catch {
+      toast.error("Failed to like reply");
+    }
+  }
+
+  function handleShare() {
+    const base = window.location.href.split("#")[0];
+    navigator.clipboard.writeText(`${base}#reply-${reply.id.toString()}`);
+    toast.success("Link copied");
+  }
 
   return (
     <div
@@ -227,8 +253,8 @@ function ReplyCard({
           {reply.text}
         </p>
 
-        {/* Actions row */}
-        <div className="flex items-center gap-2">
+        {/* Actions row: [Reply] [Heart] ... [⋯] */}
+        <div className="flex items-center gap-1">
           {/* Reply button */}
           <button
             type="button"
@@ -246,35 +272,62 @@ function ReplyCard({
             Reply
           </button>
 
-          {/* Report button */}
-          <TooltipProvider delayDuration={300}>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  data-ocid={`reply.report_button.${index}`}
-                  onClick={() => setReportDialogOpen(true)}
-                  disabled={reportedIds.has(reply.id.toString())}
-                  aria-label="Report reply"
-                  className={cn(
-                    "flex items-center justify-center w-5 h-5 rounded transition-all duration-150 ml-auto",
-                    "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/60",
-                    "disabled:cursor-not-allowed",
-                    reportedIds.has(reply.id.toString())
-                      ? "text-amber-400 opacity-60"
-                      : "text-muted-foreground opacity-0 group-hover:opacity-50 hover:!opacity-100 hover:text-destructive hover:bg-destructive/10",
-                  )}
-                >
-                  <Flag className="h-2.5 w-2.5" />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent side="top" className="text-xs font-body">
-                {reportedIds.has(reply.id.toString())
-                  ? "Reported"
-                  : "Report reply"}
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
+          {/* Like button */}
+          <button
+            type="button"
+            data-ocid={`reply.toggle.${index}`}
+            onClick={handleLike}
+            disabled={likeReply.isPending}
+            className={cn(
+              "flex items-center gap-1 text-xs font-body rounded px-1.5 py-0.5 transition-colors",
+              "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-rose-400/60",
+              "disabled:opacity-50 disabled:cursor-not-allowed",
+              isLiked
+                ? "text-rose-500"
+                : "text-muted-foreground hover:text-rose-400",
+            )}
+          >
+            <Heart className={cn("h-3 w-3", isLiked && "fill-rose-500")} />
+            {likeCount > 0 && <span>{likeCount}</span>}
+          </button>
+
+          {/* Spacer */}
+          <div className="flex-1" />
+
+          {/* Ellipsis menu */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                data-ocid={`reply.dropdown_menu.${index}`}
+                aria-label="More options"
+                className="flex items-center justify-center w-6 h-6 rounded text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/60"
+              >
+                <MoreHorizontal className="h-3.5 w-3.5" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-36">
+              <DropdownMenuItem
+                data-ocid={`reply.secondary_button.${index}`}
+                className="text-muted-foreground cursor-pointer gap-2"
+                onClick={handleShare}
+              >
+                <Share2 className="h-3.5 w-3.5 text-muted-foreground" />
+                <span>Share</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                data-ocid={`reply.delete_button.${index}`}
+                className="text-muted-foreground cursor-pointer gap-2"
+                disabled={reportedIds.has(reply.id.toString())}
+                onClick={() => setReportDialogOpen(true)}
+              >
+                <Flag className="h-3.5 w-3.5 text-muted-foreground" />
+                <span>
+                  {reportedIds.has(reply.id.toString()) ? "Reported" : "Report"}
+                </span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
 
         {/* Report dialog */}
@@ -362,6 +415,11 @@ export function ReplyThread({
   const { data: allReplies = [] } = useReplies(evidenceId);
   const replyCount = allReplies.length;
 
+  // Fetch like counts for all replies under this evidence
+  const { data: likeCounts = {} } = useReplyLikeCounts(
+    expanded ? evidenceId : null,
+  );
+
   async function handleReport(replyId: bigint) {
     const key = replyId.toString();
     if (reportedIds.has(key)) return;
@@ -429,6 +487,24 @@ export function ReplyThread({
     childrenByParent.get(key)!.push(child);
   }
 
+  // Sort top-level replies by most likes descending
+  const sortedTopLevel = [...topLevelReplies].sort(
+    (a, b) =>
+      (likeCounts[b.id.toString()] ?? 0) - (likeCounts[a.id.toString()] ?? 0),
+  );
+
+  // Sort each children group by most likes descending
+  for (const [key, children] of childrenByParent.entries()) {
+    childrenByParent.set(
+      key,
+      [...children].sort(
+        (a, b) =>
+          (likeCounts[b.id.toString()] ?? 0) -
+          (likeCounts[a.id.toString()] ?? 0),
+      ),
+    );
+  }
+
   // Global index counter for deterministic ocid markers
   let globalIndex = 0;
   function nextIndex() {
@@ -454,6 +530,7 @@ export function ReplyThread({
         replyingToId={replyingToId}
         onToggleReply={handleToggleReply}
         evidenceIndex={evidenceIndex}
+        likeCounts={likeCounts}
       >
         {nestedReplies.length > 0 && (
           <div className="ml-2 space-y-0">
@@ -521,7 +598,7 @@ export function ReplyThread({
                 </div>
               ) : replies.length > 0 ? (
                 <div className="space-y-0">
-                  {topLevelReplies.map((reply) => renderReply(reply, 0))}
+                  {sortedTopLevel.map((reply) => renderReply(reply, 0))}
                 </div>
               ) : null}
 

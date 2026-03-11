@@ -96,10 +96,13 @@ export interface backendInterface {
     getHiddenEvidence(password: string): Promise<Array<Evidence>>;
     getHiddenReplies(password: string): Promise<Array<Reply>>;
     getReplies(evidenceId: bigint): Promise<Array<Reply>>;
+    getReplyLikeCount(replyId: bigint): Promise<bigint>;
+    getReplyLikeCounts(evidenceId: bigint): Promise<Array<[bigint, bigint]>>;
     getReplyVoteTally(replyId: bigint): Promise<{
         netScore: bigint;
     }>;
     getReportCount(targetId: bigint, targetType: string): Promise<bigint>;
+    getSessionLikeForReply(replyId: bigint, sessionId: string): Promise<boolean>;
     getSessionVoteForClaim(claimId: bigint, sessionId: string): Promise<string | null>;
     getSessionVoteForEvidence(evidenceId: bigint, sessionId: string): Promise<string | null>;
     getSessionVoteForReply(replyId: bigint, sessionId: string): Promise<string | null>;
@@ -108,6 +111,7 @@ export interface backendInterface {
         falseCount: bigint;
         unverifiedCount: bigint;
     }>;
+    likeReply(replyId: bigint, sessionId: string): Promise<void>;
     reportContent(targetId: bigint, targetType: string, sessionId: string): Promise<{
         __kind__: "ok";
         ok: null;

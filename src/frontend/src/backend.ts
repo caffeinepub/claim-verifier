@@ -252,6 +252,10 @@ export interface backendInterface {
     submitVote(claimId: bigint, sessionId: string, verdict: string): Promise<void>;
     voteEvidence(evidenceId: bigint, sessionId: string, direction: string): Promise<void>;
     voteReply(replyId: bigint, sessionId: string, direction: string): Promise<void>;
+    likeReply(replyId: bigint, sessionId: string): Promise<void>;
+    getReplyLikeCount(replyId: bigint): Promise<bigint>;
+    getSessionLikeForReply(replyId: bigint, sessionId: string): Promise<boolean>;
+    getReplyLikeCounts(evidenceId: bigint): Promise<Array<[bigint, bigint]>>;
 }
 import type { _CaffeineStorageRefillInformation as __CaffeineStorageRefillInformation, _CaffeineStorageRefillResult as __CaffeineStorageRefillResult } from "./declarations/backend.did.d.ts";
 export class Backend implements backendInterface {
@@ -855,6 +859,62 @@ export class Backend implements backendInterface {
             }
         } else {
             const result = await this.actor.voteReply(arg0, arg1, arg2);
+            return result;
+        }
+    }
+    async likeReply(arg0: bigint, arg1: string): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.likeReply(arg0, arg1);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.likeReply(arg0, arg1);
+            return result;
+        }
+    }
+    async getReplyLikeCount(arg0: bigint): Promise<bigint> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getReplyLikeCount(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getReplyLikeCount(arg0);
+            return result;
+        }
+    }
+    async getSessionLikeForReply(arg0: bigint, arg1: string): Promise<boolean> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getSessionLikeForReply(arg0, arg1);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getSessionLikeForReply(arg0, arg1);
+            return result;
+        }
+    }
+    async getReplyLikeCounts(arg0: bigint): Promise<Array<[bigint, bigint]>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getReplyLikeCounts(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getReplyLikeCounts(arg0);
             return result;
         }
     }

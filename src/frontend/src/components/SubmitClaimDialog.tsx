@@ -35,7 +35,8 @@ const CATEGORIES = [
   "Religion",
   "Art",
   "Finance",
-  "Other",
+  "Conspiracy",
+  "General",
 ];
 
 interface SubmitClaimDialogProps {

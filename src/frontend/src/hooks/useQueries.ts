@@ -205,9 +205,19 @@ export function useEnhancedVoteTally(claimId: bigint | null) {
     queryKey: ["enhanced-tally", claimId?.toString()],
     queryFn: async () => {
       if (!actor || claimId === null) throw new Error("No actor or id");
-      return actor.getEnhancedVoteTally(claimId);
+      try {
+        return await actor.getEnhancedVoteTally(claimId);
+      } catch (err) {
+        console.error(
+          "[getEnhancedVoteTally] failed for claimId",
+          claimId?.toString(),
+          err,
+        );
+        throw err;
+      }
     },
     enabled: !!actor && !isFetching && claimId !== null,
+    retry: 1,
   });
 }
 
@@ -759,5 +769,84 @@ export function useAdminDeleteEvidence() {
         queryKey: ["admin", "hidden-evidence", variables.password],
       });
     },
+  });
+}
+
+// ── Reply Likes ───────────────────────────────────────────────────────────────
+
+export function useLikeReply() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      replyId,
+      sessionId,
+    }: { replyId: bigint; sessionId: string; evidenceId?: bigint }) => {
+      if (!actor) throw new Error("No actor");
+      return actor.likeReply(replyId, sessionId);
+    },
+    onSuccess: (
+      _data: unknown,
+      variables: { replyId: bigint; sessionId: string; evidenceId?: bigint },
+    ) => {
+      queryClient.invalidateQueries({
+        queryKey: ["reply-likes", variables.replyId.toString()],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["reply-like-session", variables.replyId.toString()],
+      });
+      if (variables.evidenceId != null) {
+        queryClient.invalidateQueries({
+          queryKey: ["reply-like-counts", variables.evidenceId.toString()],
+        });
+      }
+    },
+  });
+}
+
+export function useReplyLikeCount(replyId: bigint | null) {
+  const { actor, isFetching } = useActor();
+  return useQuery<bigint>({
+    queryKey: ["reply-likes", replyId?.toString()],
+    queryFn: async () => {
+      if (!actor || replyId === null) return 0n;
+      return actor.getReplyLikeCount(replyId);
+    },
+    enabled: !!actor && !isFetching && replyId !== null,
+  });
+}
+
+export function useSessionLikeForReply(
+  replyId: bigint | null,
+  sessionId: string | null,
+) {
+  const { actor, isFetching } = useActor();
+  return useQuery<boolean>({
+    queryKey: ["reply-like-session", replyId?.toString(), sessionId],
+    queryFn: async () => {
+      if (!actor || replyId === null || !sessionId) return false;
+      return actor.getSessionLikeForReply(replyId, sessionId);
+    },
+    enabled: !!actor && !isFetching && replyId !== null && !!sessionId,
+  });
+}
+
+export function useReplyLikeCounts(evidenceId: bigint | null) {
+  const { actor, isFetching } = useActor();
+  return useQuery<Record<string, number>>({
+    queryKey: ["reply-like-counts", evidenceId?.toString()],
+    queryFn: async () => {
+      if (!actor || evidenceId === null) return {};
+      const counts: Array<[bigint, bigint]> =
+        await actor.getReplyLikeCounts(evidenceId);
+      const result: Record<string, number> = {};
+      for (const [id, count] of counts) {
+        result[id.toString()] = Number(count);
+      }
+      return result;
+    },
+    enabled: !!actor && !isFetching && evidenceId !== null,
+    staleTime: 10_000,
   });
 }

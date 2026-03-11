@@ -34,6 +34,7 @@ import {
   Link2,
   Loader2,
   MessageSquare,
+  MoreHorizontal,
   Search,
   Send,
   Share2,
@@ -69,12 +70,6 @@ function sortEvidence(
   }
 }
 import { Input } from "@/components/ui/input";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { useReportContent } from "@/hooks/useQueries";
 import { getClaimSlug } from "@/utils/slug";
 import { computeOverallVerdict } from "@/utils/verdict";
@@ -203,8 +198,12 @@ export function ClaimDetail({
   );
 
   const { data: claim, isLoading: claimLoading } = useClaimById(claimId);
-  const { data: tally, isLoading: tallyLoading } =
-    useEnhancedVoteTally(claimId);
+  const {
+    data: tally,
+    isLoading: tallyLoading,
+    isError: tallyError,
+    refetch: refetchTally,
+  } = useEnhancedVoteTally(claimId);
   const { data: sessionVote } = useSessionVote(claimId, sessionId);
   const { data: evidence, isLoading: evidenceLoading } = useEvidence(claimId);
   const username = useUsername();
@@ -438,28 +437,72 @@ export function ClaimDetail({
                   <Skeleton className="h-4 w-32" />
                 </div>
               </div>
+            ) : tallyError ? (
+              <div
+                data-ocid="claim_detail.tally_error_state"
+                className="flex items-center gap-3 p-4 rounded-lg bg-muted border border-border"
+              >
+                <span className="text-sm text-muted-foreground font-body">
+                  Could not load verdict data.
+                </span>
+                <button
+                  type="button"
+                  onClick={() => refetchTally()}
+                  className="text-sm text-primary underline hover:no-underline font-body"
+                >
+                  Retry
+                </button>
+              </div>
             ) : tally ? (
               <div className="space-y-4">
-                <OverallVerdictBanner
-                  verdict={computeOverallVerdict(
-                    Number(tally.trueCount),
-                    Number(tally.falseCount),
-                    Number(tally.unverifiedCount),
-                  )}
-                />
-                <VerdictBar
-                  trueCount={tally.trueCount}
-                  falseCount={tally.falseCount}
-                  unverifiedCount={tally.unverifiedCount}
-                  breakdown={{
-                    trueDirect: tally.trueDirect,
-                    trueFromEvidence: tally.trueFromEvidence,
-                    falseDirect: tally.falseDirect,
-                    falseFromEvidence: tally.falseFromEvidence,
-                    unverifiedDirect: tally.unverifiedDirect,
-                    unverifiedFromEvidence: tally.unverifiedFromEvidence,
-                  }}
-                />
+                {(() => {
+                  // Floor evidence contributions at 0 (negative evidence can't subtract)
+                  const ft =
+                    Number(tally.trueDirect) +
+                    Math.max(0, Number(tally.trueFromEvidence));
+                  const ff =
+                    Number(tally.falseDirect) +
+                    Math.max(0, Number(tally.falseFromEvidence));
+                  const fu =
+                    Number(tally.unverifiedDirect) +
+                    Math.max(0, Number(tally.unverifiedFromEvidence));
+                  return (
+                    <>
+                      <OverallVerdictBanner
+                        verdict={computeOverallVerdict(
+                          ft,
+                          ff,
+                          fu,
+                          Number(tally.trueDirect) +
+                            Number(tally.falseDirect) +
+                            Number(tally.unverifiedDirect),
+                        )}
+                      />
+                      <VerdictBar
+                        trueCount={BigInt(ft)}
+                        falseCount={BigInt(ff)}
+                        unverifiedCount={BigInt(fu)}
+                        breakdown={{
+                          trueDirect: tally.trueDirect,
+                          trueFromEvidence:
+                            tally.trueFromEvidence < 0n
+                              ? 0n
+                              : tally.trueFromEvidence,
+                          falseDirect: tally.falseDirect,
+                          falseFromEvidence:
+                            tally.falseFromEvidence < 0n
+                              ? 0n
+                              : tally.falseFromEvidence,
+                          unverifiedDirect: tally.unverifiedDirect,
+                          unverifiedFromEvidence:
+                            tally.unverifiedFromEvidence < 0n
+                              ? 0n
+                              : tally.unverifiedFromEvidence,
+                        }}
+                      />
+                    </>
+                  );
+                })()}
               </div>
             ) : null}
           </section>
@@ -855,42 +898,48 @@ export function ClaimDetail({
                           claimId={claimId}
                         />
                         <div className="flex items-center gap-1">
-                          {/* Report button */}
-                          <TooltipProvider delayDuration={300}>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <button
-                                  type="button"
-                                  data-ocid={`evidence.report_button.${idx + 1}`}
-                                  onClick={() =>
-                                    setReportingEvidenceId(item.id)
-                                  }
-                                  disabled={reportedEvidence.has(
-                                    item.id.toString(),
-                                  )}
-                                  aria-label="Report evidence"
-                                  className={cn(
-                                    "flex items-center justify-center w-6 h-6 rounded transition-all duration-150",
-                                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60",
-                                    "disabled:cursor-not-allowed",
-                                    reportedEvidence.has(item.id.toString())
-                                      ? "text-amber-400 opacity-60"
-                                      : "text-muted-foreground opacity-50 hover:opacity-100 hover:text-destructive hover:bg-destructive/10",
-                                  )}
-                                >
-                                  <Flag className="h-3 w-3" />
-                                </button>
-                              </TooltipTrigger>
-                              <TooltipContent
-                                side="top"
-                                className="text-xs font-body"
+                          {/* Ellipsis menu */}
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <button
+                                type="button"
+                                data-ocid={`evidence.dropdown_menu.${idx + 1}`}
+                                aria-label="More options"
+                                className="flex items-center justify-center w-6 h-6 rounded text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/60"
                               >
-                                {reportedEvidence.has(item.id.toString())
-                                  ? "Reported"
-                                  : "Report evidence"}
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
+                                <MoreHorizontal className="h-3.5 w-3.5" />
+                              </button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-36">
+                              <DropdownMenuItem
+                                data-ocid={`evidence.secondary_button.${idx + 1}`}
+                                className="text-gray-500 cursor-pointer gap-2"
+                                onClick={() =>
+                                  navigator.clipboard.writeText(
+                                    window.location.href,
+                                  )
+                                }
+                              >
+                                <Share2 className="h-3.5 w-3.5 text-gray-500" />
+                                <span>Share</span>
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                data-ocid={`evidence.delete_button.${idx + 1}`}
+                                className="text-gray-500 cursor-pointer gap-2"
+                                disabled={reportedEvidence.has(
+                                  item.id.toString(),
+                                )}
+                                onClick={() => setReportingEvidenceId(item.id)}
+                              >
+                                <Flag className="h-3.5 w-3.5 text-gray-500" />
+                                <span>
+                                  {reportedEvidence.has(item.id.toString())
+                                    ? "Reported"
+                                    : "Report"}
+                                </span>
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         </div>
                       </div>
                       {/* Threaded replies */}

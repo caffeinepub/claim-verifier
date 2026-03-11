@@ -72,6 +72,11 @@ actor {
     direction : Text;
   };
 
+  type ReplyLike = {
+    replyId : Nat;
+    sessionId : Text;
+  };
+
   var claimsArray : [Claim] = [];
   var votesArray : [Vote] = [];
   var evidencesArray : [Evidence] = [];
@@ -79,6 +84,7 @@ actor {
   var reportsArray : [Report] = [];
   var repliesArray : [Reply] = [];
   var replyVotesArray : [ReplyVote] = [];
+  var replyLikesArray : [ReplyLike] = [];
   var claimCount : Nat = 0;
   var evidenceCount : Nat = 0;
   var reportCount : Nat = 0;
@@ -163,16 +169,9 @@ actor {
     tokens;
   };
 
-  func natToFloat(n : Nat) : Float {
-    var f : Float = 0.0;
-    var i = 0;
-    while (i < n) { f := f + 1.0; i += 1 };
-    f;
-  };
+  // Float.fromInt is used directly instead of natToFloat
 
-  func intToFloat(i : Int) : Float {
-    if (i >= 0) { natToFloat(i.toNat()) } else { -natToFloat((-i).toNat()) };
-  };
+
 
   func jaccardSimilarity(a : Text, b : Text) : Float {
     let tokensA = tokenize(a);
@@ -181,16 +180,20 @@ actor {
     let sizeB = tokensB.size();
     if (sizeA == 0 and sizeB == 0) return 1.0;
     if (sizeA == 0 or sizeB == 0) return 0.0;
-    var intersectionCount = 0;
+    var intersectionF : Float = 0.0;
+    var sizeAF : Float = 0.0;
     for (t in tokensA.values()) {
+      sizeAF += 1.0;
       switch (tokensB.find(func(u : Text) : Bool { u == t })) {
-        case (?_) { intersectionCount += 1 };
+        case (?_) { intersectionF += 1.0 };
         case null {};
       };
     };
-    let unionCount : Nat = sizeA + sizeB - intersectionCount;
-    if (unionCount == 0) return 0.0;
-    natToFloat(intersectionCount) / natToFloat(unionCount);
+    var sizeBF : Float = 0.0;
+    for (_ in tokensB.values()) { sizeBF += 1.0 };
+    let unionF = sizeAF + sizeBF - intersectionF;
+    if (unionF == 0.0) return 0.0;
+    intersectionF / unionF;
   };
 
   func getCooldown(cooldownList : List.List<(Text, Int)>, sessionId : Text) : ?Int {
@@ -321,7 +324,7 @@ actor {
     text : Text,
     imageUrls : [Text],
     urls : [Text],
-    evidenceType : Text, // New parameter
+    evidenceType : Text,
   ) : async {
     #ok;
     #err : Text;
@@ -354,7 +357,7 @@ actor {
       timestamp = now;
       imageUrls;
       urls;
-      evidenceType; // Set evidenceType field
+      evidenceType;
     };
     let list = List.fromArray<Evidence>(evidencesArray);
     list.add(evidence);
@@ -399,8 +402,8 @@ actor {
   };
 
   public query func getEvidenceVoteTally(evidenceId : Nat) : async { netScore : Int } {
-    var up = 0;
-    var down = 0;
+    var up : Int = 0;
+    var down : Int = 0;
     for (v in evidenceVotesArray.values()) {
       if (v.evidenceId == evidenceId) {
         switch (v.direction) {
@@ -661,10 +664,66 @@ actor {
     if (password != ADMIN_PASSWORD) { return #err("Unauthorized") };
     repliesArray := repliesArray.filter(func(r : Reply) : Bool { r.id != id });
     replyVotesArray := replyVotesArray.filter(func(v : ReplyVote) : Bool { v.replyId != id });
+    replyLikesArray := replyLikesArray.filter(func(l : ReplyLike) : Bool { l.replyId != id });
     reportsArray := reportsArray.filter(func(r : Report) : Bool {
       not (r.targetId == id and r.targetType == "reply");
     });
     #ok;
+  };
+
+  // ── Reply Likes ──────────────────────────────────────────────────────────────
+
+  public shared func likeReply(replyId : Nat, sessionId : Text) : async () {
+    // Toggle: if already liked, remove the like
+    let existing = replyLikesArray.find(func(l : ReplyLike) : Bool {
+      l.replyId == replyId and l.sessionId == sessionId
+    });
+    switch (existing) {
+      case (?_) {
+        replyLikesArray := replyLikesArray.filter(func(l : ReplyLike) : Bool {
+          not (l.replyId == replyId and l.sessionId == sessionId)
+        });
+      };
+      case null {
+        let like : ReplyLike = { replyId; sessionId };
+        let list = List.fromArray<ReplyLike>(replyLikesArray);
+        list.add(like);
+        replyLikesArray := list.toArray();
+      };
+    };
+  };
+
+  public query func getReplyLikeCount(replyId : Nat) : async Nat {
+    var count = 0;
+    for (l in replyLikesArray.values()) {
+      if (l.replyId == replyId) { count += 1 };
+    };
+    count;
+  };
+
+  public query func getSessionLikeForReply(replyId : Nat, sessionId : Text) : async Bool {
+    switch (replyLikesArray.find(func(l : ReplyLike) : Bool {
+      l.replyId == replyId and l.sessionId == sessionId
+    })) {
+      case (?_) { true };
+      case null { false };
+    };
+  };
+
+  // ── Bulk like counts for all replies in an evidence thread ───────────────────
+
+  public query func getReplyLikeCounts(evidenceId : Nat) : async [(Nat, Nat)] {
+    let result = List.empty<(Nat, Nat)>();
+    for (r in repliesArray.values()) {
+      if (r.evidenceId == evidenceId) {
+        var count = 0;
+        for (l in replyLikesArray.values()) {
+          if (l.replyId == r.id) { count += 1 };
+        };
+        result.add((r.id, count));
+      };
+    };
+    result.toArray();
   };
 
   public query func getEnhancedVoteTally(claimId : Nat) : async {
@@ -700,17 +759,18 @@ actor {
     let claimEvidence = evidencesArray.filter(func(e : Evidence) : Bool { e.claimId == claimId and not isHidden(e.id, "evidence") });
 
     for (e in claimEvidence.values()) {
-      var netVotes = 0;
+      var netVotesF : Float = 0.0;
       for (v in evidenceVotesArray.values()) {
         if (v.evidenceId == e.id) {
           switch (v.direction) {
-            case ("up") { netVotes += 1 };
-            case ("down") { netVotes -= 1 };
+            case ("up") { netVotesF += 1.0 };
+            case ("down") { netVotesF -= 1.0 };
             case (_) {};
           };
         };
       };
-      let weightedScore = intToFloat(netVotes) * EVIDENCE_WEIGHT_MULTIPLIER;
+      let rawScore = netVotesF * EVIDENCE_WEIGHT_MULTIPLIER;
+      let weightedScore = if (rawScore < 0.0) { 0.0 } else { rawScore };
       switch (e.evidenceType) {
         case ("True") { trueFromEvidence += weightedScore };
         case ("False") { falseFromEvidence += weightedScore };

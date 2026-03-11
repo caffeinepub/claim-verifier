@@ -52,45 +52,33 @@ const verdictBadgeConfig: Record<
   OverallVerdict,
   {
     label: string;
-    bg: string;
-    text: string;
-    ring: string;
+    textColor: string;
     icon: React.ComponentType<{ className?: string }>;
   }
 > = {
   True: {
     label: "REBUNKED",
-    bg: "bg-emerald-500",
-    text: "text-white",
-    ring: "ring-1 ring-emerald-600",
+    textColor: "text-emerald-600",
     icon: CheckCircle2,
   },
   False: {
     label: "DEBUNKED",
-    bg: "bg-red-500",
-    text: "text-white",
-    ring: "ring-1 ring-red-600",
+    textColor: "text-red-600",
     icon: XCircle,
   },
   Unverified: {
     label: "UNVERIFIED",
-    bg: "bg-amber-500",
-    text: "text-white",
-    ring: "ring-1 ring-amber-600",
+    textColor: "text-amber-600",
     icon: Search,
   },
   Contested: {
     label: "CONTESTED",
-    bg: "bg-amber-500",
-    text: "text-white",
-    ring: "ring-1 ring-amber-600",
+    textColor: "text-amber-600",
     icon: Swords,
   },
   "Insufficient Data": {
     label: "INSUFFICIENT DATA",
-    bg: "bg-slate-400",
-    text: "text-white",
-    ring: "ring-1 ring-slate-500",
+    textColor: "text-slate-500",
     icon: BarChart2,
   },
 };
@@ -102,9 +90,12 @@ export function ClaimCard({
   sessionId,
   slug,
 }: ClaimCardProps) {
-  const { data: tally, isLoading: tallyLoading } = useEnhancedVoteTally(
-    claim.id,
-  );
+  const {
+    data: tally,
+    isLoading: tallyLoading,
+    isError: tallyError,
+    refetch: refetchTally,
+  } = useEnhancedVoteTally(claim.id);
   const reportContent = useReportContent();
   const username = useUsername();
   const [reported, setReported] = useState(false);
@@ -135,27 +126,40 @@ export function ClaimCard({
     claim.imageUrls?.[0] ||
     (claim.ogThumbnailUrl ? claim.ogThumbnailUrl : null);
 
+  // Floor evidence contributions at 0 (Option B: negative evidence can't subtract)
+  const flooredTrue = tally
+    ? Number(tally.trueDirect) + Math.max(0, Number(tally.trueFromEvidence))
+    : 0;
+  const flooredFalse = tally
+    ? Number(tally.falseDirect) + Math.max(0, Number(tally.falseFromEvidence))
+    : 0;
+  const flooredUnverified = tally
+    ? Number(tally.unverifiedDirect) +
+      Math.max(0, Number(tally.unverifiedFromEvidence))
+    : 0;
+
   const verdict = tally
     ? computeOverallVerdict(
-        Number(tally.trueCount),
-        Number(tally.falseCount),
-        Number(tally.unverifiedCount),
+        flooredTrue,
+        flooredFalse,
+        flooredUnverified,
+        tally
+          ? Number(tally.trueDirect) +
+              Number(tally.falseDirect) +
+              Number(tally.unverifiedDirect)
+          : undefined,
       )
     : null;
 
   // Confidence meter calculation
-  const totalVotes = tally
-    ? Math.max(0, Number(tally.trueCount)) +
-      Math.max(0, Number(tally.falseCount)) +
-      Math.max(0, Number(tally.unverifiedCount))
-    : 0;
+  const totalVotes = flooredTrue + flooredFalse + flooredUnverified;
   const truePercent =
     totalVotes >= 5 && tally
-      ? Math.round((Math.max(0, Number(tally.trueCount)) / totalVotes) * 100)
+      ? Math.round((flooredTrue / totalVotes) * 100)
       : null;
   const falsePercent =
     totalVotes >= 5 && tally
-      ? Math.round((Math.max(0, Number(tally.falseCount)) / totalVotes) * 100)
+      ? Math.round((flooredFalse / totalVotes) * 100)
       : null;
 
   // Meter bar color based on verdict
@@ -187,33 +191,8 @@ export function ClaimCard({
         borderClass,
       )}
     >
-      {/* Floating verdict badge -- top-left corner overlay (Option A) */}
-      {tallyLoading ? (
-        <Skeleton className="absolute top-3 left-3 h-6 w-24 rounded-full" />
-      ) : verdict ? (
-        (() => {
-          const cfg = verdictBadgeConfig[verdict];
-          const Icon = cfg.icon;
-          return (
-            <div
-              className={cn(
-                "absolute top-3 left-3 flex items-center gap-1 px-2.5 py-0.5 rounded-full shadow-sm z-10",
-                cfg.bg,
-                cfg.text,
-                cfg.ring,
-              )}
-            >
-              <Icon className="w-3 h-3" />
-              <span className="text-[10px] font-bold tracking-wider font-body">
-                {cfg.label}
-              </span>
-            </div>
-          );
-        })()
-      ) : null}
-
       {/* Row 1: meta + ellipsis menu */}
-      <div className="flex items-start justify-between gap-3 mb-2 mt-7">
+      <div className="flex items-start justify-between gap-3 mb-2">
         <div className="flex items-center gap-2 flex-wrap">
           <CategoryBadge category={claim.category} />
           <span className="text-xs text-muted-foreground font-body">
@@ -314,22 +293,53 @@ export function ClaimCard({
         </div>
       )}
 
-      {/* Row 5: verdict bar + confidence meter */}
+      {/* Row 5: verdict label (Option B) + verdict bar + confidence meter */}
       {tallyLoading ? (
         <div className="space-y-2">
+          <Skeleton className="h-4 w-28 rounded" />
           <Skeleton className="h-2 w-full rounded-full" />
           <div className="flex gap-4">
-            <Skeleton className="h-3 w-20" />
             <Skeleton className="h-3 w-20" />
             <Skeleton className="h-3 w-24" />
           </div>
         </div>
+      ) : tallyError ? (
+        <div
+          data-ocid="claim_card.error_state"
+          className="flex items-center gap-2 text-xs text-muted-foreground font-body"
+        >
+          <span>Could not load verdict.</span>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              refetchTally();
+            }}
+            className="text-primary underline hover:no-underline"
+          >
+            Retry
+          </button>
+        </div>
       ) : tally ? (
         <div className="space-y-3">
+          {/* Inline verdict label flush to left border color */}
+          {verdict &&
+            (() => {
+              const cfg = verdictBadgeConfig[verdict];
+              const Icon = cfg.icon;
+              return (
+                <div className={cn("flex items-center gap-1.5", cfg.textColor)}>
+                  <Icon className="w-3.5 h-3.5 flex-shrink-0" />
+                  <span className="text-xs font-bold tracking-wider font-body">
+                    {cfg.label}
+                  </span>
+                </div>
+              );
+            })()}
           <VerdictBar
-            trueCount={tally.trueCount}
-            falseCount={tally.falseCount}
-            unverifiedCount={tally.unverifiedCount}
+            trueCount={BigInt(flooredTrue)}
+            falseCount={BigInt(flooredFalse)}
+            unverifiedCount={BigInt(flooredUnverified)}
             compact
           />
           {/* Confidence meter */}

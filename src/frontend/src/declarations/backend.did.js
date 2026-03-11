@@ -141,12 +141,23 @@ export const idlService = IDL.Service({
   'getHiddenEvidence' : IDL.Func([IDL.Text], [IDL.Vec(Evidence)], ['query']),
   'getHiddenReplies' : IDL.Func([IDL.Text], [IDL.Vec(Reply)], ['query']),
   'getReplies' : IDL.Func([IDL.Nat], [IDL.Vec(Reply)], ['query']),
+  'getReplyLikeCount' : IDL.Func([IDL.Nat], [IDL.Nat], ['query']),
+  'getReplyLikeCounts' : IDL.Func(
+      [IDL.Nat],
+      [IDL.Vec(IDL.Tuple(IDL.Nat, IDL.Nat))],
+      ['query'],
+    ),
   'getReplyVoteTally' : IDL.Func(
       [IDL.Nat],
       [IDL.Record({ 'netScore' : IDL.Int })],
       ['query'],
     ),
   'getReportCount' : IDL.Func([IDL.Nat, IDL.Text], [IDL.Nat], ['query']),
+  'getSessionLikeForReply' : IDL.Func(
+      [IDL.Nat, IDL.Text],
+      [IDL.Bool],
+      ['query'],
+    ),
   'getSessionVoteForClaim' : IDL.Func(
       [IDL.Nat, IDL.Text],
       [IDL.Opt(IDL.Text)],
@@ -173,6 +184,7 @@ export const idlService = IDL.Service({
       ],
       ['query'],
     ),
+  'likeReply' : IDL.Func([IDL.Nat, IDL.Text], [], []),
   'reportContent' : IDL.Func(
       [IDL.Nat, IDL.Text, IDL.Text],
       [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
@@ -351,12 +363,23 @@ export const idlFactory = ({ IDL }) => {
     'getHiddenEvidence' : IDL.Func([IDL.Text], [IDL.Vec(Evidence)], ['query']),
     'getHiddenReplies' : IDL.Func([IDL.Text], [IDL.Vec(Reply)], ['query']),
     'getReplies' : IDL.Func([IDL.Nat], [IDL.Vec(Reply)], ['query']),
+    'getReplyLikeCount' : IDL.Func([IDL.Nat], [IDL.Nat], ['query']),
+    'getReplyLikeCounts' : IDL.Func(
+        [IDL.Nat],
+        [IDL.Vec(IDL.Tuple(IDL.Nat, IDL.Nat))],
+        ['query'],
+      ),
     'getReplyVoteTally' : IDL.Func(
         [IDL.Nat],
         [IDL.Record({ 'netScore' : IDL.Int })],
         ['query'],
       ),
     'getReportCount' : IDL.Func([IDL.Nat, IDL.Text], [IDL.Nat], ['query']),
+    'getSessionLikeForReply' : IDL.Func(
+        [IDL.Nat, IDL.Text],
+        [IDL.Bool],
+        ['query'],
+      ),
     'getSessionVoteForClaim' : IDL.Func(
         [IDL.Nat, IDL.Text],
         [IDL.Opt(IDL.Text)],
@@ -383,6 +406,7 @@ export const idlFactory = ({ IDL }) => {
         ],
         ['query'],
       ),
+    'likeReply' : IDL.Func([IDL.Nat, IDL.Text], [], []),
     'reportContent' : IDL.Func(
         [IDL.Nat, IDL.Text, IDL.Text],
         [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
