@@ -13,13 +13,22 @@ import {
 import { cn } from "@/lib/utils";
 import { formatRelativeTime } from "@/utils/time";
 import { computeOverallVerdict } from "@/utils/verdict";
-import { Flag, MoreHorizontal, Share2 } from "lucide-react";
+import type { OverallVerdict } from "@/utils/verdict";
+import {
+  BarChart2,
+  CheckCircle2,
+  Flag,
+  MoreHorizontal,
+  Search,
+  Share2,
+  Swords,
+  XCircle,
+} from "lucide-react";
 import { motion } from "motion/react";
 import { useState } from "react";
 import { toast } from "sonner";
 import type { Claim } from "../backend.d";
 import { CategoryBadge } from "./CategoryBadge";
-import { OverallVerdictBadge } from "./OverallVerdictBadge";
 import { ReportDialog } from "./ReportDialog";
 import { VerdictBar } from "./VerdictBar";
 
@@ -37,6 +46,53 @@ const verdictBorderClass: Record<string, string> = {
   Contested: "border-l-amber-500",
   Unverified: "border-l-slate-400",
   "Insufficient Data": "border-l-border",
+};
+
+const verdictBannerConfig: Record<
+  OverallVerdict,
+  {
+    label: string;
+    bg: string;
+    border: string;
+    text: string;
+    icon: React.ComponentType<{ className?: string }>;
+  }
+> = {
+  True: {
+    label: "REBUNKED",
+    bg: "bg-emerald-50",
+    border: "border-t-2 border-emerald-500",
+    text: "text-emerald-700",
+    icon: CheckCircle2,
+  },
+  False: {
+    label: "DEBUNKED",
+    bg: "bg-red-50",
+    border: "border-t-2 border-red-500",
+    text: "text-red-700",
+    icon: XCircle,
+  },
+  Unverified: {
+    label: "UNVERIFIED",
+    bg: "bg-amber-50",
+    border: "border-t-2 border-amber-500",
+    text: "text-amber-700",
+    icon: Search,
+  },
+  Contested: {
+    label: "CONTESTED",
+    bg: "bg-amber-50",
+    border: "border-t-2 border-amber-500",
+    text: "text-amber-700",
+    icon: Swords,
+  },
+  "Insufficient Data": {
+    label: "INSUFFICIENT DATA",
+    bg: "bg-muted/50",
+    border: "border-t-2 border-slate-300",
+    text: "text-muted-foreground",
+    icon: BarChart2,
+  },
 };
 
 export function ClaimCard({
@@ -127,10 +183,42 @@ export function ClaimCard({
       data-ocid={ocid}
       onClick={onClick}
       className={cn(
-        "group cursor-pointer bg-card border border-border border-l-4 hover:border-primary/40 rounded-sm p-5 transition-colors duration-200",
+        "group cursor-pointer bg-card border border-border border-l-4 hover:border-primary/40 rounded-sm p-5 transition-colors duration-200 overflow-hidden",
         borderClass,
       )}
     >
+      {/* Verdict banner strip at the very top */}
+      {tallyLoading ? (
+        <Skeleton
+          className="h-7 w-full rounded-t-sm -mx-5 -mt-5 mb-3"
+          style={{ width: "calc(100% + 2.5rem)" }}
+        />
+      ) : verdict ? (
+        (() => {
+          const cfg = verdictBannerConfig[verdict];
+          const Icon = cfg.icon;
+          return (
+            <div
+              className={cn(
+                "-mx-5 -mt-5 mb-3 px-5 py-2 flex items-center justify-center gap-1.5 rounded-t-sm",
+                cfg.bg,
+                cfg.border,
+              )}
+            >
+              <Icon className={cn("w-3.5 h-3.5", cfg.text)} />
+              <span
+                className={cn(
+                  "text-xs font-bold tracking-wider font-body",
+                  cfg.text,
+                )}
+              >
+                {cfg.label}
+              </span>
+            </div>
+          );
+        })()
+      ) : null}
+
       {/* Row 1: meta + ellipsis menu */}
       <div className="flex items-start justify-between gap-3 mb-2">
         <div className="flex items-center gap-2 flex-wrap">
@@ -169,8 +257,8 @@ export function ClaimCard({
                 onClick={handleShare}
                 className="cursor-pointer gap-2"
               >
-                <Share2 className="h-3.5 w-3.5" />
-                Share
+                <Share2 className="h-3.5 w-3.5 text-muted-foreground" />
+                <span className="text-muted-foreground">Share</span>
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={(e) => {
@@ -178,28 +266,22 @@ export function ClaimCard({
                   setReportDialogOpen(true);
                 }}
                 disabled={reported}
-                className="cursor-pointer gap-2 text-destructive focus:text-destructive"
+                className="cursor-pointer gap-2"
               >
-                <Flag className="h-3.5 w-3.5" />
-                {reported ? "Reported" : "Report"}
+                <Flag className="h-3.5 w-3.5 text-muted-foreground" />
+                <span className="text-muted-foreground">
+                  {reported ? "Reported" : "Report"}
+                </span>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
       </div>
 
-      {/* Row 2: title + verdict badge */}
-      <div className="flex items-start gap-2 mb-2">
-        <h3 className="font-display text-lg font-semibold text-foreground leading-snug group-hover:text-primary transition-colors flex-1">
-          {claim.title}
-        </h3>
-        {verdict && !tallyLoading && (
-          <OverallVerdictBadge
-            verdict={verdict}
-            className="flex-shrink-0 mt-0.5"
-          />
-        )}
-      </div>
+      {/* Row 2: title only */}
+      <h3 className="font-display text-lg font-semibold text-foreground leading-snug group-hover:text-primary transition-colors mb-2">
+        {claim.title}
+      </h3>
 
       {/* Row 3: description */}
       <p className="text-sm text-muted-foreground font-body leading-relaxed line-clamp-2 mb-3">
