@@ -21,6 +21,7 @@ import {
   Flag,
   Flame,
   MoreHorizontal,
+  Share2,
   Swords,
   TrendingDown,
   TrendingUp,
@@ -237,6 +238,7 @@ export function ClaimCard({
                 onClick={handleShare}
                 className="cursor-pointer gap-2"
               >
+                <Share2 className="h-3.5 w-3.5 text-muted-foreground" />
                 <span className="text-muted-foreground">Share</span>
               </DropdownMenuItem>
               <DropdownMenuItem

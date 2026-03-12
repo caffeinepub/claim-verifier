@@ -22,47 +22,47 @@ interface CategoryBadgeProps {
 
 const categoryConfig: Record<string, { style: string; icon: LucideIcon }> = {
   Science: {
-    style: "bg-blue-950 text-blue-300 border-blue-800",
+    style: "bg-blue-950 text-white border-blue-800",
     icon: FlaskConical,
   },
   Politics: {
-    style: "bg-purple-950 text-purple-300 border-purple-800",
+    style: "bg-purple-950 text-white border-purple-800",
     icon: Landmark,
   },
   Health: {
-    style: "bg-green-950 text-green-300 border-green-800",
+    style: "bg-green-950 text-white border-green-800",
     icon: HeartPulse,
   },
   Technology: {
-    style: "bg-cyan-950 text-cyan-300 border-cyan-800",
+    style: "bg-cyan-950 text-white border-cyan-800",
     icon: Cpu,
   },
   Sports: {
-    style: "bg-orange-950 text-orange-300 border-orange-800",
+    style: "bg-orange-950 text-white border-orange-800",
     icon: Trophy,
   },
   Entertainment: {
-    style: "bg-pink-950 text-pink-300 border-pink-800",
+    style: "bg-pink-950 text-white border-pink-800",
     icon: Clapperboard,
   },
   Religion: {
-    style: "bg-amber-950 text-amber-300 border-amber-800",
+    style: "bg-amber-950 text-white border-amber-800",
     icon: BookOpen,
   },
   Art: {
-    style: "bg-rose-950 text-rose-300 border-rose-800",
+    style: "bg-rose-950 text-white border-rose-800",
     icon: Palette,
   },
   Finance: {
-    style: "bg-emerald-950 text-emerald-300 border-emerald-800",
+    style: "bg-emerald-950 text-white border-emerald-800",
     icon: TrendingUp,
   },
   Conspiracy: {
-    style: "bg-violet-950 text-violet-300 border-violet-800",
+    style: "bg-violet-950 text-white border-violet-800",
     icon: Eye,
   },
   General: {
-    style: "bg-secondary text-secondary-foreground border-border",
+    style: "bg-secondary text-white border-border",
     icon: Globe,
   },
 };
