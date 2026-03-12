@@ -1,30 +1,32 @@
 # Rebunked
 
 ## Current State
-Rebunked is a community-driven claim verification platform with anonymous voting, evidence submission, threaded replies, and spam controls. The UI uses a light theme with coral-orange accents, Bricolage Grotesque headings, and Outfit body font. Verdict badges are text-only colored pills. Category filters are plain text pills. Vote buttons are minimal up/down arrows. Claim cards show a thumbnail, title, and basic verdict badge.
+The app has a `useSessionGate` hook in `src/frontend/src/hooks/useSessionGate.ts` that enforces a 15-minute read-only period for new sessions. All write actions call `checkAction()` before proceeding; if the session is under 15 minutes old, a toast is shown with the remaining wait time.
+
+There is currently no rate limiting on the number of votes a session can cast within a time window.
 
 ## Requested Changes (Diff)
 
 ### Add
-- Distinct Lucide icons for each verdict type (True, False, Contested, Unverified, Insufficient Data) displayed alongside verdict text on both claim cards and the detail page verdict banner
-- Category icons (Lucide icons) next to each category label in the filter bar and on category badges
-- Visual confidence/percentage meter on claim cards showing the true/false vote split as a percentage (e.g. "73% True")
-- Colored left-border on claim cards based on verdict status (green=True, red=False, yellow=Contested, gray=Unverified/Insufficient)
+- A vote rate limiter in `useSessionGate.ts` (or a new `useVoteRateLimit.ts` hook): tracks timestamps of votes cast by the session using localStorage (`rebunked_vote_timestamps`). A "vote" counts as: direct claim votes (True/False/Unverified) and evidence upvotes/downvotes. Reply likes are excluded.
+- Rate limit: 3 votes per 10-minute rolling window per session.
+- When the limit is hit, show a toast/banner with the same pattern as the session gate: "You've reached the vote limit. Please wait X minutes before voting again." The toast ID should be unique to avoid stacking.
+- A `checkVoteAction()` function exported from the gate hook/utility, called before any vote is cast (claim vote buttons + evidence vote buttons).
 
 ### Modify
-- Vote buttons (up/down) to be chunkier with a subtle scale bounce animation on click
-- Verdict badges to include icons and be more visually expressive
-- Category badges/pills to include icons
+- `ClaimDetail.tsx`: wrap direct claim vote action with `checkVoteAction()` before submitting.
+- `EvidenceVoteButtons.tsx`: wrap evidence upvote/downvote actions with `checkVoteAction()` before submitting.
+- `useSessionGate.ts`: add `checkVoteAction()` alongside existing `checkAction()`.
 
 ### Remove
-- Nothing removed
+- Nothing removed.
 
 ## Implementation Plan
-1. Add verdict icon map (Lucide icons: CheckCircle2 for True, XCircle for False, Swords/GitMerge for Contested, Search for Unverified, BarChart2 for Insufficient Data)
-2. Add category icon map (Lucide icons per category)
-3. Update VerdictBadge component to include icon
-4. Update claim card to show colored left-border based on verdict, and add percentage confidence meter
-5. Update verdict banner on detail page to show icon
-6. Update CategoryBadge component to include icon
-7. Add CSS animation for vote button bounce on click
-8. Update vote buttons to be chunkier styled
+1. Add `checkVoteAction()` to `useSessionGate.ts`:
+   - Read `rebunked_vote_timestamps` from localStorage (array of ISO timestamp strings).
+   - Filter to only timestamps within the last 10 minutes.
+   - If filtered count >= 3, show toast with minutes until oldest vote expires, return false.
+   - If under limit, append current timestamp to array (trimmed to last 20 entries max), save to localStorage, return true.
+2. Update `useSessionGate` hook return to include `checkVoteAction`.
+3. In `ClaimDetail.tsx`, call `checkVoteAction()` before submitting a direct claim vote.
+4. In `EvidenceVoteButtons.tsx`, call `checkVoteAction()` before submitting an evidence vote.

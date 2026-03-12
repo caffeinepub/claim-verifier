@@ -3,6 +3,7 @@ import {
   useSessionVoteForEvidence,
   useVoteEvidence,
 } from "@/hooks/useQueries";
+import { useSessionGate } from "@/hooks/useSessionGate";
 import { cn } from "@/lib/utils";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -29,6 +30,7 @@ export function EvidenceVoteButtons({
     sessionId,
   );
   const voteEvidence = useVoteEvidence();
+  const { checkVoteAction } = useSessionGate();
 
   // Optimistic local state: null means "use server data"
   const [optimisticVote, setOptimisticVote] = useState<
@@ -63,6 +65,7 @@ export function EvidenceVoteButtons({
 
   async function handleVote(direction: "up" | "down") {
     if (voteEvidence.isPending) return;
+    if (!checkVoteAction()) return;
 
     // Trigger bounce
     if (direction === "up") setJustVotedUp(true);

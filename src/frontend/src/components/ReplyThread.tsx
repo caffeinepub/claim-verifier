@@ -17,6 +17,7 @@ import {
   useSessionLikeForReply,
   useUsername,
 } from "@/hooks/useQueries";
+import { useSessionGate } from "@/hooks/useSessionGate";
 import { cn } from "@/lib/utils";
 import { formatRelativeTime } from "@/utils/time";
 import {
@@ -62,6 +63,7 @@ function ReplyForm({
   const [text, setText] = useState("");
   const [cooldownLeft, setCooldownLeft] = useState(0);
   const addReply = useAddReply();
+  const { checkAction } = useSessionGate();
 
   useEffect(() => {
     if (cooldownLeft <= 0) return;
@@ -86,6 +88,7 @@ function ReplyForm({
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!text.trim() || cooldownLeft > 0) return;
+    if (!checkAction()) return;
     try {
       await addReply.mutateAsync({
         evidenceId,
@@ -212,11 +215,13 @@ function ReplyCard({
   const [reportDialogOpen, setReportDialogOpen] = useState(false);
 
   const likeReply = useLikeReply();
+  const { checkAction: checkReplyAction } = useSessionGate();
   const { data: isLiked = false } = useSessionLikeForReply(reply.id, sessionId);
   const likeCount = likeCounts[reply.id.toString()] ?? 0;
 
   async function handleLike() {
     try {
+      if (!checkReplyAction()) return;
       await likeReply.mutateAsync({ replyId: reply.id, sessionId, evidenceId });
     } catch {
       toast.error("Failed to like reply");
@@ -319,7 +324,9 @@ function ReplyCard({
                 data-ocid={`reply.delete_button.${index}`}
                 className="text-muted-foreground cursor-pointer gap-2"
                 disabled={reportedIds.has(reply.id.toString())}
-                onClick={() => setReportDialogOpen(true)}
+                onClick={() => {
+                  if (checkReplyAction()) setReportDialogOpen(true);
+                }}
               >
                 <Flag className="h-3.5 w-3.5 text-muted-foreground" />
                 <span>
@@ -406,6 +413,7 @@ export function ReplyThread({
   const [reportedIds, setReportedIds] = useState<Set<string>>(new Set());
   const username = useUsername();
   const reportReply = useReportReply();
+  const { checkAction: checkThreadAction } = useSessionGate();
 
   const { data: replies = [], isLoading } = useReplies(
     expanded ? evidenceId : null,
@@ -422,6 +430,7 @@ export function ReplyThread({
 
   async function handleReport(replyId: bigint) {
     const key = replyId.toString();
+    if (!checkThreadAction()) return;
     if (reportedIds.has(key)) return;
     try {
       await reportReply.mutateAsync({ replyId, sessionId });

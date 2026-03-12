@@ -10,18 +10,23 @@ import {
   useReportContent,
   useUsername,
 } from "@/hooks/useQueries";
+import { useSessionGate } from "@/hooks/useSessionGate";
 import { cn } from "@/lib/utils";
 import { formatRelativeTime } from "@/utils/time";
-import { computeOverallVerdict } from "@/utils/verdict";
+import {
+  computeOverallVerdict,
+  getVerdictStability,
+  recordVerdict,
+} from "@/utils/verdict";
 import type { OverallVerdict } from "@/utils/verdict";
 import {
   BarChart2,
   CheckCircle2,
   Flag,
   MoreHorizontal,
-  Search,
-  Share2,
   Swords,
+  TrendingDown,
+  TrendingUp,
   XCircle,
 } from "lucide-react";
 import { motion } from "motion/react";
@@ -41,11 +46,12 @@ interface ClaimCardProps {
 }
 
 const verdictBorderClass: Record<string, string> = {
-  True: "border-l-emerald-500",
-  False: "border-l-red-500",
+  REBUNKED: "border-l-emerald-500",
+  DEBUNKED: "border-l-red-500",
   Contested: "border-l-amber-500",
-  Unverified: "border-l-slate-400",
   "Insufficient Data": "border-l-border",
+  "Leaning REBUNKED": "border-l-emerald-300",
+  "Leaning DEBUNKED": "border-l-red-300",
 };
 
 const verdictBadgeConfig: Record<
@@ -56,20 +62,15 @@ const verdictBadgeConfig: Record<
     icon: React.ComponentType<{ className?: string }>;
   }
 > = {
-  True: {
+  REBUNKED: {
     label: "REBUNKED",
     textColor: "text-emerald-600",
     icon: CheckCircle2,
   },
-  False: {
+  DEBUNKED: {
     label: "DEBUNKED",
     textColor: "text-red-600",
     icon: XCircle,
-  },
-  Unverified: {
-    label: "UNVERIFIED",
-    textColor: "text-amber-600",
-    icon: Search,
   },
   Contested: {
     label: "CONTESTED",
@@ -80,6 +81,16 @@ const verdictBadgeConfig: Record<
     label: "INSUFFICIENT DATA",
     textColor: "text-slate-500",
     icon: BarChart2,
+  },
+  "Leaning REBUNKED": {
+    label: "LEANING REBUNKED",
+    textColor: "text-emerald-500",
+    icon: TrendingUp,
+  },
+  "Leaning DEBUNKED": {
+    label: "LEANING DEBUNKED",
+    textColor: "text-red-500",
+    icon: TrendingDown,
   },
 };
 
@@ -94,6 +105,7 @@ export function ClaimCard({
     claim.id,
   );
   const reportContent = useReportContent();
+  const { checkAction } = useSessionGate();
   const username = useUsername();
   const [reported, setReported] = useState(false);
   const [reportDialogOpen, setReportDialogOpen] = useState(false);
@@ -102,6 +114,7 @@ export function ClaimCard({
 
   async function handleReportConfirm(_reason: string) {
     if (!sessionId || reported) return;
+    if (!checkAction()) return;
     await reportContent.mutateAsync({
       targetId: claim.id,
       targetType: "claim",
@@ -128,8 +141,17 @@ export function ClaimCard({
         Number(tally.trueCount),
         Number(tally.falseCount),
         Number(tally.unverifiedCount),
+        true,
+        Number(tally.trueDirect),
+        Number(tally.falseDirect),
       )
     : null;
+
+  // Record verdict for stability tracking
+  if (verdict) {
+    recordVerdict(claim.id.toString(), verdict);
+  }
+  const stability = getVerdictStability(claim.id.toString());
 
   // Confidence meter calculation
   const totalVotes = tally
@@ -148,36 +170,44 @@ export function ClaimCard({
 
   // Meter bar color based on verdict
   const meterBarColor =
-    verdict === "True"
+    verdict === "REBUNKED"
       ? "bg-emerald-500"
-      : verdict === "False"
+      : verdict === "DEBUNKED"
         ? "bg-red-500"
         : verdict === "Contested"
-          ? "bg-amber-500"
-          : "bg-slate-400";
+          ? "bg-amber-400"
+          : verdict === "Leaning REBUNKED"
+            ? "bg-emerald-400"
+            : verdict === "Leaning DEBUNKED"
+              ? "bg-red-400"
+              : "bg-muted-foreground";
 
   // Meter fill % (true % for positive verdicts, false % for false verdict)
   const meterFill =
-    verdict === "False" ? (falsePercent ?? 0) : (truePercent ?? 0);
+    verdict === "DEBUNKED" || verdict === "Leaning DEBUNKED"
+      ? (falsePercent ?? 0)
+      : (truePercent ?? 0);
 
   const borderClass = verdict ? verdictBorderClass[verdict] : "border-l-border";
 
   return (
     <motion.article
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.35, delay: index * 0.05 }}
-      whileHover={{ y: -2 }}
       data-ocid={ocid}
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.25, delay: index * 0.04 }}
       onClick={onClick}
       className={cn(
-        "group relative cursor-pointer bg-card border border-border border-l-4 hover:border-primary/40 rounded-sm p-5 transition-colors duration-200 overflow-hidden",
+        "group relative bg-card border border-border rounded-xl p-4 cursor-pointer transition-all duration-200",
+        "hover:shadow-md hover:border-primary/30 hover:-translate-y-0.5",
+        "border-l-4",
         borderClass,
       )}
+      aria-label={`View claim: ${claim.title}`}
     >
-      {/* Row 1: meta + ellipsis menu */}
-      <div className="flex items-start justify-between gap-3 mb-2">
-        <div className="flex items-center gap-2 flex-wrap">
+      {/* Row 1: category + meta + ellipsis menu */}
+      <div className="flex items-start justify-between gap-2 mb-2">
+        <div className="flex items-center gap-2 flex-wrap min-w-0">
           <CategoryBadge category={claim.category} />
           <span className="text-xs text-muted-foreground font-body">
             {formatRelativeTime(claim.timestamp)}
@@ -213,7 +243,6 @@ export function ClaimCard({
                 onClick={handleShare}
                 className="cursor-pointer gap-2"
               >
-                <Share2 className="h-3.5 w-3.5 text-muted-foreground" />
                 <span className="text-muted-foreground">Share</span>
               </DropdownMenuItem>
               <DropdownMenuItem
@@ -277,7 +306,7 @@ export function ClaimCard({
         </div>
       )}
 
-      {/* Row 5: verdict label (Option B) + verdict bar + confidence meter */}
+      {/* Row 5: verdict label + verdict bar + confidence meter */}
       {tallyLoading ? (
         <div className="space-y-2">
           <Skeleton className="h-4 w-28 rounded" />
@@ -300,6 +329,16 @@ export function ClaimCard({
                   <span className="text-xs font-bold tracking-wider font-body">
                     {cfg.label}
                   </span>
+                  {stability === "Volatile" && (
+                    <span className="ml-1 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-orange-100 text-orange-600 border border-orange-200">
+                      🔥 Volatile
+                    </span>
+                  )}
+                  {stability === "Stable" && (
+                    <span className="ml-1 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-sky-100 text-sky-600 border border-sky-200">
+                      🛡️ Stable
+                    </span>
+                  )}
                 </div>
               );
             })()}
@@ -314,11 +353,9 @@ export function ClaimCard({
             <div className="space-y-1">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold font-body text-foreground">
-                  {verdict === "False"
+                  {verdict === "DEBUNKED" || verdict === "Leaning DEBUNKED"
                     ? `${falsePercent}% False`
-                    : verdict === "True"
-                      ? `${truePercent}% True`
-                      : `${truePercent}% True`}
+                    : `${truePercent}% True`}
                 </span>
                 <span className="text-xs text-muted-foreground font-body">
                   {totalVotes} vote{totalVotes !== 1 ? "s" : ""}

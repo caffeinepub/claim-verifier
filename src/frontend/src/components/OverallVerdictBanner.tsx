@@ -1,9 +1,19 @@
 import { cn } from "@/lib/utils";
-import type { OverallVerdict } from "@/utils/verdict";
-import { BarChart2, CheckCircle2, Search, Swords, XCircle } from "lucide-react";
+import type { OverallVerdict, StabilityState } from "@/utils/verdict";
+import {
+  BarChart2,
+  CheckCircle2,
+  Flame,
+  Shield,
+  Swords,
+  TrendingDown,
+  TrendingUp,
+  XCircle,
+} from "lucide-react";
 
 interface OverallVerdictBannerProps {
   verdict: OverallVerdict;
+  stability?: StabilityState;
   className?: string;
 }
 
@@ -17,26 +27,33 @@ const config: Record<
     labelClass: string;
   }
 > = {
-  True: {
+  REBUNKED: {
     label: "REBUNKED",
     icon: CheckCircle2,
     bannerClass: "bg-emerald-50 border-emerald-200",
     iconClass: "text-emerald-500",
     labelClass: "text-emerald-800",
   },
-  False: {
+  DEBUNKED: {
     label: "DEBUNKED",
     icon: XCircle,
     bannerClass: "bg-red-50 border-red-200",
     iconClass: "text-red-500",
     labelClass: "text-red-800",
   },
-  Unverified: {
-    label: "UNVERIFIED",
-    icon: Search,
-    bannerClass: "bg-amber-50 border-amber-200",
-    iconClass: "text-amber-500",
-    labelClass: "text-amber-800",
+  "Leaning REBUNKED": {
+    label: "LEANING REBUNKED",
+    icon: TrendingUp,
+    bannerClass: "bg-emerald-50/60 border-emerald-200",
+    iconClass: "text-emerald-400",
+    labelClass: "text-emerald-700",
+  },
+  "Leaning DEBUNKED": {
+    label: "LEANING DEBUNKED",
+    icon: TrendingDown,
+    bannerClass: "bg-red-50/60 border-red-200",
+    iconClass: "text-red-400",
+    labelClass: "text-red-700",
   },
   Contested: {
     label: "CONTESTED",
@@ -56,6 +73,7 @@ const config: Record<
 
 export function OverallVerdictBanner({
   verdict,
+  stability,
   className,
 }: OverallVerdictBannerProps) {
   const {
@@ -75,7 +93,7 @@ export function OverallVerdictBanner({
       )}
     >
       <Icon className={cn("w-10 h-10 flex-shrink-0", iconClass)} />
-      <div>
+      <div className="flex-1">
         <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-0.5 font-body">
           Community Verdict
         </p>
@@ -88,6 +106,23 @@ export function OverallVerdictBanner({
           {label}
         </p>
       </div>
+      {stability && (
+        <div
+          className={cn(
+            "flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[11px] font-bold tracking-wider border font-body flex-shrink-0",
+            stability === "Volatile"
+              ? "bg-orange-100 text-orange-700 border-orange-300"
+              : "bg-sky-100 text-sky-700 border-sky-300",
+          )}
+        >
+          {stability === "Volatile" ? (
+            <Flame className="w-3 h-3" />
+          ) : (
+            <Shield className="w-3 h-3" />
+          )}
+          {stability}
+        </div>
+      )}
     </div>
   );
 }

@@ -1,9 +1,19 @@
 import { cn } from "@/lib/utils";
-import type { OverallVerdict } from "@/utils/verdict";
-import { BarChart2, CheckCircle2, Search, Swords, XCircle } from "lucide-react";
+import type { OverallVerdict, StabilityState } from "@/utils/verdict";
+import {
+  BarChart2,
+  CheckCircle2,
+  Flame,
+  Shield,
+  Swords,
+  TrendingDown,
+  TrendingUp,
+  XCircle,
+} from "lucide-react";
 
 interface OverallVerdictBadgeProps {
   verdict: OverallVerdict;
+  stability?: StabilityState;
   className?: string;
 }
 
@@ -15,20 +25,25 @@ const config: Record<
     icon: React.ComponentType<{ className?: string }>;
   }
 > = {
-  True: {
+  REBUNKED: {
     label: "REBUNKED",
     className: "bg-emerald-100 text-emerald-800 border-emerald-300",
     icon: CheckCircle2,
   },
-  False: {
+  DEBUNKED: {
     label: "DEBUNKED",
     className: "bg-red-100 text-red-800 border-red-300",
     icon: XCircle,
   },
-  Unverified: {
-    label: "UNVERIFIED",
-    className: "bg-amber-100 text-amber-800 border-amber-300",
-    icon: Search,
+  "Leaning REBUNKED": {
+    label: "LEANING REBUNKED",
+    className: "bg-emerald-50 text-emerald-700 border-emerald-200",
+    icon: TrendingUp,
+  },
+  "Leaning DEBUNKED": {
+    label: "LEANING DEBUNKED",
+    className: "bg-red-50 text-red-700 border-red-200",
+    icon: TrendingDown,
   },
   Contested: {
     label: "CONTESTED",
@@ -44,6 +59,7 @@ const config: Record<
 
 export function OverallVerdictBadge({
   verdict,
+  stability,
   className,
 }: OverallVerdictBadgeProps) {
   const { label, className: vcn, icon: Icon } = config[verdict];
@@ -57,6 +73,12 @@ export function OverallVerdictBadge({
     >
       <Icon className="w-3 h-3 flex-shrink-0" />
       {label}
+      {stability === "Volatile" && (
+        <Flame className="w-2.5 h-2.5 text-orange-500 flex-shrink-0" />
+      )}
+      {stability === "Stable" && (
+        <Shield className="w-2.5 h-2.5 text-sky-500 flex-shrink-0" />
+      )}
     </span>
   );
 }

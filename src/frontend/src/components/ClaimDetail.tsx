@@ -23,6 +23,7 @@ import {
 import { cn } from "@/lib/utils";
 import { formatRelativeTime } from "@/utils/time";
 import {
+  AlertCircle,
   ArrowLeft,
   Check,
   CheckCircle2,
@@ -35,6 +36,7 @@ import {
   Loader2,
   MessageSquare,
   MoreHorizontal,
+  RefreshCw,
   Search,
   Send,
   Share2,
@@ -71,8 +73,13 @@ function sortEvidence(
 }
 import { Input } from "@/components/ui/input";
 import { useReportContent } from "@/hooks/useQueries";
+import { useSessionGate } from "@/hooks/useSessionGate";
 import { getClaimSlug } from "@/utils/slug";
-import { computeOverallVerdict } from "@/utils/verdict";
+import {
+  computeOverallVerdict,
+  getVerdictStability,
+  recordVerdict,
+} from "@/utils/verdict";
 import { CategoryBadge } from "./CategoryBadge";
 import { EvidenceTypeBadge } from "./EvidenceTypeBadge";
 import { EvidenceVoteButtons } from "./EvidenceVoteButtons";
@@ -198,8 +205,12 @@ export function ClaimDetail({
   );
 
   const { data: claim, isLoading: claimLoading } = useClaimById(claimId);
-  const { data: tally, isLoading: tallyLoading } =
-    useEnhancedVoteTally(claimId);
+  const {
+    data: tally,
+    isLoading: tallyLoading,
+    isError: tallyError,
+    refetch: refetchTally,
+  } = useEnhancedVoteTally(claimId);
   const { data: sessionVote } = useSessionVote(claimId, sessionId);
   const { data: evidence, isLoading: evidenceLoading } = useEvidence(claimId);
   const username = useUsername();
@@ -238,6 +249,7 @@ export function ClaimDetail({
   const submitVote = useSubmitVote();
   const submitEvidence = useSubmitEvidence();
   const reportContent = useReportContent();
+  const { checkAction, checkVoteAction } = useSessionGate();
 
   const hasVoted = !!sessionVote;
 
@@ -276,6 +288,7 @@ export function ClaimDetail({
 
   async function handleVote(verdict: string) {
     if (!sessionId || hasVoted) return;
+    if (!checkVoteAction()) return;
     try {
       await submitVote.mutateAsync({ claimId, sessionId, verdict });
       toast.success(`Your verdict: ${verdict}`);
@@ -287,6 +300,7 @@ export function ClaimDetail({
   async function handleSubmitEvidence(e: React.FormEvent) {
     e.preventDefault();
     if (!evidenceText.trim() || !sessionId || evidenceCooldownLeft > 0) return;
+    if (!checkAction()) return;
     try {
       await submitEvidence.mutateAsync({
         claimId,
@@ -316,6 +330,7 @@ export function ClaimDetail({
   }
 
   async function handleReportClaim(_reason: string) {
+    if (!checkAction()) return;
     await reportContent.mutateAsync({
       targetId: claimId,
       targetType: "claim",
@@ -325,6 +340,7 @@ export function ClaimDetail({
 
   async function handleReportEvidenceConfirm(_reason: string) {
     if (!reportingEvidenceId) return;
+    if (!checkAction()) return;
     const key = reportingEvidenceId.toString();
     await reportContent.mutateAsync({
       targetId: reportingEvidenceId,
@@ -426,6 +442,7 @@ export function ClaimDetail({
             </h2>
             {tallyLoading ? (
               <div className="space-y-3">
+                <Skeleton className="h-14 w-full rounded-xl" />
                 <Skeleton className="h-3 w-full rounded-full" />
                 <div className="flex justify-between">
                   <Skeleton className="h-4 w-28" />
@@ -433,29 +450,64 @@ export function ClaimDetail({
                   <Skeleton className="h-4 w-32" />
                 </div>
               </div>
-            ) : tally ? (
-              <div className="space-y-4">
-                <OverallVerdictBanner
-                  verdict={computeOverallVerdict(
-                    Number(tally.trueCount),
-                    Number(tally.falseCount),
-                    Number(tally.unverifiedCount),
-                  )}
-                />
-                <VerdictBar
-                  trueCount={tally.trueCount}
-                  falseCount={tally.falseCount}
-                  unverifiedCount={tally.unverifiedCount}
-                  breakdown={{
-                    trueDirect: tally.trueDirect,
-                    trueFromEvidence: tally.trueFromEvidence,
-                    falseDirect: tally.falseDirect,
-                    falseFromEvidence: tally.falseFromEvidence,
-                    unverifiedDirect: tally.unverifiedDirect,
-                    unverifiedFromEvidence: tally.unverifiedFromEvidence,
-                  }}
-                />
+            ) : tallyError ? (
+              <div
+                data-ocid="verdict.error_state"
+                className="flex items-center gap-3 p-4 rounded-xl bg-destructive/10 border border-destructive/30 text-destructive"
+              >
+                <AlertCircle className="h-5 w-5 flex-shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold font-body">
+                    Could not load verdict data
+                  </p>
+                  <p className="text-xs font-body opacity-80 mt-0.5">
+                    The canister may be temporarily unavailable.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  data-ocid="verdict.retry_button"
+                  onClick={() => refetchTally()}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold font-body border border-destructive/40 hover:bg-destructive/20 transition-colors flex-shrink-0"
+                >
+                  <RefreshCw className="h-3.5 w-3.5" />
+                  Retry
+                </button>
               </div>
+            ) : tally ? (
+              (() => {
+                const detailVerdict = computeOverallVerdict(
+                  Number(tally.trueCount),
+                  Number(tally.falseCount),
+                  Number(tally.unverifiedCount),
+                  true,
+                  Number(tally.trueDirect),
+                  Number(tally.falseDirect),
+                );
+                recordVerdict(claimId.toString(), detailVerdict);
+                const detailStability = getVerdictStability(claimId.toString());
+                return (
+                  <div className="space-y-4">
+                    <OverallVerdictBanner
+                      verdict={detailVerdict}
+                      stability={detailStability}
+                    />
+                    <VerdictBar
+                      trueCount={tally.trueCount}
+                      falseCount={tally.falseCount}
+                      unverifiedCount={tally.unverifiedCount}
+                      breakdown={{
+                        trueDirect: tally.trueDirect,
+                        trueFromEvidence: tally.trueFromEvidence,
+                        falseDirect: tally.falseDirect,
+                        falseFromEvidence: tally.falseFromEvidence,
+                        unverifiedDirect: tally.unverifiedDirect,
+                        unverifiedFromEvidence: tally.unverifiedFromEvidence,
+                      }}
+                    />
+                  </div>
+                );
+              })()
             ) : null}
           </section>
 

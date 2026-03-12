@@ -100,7 +100,7 @@ actor {
   let REPORT_THRESHOLD : Nat = 10;
   let SIMILARITY_THRESHOLD : Float = 0.8;
   let ONE_DAY_NS : Int = 86_400_000_000_000;
-  let EVIDENCE_WEIGHT_MULTIPLIER = 3.0;
+  let EVIDENCE_WEIGHT_MULTIPLIER : Float = 3.0; // kept for canister upgrade compatibility
 
   func seedClaimsData() : [Claim] {
     let seeds = [
@@ -405,8 +405,8 @@ actor {
   };
 
   public query func getEvidenceVoteTally(evidenceId : Nat) : async { netScore : Int } {
-    var up = 0;
-    var down = 0;
+    var up : Int = 0;
+    var down : Int = 0;
     for (v in evidenceVotesArray.values()) {
       if (v.evidenceId == evidenceId) {
         switch (v.direction) {
@@ -599,8 +599,8 @@ actor {
   };
 
   public query func getReplyVoteTally(replyId : Nat) : async { netScore : Int } {
-    var up = 0;
-    var down = 0;
+    var up : Int = 0;
+    var down : Int = 0;
     for (v in replyVotesArray.values()) {
       if (v.replyId == replyId) {
         switch (v.direction) {
@@ -674,7 +674,7 @@ actor {
     #ok;
   };
 
-  // ── Reply Likes ──────────────────────────────────────────────────────────────
+  // ── Reply Likes ────────────────────────────────────────────────────────────────────────────
 
   public shared func likeReply(replyId : Nat, sessionId : Text) : async () {
     // Toggle: if already liked, remove the like
@@ -713,7 +713,7 @@ actor {
     };
   };
 
-  // ── Bulk like counts for all replies in an evidence thread ───────────────────
+  // ── Bulk like counts for all replies in an evidence thread ───────────────────────────────────────
 
   public query func getReplyLikeCounts(evidenceId : Nat) : async [(Nat, Nat)] {
     let result = List.empty<(Nat, Nat)>();
@@ -729,6 +729,12 @@ actor {
     result.toArray();
   };
 
+  // ── Enhanced Vote Tally with Multiplier System ─────────────────────────────────────────────
+  // Evidence quality gate: only counts if net score >= 3
+  // Multiplier formula: directVotes * min(5, max(1, 1 + 0.1 * evidenceScore))
+  // Multiplier only activates if directVotes >= 3; otherwise stays at 1x
+  // Multiplier capped at 5x (multiplierNum max = 50, divided by 10)
+
   public query func getEnhancedVoteTally(claimId : Nat) : async {
     trueCount : Int;
     falseCount : Int;
@@ -740,13 +746,9 @@ actor {
     falseFromEvidence : Int;
     unverifiedFromEvidence : Int;
   } {
-    var trueDirect = 0;
-    var falseDirect = 0;
-    var unverifiedDirect = 0;
-
-    var trueFromEvidence : Float = 0.0;
-    var falseFromEvidence : Float = 0.0;
-    var unverifiedFromEvidence : Float = 0.0;
+    var trueDirect : Int = 0;
+    var falseDirect : Int = 0;
+    var unverifiedDirect : Int = 0;
 
     for (v in votesArray.values()) {
       if (v.claimId == claimId) {
@@ -759,10 +761,17 @@ actor {
       };
     };
 
-    let claimEvidence = evidencesArray.filter(func(e : Evidence) : Bool { e.claimId == claimId and not isHidden(e.id, "evidence") });
+    let claimEvidence = evidencesArray.filter(func(e : Evidence) : Bool {
+      e.claimId == claimId and not isHidden(e.id, "evidence")
+    });
+
+    // Sum qualifying evidence net scores per type (quality gate: net score >= 3)
+    var trueEvidenceScore : Int = 0;
+    var falseEvidenceScore : Int = 0;
+    var unverifiedEvidenceScore : Int = 0;
 
     for (e in claimEvidence.values()) {
-      var netVotes = 0;
+      var netVotes : Int = 0;
       for (v in evidenceVotesArray.values()) {
         if (v.evidenceId == e.id) {
           switch (v.direction) {
@@ -772,24 +781,44 @@ actor {
           };
         };
       };
-      let weightedScore = intToFloat(netVotes) * EVIDENCE_WEIGHT_MULTIPLIER;
-      switch (e.evidenceType) {
-        case ("True") { trueFromEvidence += weightedScore };
-        case ("False") { falseFromEvidence += weightedScore };
-        case (_) { unverifiedFromEvidence += weightedScore };
+      // Quality gate: only count evidence with net score >= 3
+      if (netVotes >= 3) {
+        switch (e.evidenceType) {
+          case ("True") { trueEvidenceScore += netVotes };
+          case ("False") { falseEvidenceScore += netVotes };
+          case (_) { unverifiedEvidenceScore += netVotes };
+        };
       };
     };
 
+    // Multiplier system using integer math (factor of 10):
+    // multiplierNum = min(50, max(10, 10 + evidenceScore))
+    // totalCount = directVotes * multiplierNum / 10
+    // Multiplier only activates if direct votes >= 3
+    let trueMultNum : Int = if (trueDirect >= 3) {
+      Int.min(50, Int.max(10, 10 + trueEvidenceScore))
+    } else { 10 };
+    let falseMultNum : Int = if (falseDirect >= 3) {
+      Int.min(50, Int.max(10, 10 + falseEvidenceScore))
+    } else { 10 };
+    let unverifiedMultNum : Int = if (unverifiedDirect >= 3) {
+      Int.min(50, Int.max(10, 10 + unverifiedEvidenceScore))
+    } else { 10 };
+
+    let trueTotal : Int = (trueDirect * trueMultNum) / 10;
+    let falseTotal : Int = (falseDirect * falseMultNum) / 10;
+    let unverifiedTotal : Int = (unverifiedDirect * unverifiedMultNum) / 10;
+
     {
-      trueCount = trueDirect + trueFromEvidence.toInt();
-      falseCount = falseDirect + falseFromEvidence.toInt();
-      unverifiedCount = unverifiedDirect + unverifiedFromEvidence.toInt();
+      trueCount = trueTotal;
+      falseCount = falseTotal;
+      unverifiedCount = unverifiedTotal;
       trueDirect;
       falseDirect;
       unverifiedDirect;
-      trueFromEvidence = trueFromEvidence.toInt();
-      falseFromEvidence = falseFromEvidence.toInt();
-      unverifiedFromEvidence = unverifiedFromEvidence.toInt();
+      trueFromEvidence = trueTotal - trueDirect;
+      falseFromEvidence = falseTotal - falseDirect;
+      unverifiedFromEvidence = unverifiedTotal - unverifiedDirect;
     };
   };
 };

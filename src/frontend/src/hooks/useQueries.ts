@@ -48,12 +48,22 @@ export function useSessionId() {
       if (existing) {
         // Ensure username is also initialized alongside session
         getOrInitUsername();
+        if (!localStorage.getItem("rebunked_session_created_at")) {
+          localStorage.setItem(
+            "rebunked_session_created_at",
+            new Date().toISOString(),
+          );
+        }
         return existing;
       }
       if (!actor) throw new Error("No actor");
       const id = await actor.generateSessionId();
       localStorage.setItem(SESSION_KEY, id);
       // Initialize username at the same time as session
+      localStorage.setItem(
+        "rebunked_session_created_at",
+        new Date().toISOString(),
+      );
       getOrInitUsername();
       return id;
     },

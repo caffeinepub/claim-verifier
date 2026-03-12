@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useCreateClaim } from "@/hooks/useQueries";
+import { useSessionGate } from "@/hooks/useSessionGate";
 import { Clock, Loader2, Plus } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -64,6 +65,7 @@ export function SubmitClaimDialog({
   const [cooldownSecondsLeft, setCooldownSecondsLeft] = useState(0);
 
   const createClaim = useCreateClaim();
+  const { checkAction } = useSessionGate();
 
   // Countdown timer
   useEffect(() => {
@@ -94,6 +96,7 @@ export function SubmitClaimDialog({
     e.preventDefault();
     if (!title.trim() || !description.trim() || !category) return;
     if (cooldownSecondsLeft > 0) return;
+    if (!checkAction()) return;
 
     try {
       await createClaim.mutateAsync({
