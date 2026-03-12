@@ -1,10 +1,8 @@
 import { cn } from "@/lib/utils";
-import type { OverallVerdict, StabilityState } from "@/utils/verdict";
+import type { OverallVerdict } from "@/utils/verdict";
 import {
   BarChart2,
   CheckCircle2,
-  Flame,
-  Shield,
   Swords,
   TrendingDown,
   TrendingUp,
@@ -13,7 +11,6 @@ import {
 
 interface OverallVerdictBannerProps {
   verdict: OverallVerdict;
-  stability?: StabilityState;
   className?: string;
 }
 
@@ -32,28 +29,28 @@ const config: Record<
     icon: CheckCircle2,
     bannerClass: "bg-emerald-50 border-emerald-200",
     iconClass: "text-emerald-500",
-    labelClass: "text-emerald-800",
+    labelClass: "text-emerald-700",
   },
   DEBUNKED: {
     label: "DEBUNKED",
     icon: XCircle,
     bannerClass: "bg-red-50 border-red-200",
-    iconClass: "text-red-500",
-    labelClass: "text-red-800",
+    iconClass: "text-red-400",
+    labelClass: "text-red-700",
   },
   "Leaning REBUNKED": {
-    label: "LEANING REBUNKED",
+    label: "LEANING TRUE",
     icon: TrendingUp,
     bannerClass: "bg-emerald-50/60 border-emerald-200",
     iconClass: "text-emerald-400",
-    labelClass: "text-emerald-700",
+    labelClass: "text-emerald-600",
   },
   "Leaning DEBUNKED": {
-    label: "LEANING DEBUNKED",
+    label: "LEANING FALSE",
     icon: TrendingDown,
     bannerClass: "bg-red-50/60 border-red-200",
     iconClass: "text-red-400",
-    labelClass: "text-red-700",
+    labelClass: "text-red-600",
   },
   Contested: {
     label: "CONTESTED",
@@ -73,7 +70,6 @@ const config: Record<
 
 export function OverallVerdictBanner({
   verdict,
-  stability,
   className,
 }: OverallVerdictBannerProps) {
   const {
@@ -106,23 +102,6 @@ export function OverallVerdictBanner({
           {label}
         </p>
       </div>
-      {stability && (
-        <div
-          className={cn(
-            "flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[11px] font-bold tracking-wider border font-body flex-shrink-0",
-            stability === "Volatile"
-              ? "bg-orange-100 text-orange-700 border-orange-300"
-              : "bg-sky-100 text-sky-700 border-sky-300",
-          )}
-        >
-          {stability === "Volatile" ? (
-            <Flame className="w-3 h-3" />
-          ) : (
-            <Shield className="w-3 h-3" />
-          )}
-          {stability}
-        </div>
-      )}
     </div>
   );
 }

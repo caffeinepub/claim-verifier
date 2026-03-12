@@ -31,6 +31,7 @@ import {
   Clock,
   ExternalLink,
   Flag,
+  Flame,
   HelpCircle,
   Link2,
   Loader2,
@@ -75,11 +76,7 @@ import { Input } from "@/components/ui/input";
 import { useReportContent } from "@/hooks/useQueries";
 import { useSessionGate } from "@/hooks/useSessionGate";
 import { getClaimSlug } from "@/utils/slug";
-import {
-  computeOverallVerdict,
-  getVerdictStability,
-  recordVerdict,
-} from "@/utils/verdict";
+import { computeOverallVerdict } from "@/utils/verdict";
 import { CategoryBadge } from "./CategoryBadge";
 import { EvidenceTypeBadge } from "./EvidenceTypeBadge";
 import { EvidenceVoteButtons } from "./EvidenceVoteButtons";
@@ -88,6 +85,7 @@ import { Lightbox } from "./Lightbox";
 import { OverallVerdictBanner } from "./OverallVerdictBanner";
 import { ReplyThread } from "./ReplyThread";
 import { ReportDialog } from "./ReportDialog";
+import { TrustedSourceBadgeList } from "./TrustedSourceBadgeList";
 import { UrlInputList } from "./UrlInputList";
 import { VerdictBar } from "./VerdictBar";
 
@@ -213,6 +211,13 @@ export function ClaimDetail({
   } = useEnhancedVoteTally(claimId);
   const { data: sessionVote } = useSessionVote(claimId, sessionId);
   const { data: evidence, isLoading: evidenceLoading } = useEvidence(claimId);
+
+  // Hot threshold: 10+ total votes as proxy for activity
+  const claimTotalVotes = tally
+    ? Math.max(0, Number(tally.trueCount)) +
+      Math.max(0, Number(tally.falseCount)) +
+      Math.max(0, Number(tally.unverifiedCount))
+    : 0;
   const username = useUsername();
 
   const evidenceIds = useMemo(
@@ -421,9 +426,17 @@ export function ClaimDetail({
                   : "Anonymous"}
               </span>
             </div>
-            <h1 className="font-display text-3xl font-bold leading-tight text-foreground mb-4">
-              {claim.title}
-            </h1>
+            <div className="flex items-start gap-3 mb-4">
+              <h1 className="font-display text-3xl font-bold leading-tight text-foreground flex-1">
+                {claim.title}
+              </h1>
+              {claimTotalVotes >= 10 && (
+                <Flame
+                  className="w-6 h-6 text-orange-500 flex-shrink-0 mt-1"
+                  aria-label="Hot claim"
+                />
+              )}
+            </div>
             <p className="font-body text-base text-muted-foreground leading-relaxed">
               {claim.description}
             </p>
@@ -484,14 +497,9 @@ export function ClaimDetail({
                   Number(tally.trueDirect),
                   Number(tally.falseDirect),
                 );
-                recordVerdict(claimId.toString(), detailVerdict);
-                const detailStability = getVerdictStability(claimId.toString());
                 return (
                   <div className="space-y-4">
-                    <OverallVerdictBanner
-                      verdict={detailVerdict}
-                      stability={detailStability}
-                    />
+                    <OverallVerdictBanner verdict={detailVerdict} />
                     <VerdictBar
                       trueCount={tally.trueCount}
                       falseCount={tally.falseCount}
@@ -892,6 +900,7 @@ export function ClaimDetail({
                       <ImageGrid imageUrls={item.imageUrls ?? []} size="sm" />
                       {/* Evidence URLs */}
                       <UrlChips urls={item.urls ?? []} />
+                      <TrustedSourceBadgeList urls={item.urls ?? []} />
 
                       {/* Bottom row: vote buttons (left) + report (right) */}
                       <div className="flex items-center justify-between mt-2 gap-2">

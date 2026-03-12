@@ -37,6 +37,17 @@ export interface Reply {
     sessionId: string;
     evidenceId: bigint;
 }
+export interface TrustedSourceInfo {
+    id: bigint;
+    domain: string;
+    sourceType: string;
+    suggestedBy: string;
+    timestamp: bigint;
+    adminOverride: boolean;
+    upvotes: bigint;
+    downvotes: bigint;
+    isTrusted: boolean;
+}
 export interface backendInterface {
     addReply(evidenceId: bigint, parentReplyId: bigint, text: string, authorUsername: string, sessionId: string): Promise<{
         __kind__: "ok";
@@ -60,6 +71,20 @@ export interface backendInterface {
         err: string;
     }>;
     adminDeleteReply(id: bigint, password: string): Promise<{
+        __kind__: "ok";
+        ok: null;
+    } | {
+        __kind__: "err";
+        err: string;
+    }>;
+    adminOverrideSource(sourceId: bigint, approved: boolean, password: string): Promise<{
+        __kind__: "ok";
+        ok: null;
+    } | {
+        __kind__: "err";
+        err: string;
+    }>;
+    adminRemoveSource(sourceId: bigint, password: string): Promise<{
         __kind__: "ok";
         ok: null;
     } | {
@@ -106,6 +131,14 @@ export interface backendInterface {
     getSessionVoteForClaim(claimId: bigint, sessionId: string): Promise<string | null>;
     getSessionVoteForEvidence(evidenceId: bigint, sessionId: string): Promise<string | null>;
     getSessionVoteForReply(replyId: bigint, sessionId: string): Promise<string | null>;
+    getSessionVoteForSource(sourceId: bigint, sessionId: string): Promise<string | null>;
+    getSourceCredibilityForUrl(url: string): Promise<{
+        isTrusted: boolean;
+        sourceType: string;
+        bonusPct: bigint;
+        domain: string;
+    }>;
+    getTrustedSources(): Promise<Array<TrustedSourceInfo>>;
     getVoteTally(claimId: bigint): Promise<{
         trueCount: bigint;
         falseCount: bigint;
@@ -155,6 +188,20 @@ export interface backendInterface {
         err: string;
     }>;
     submitVote(claimId: bigint, sessionId: string, verdict: string): Promise<void>;
+    suggestTrustedSource(domain: string, sourceType: string, sessionId: string): Promise<{
+        __kind__: "ok";
+        ok: bigint;
+    } | {
+        __kind__: "err";
+        err: string;
+    }>;
     voteEvidence(evidenceId: bigint, sessionId: string, direction: string): Promise<void>;
+    voteOnSource(sourceId: bigint, sessionId: string, direction: string): Promise<{
+        __kind__: "ok";
+        ok: null;
+    } | {
+        __kind__: "err";
+        err: string;
+    }>;
     voteReply(replyId: bigint, sessionId: string, direction: string): Promise<void>;
 }

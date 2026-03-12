@@ -40,6 +40,17 @@ export interface Reply {
   'sessionId' : string,
   'evidenceId' : bigint,
 }
+export interface TrustedSourceInfo {
+  'id' : bigint,
+  'domain' : string,
+  'sourceType' : string,
+  'suggestedBy' : string,
+  'timestamp' : bigint,
+  'adminOverride' : boolean,
+  'upvotes' : bigint,
+  'downvotes' : bigint,
+  'isTrusted' : boolean,
+}
 export interface _CaffeineStorageCreateCertificateResult {
   'method' : string,
   'blob_hash' : string,
@@ -87,6 +98,16 @@ export interface _SERVICE {
     { 'ok' : null } |
       { 'err' : string }
   >,
+  'adminOverrideSource' : ActorMethod<
+    [bigint, boolean, string],
+    { 'ok' : null } |
+      { 'err' : string }
+  >,
+  'adminRemoveSource' : ActorMethod<
+    [bigint, string],
+    { 'ok' : null } |
+      { 'err' : string }
+  >,
   'createClaim' : ActorMethod<
     [string, string, string, string, Array<string>, Array<string>, string],
     { 'ok' : null } |
@@ -121,6 +142,17 @@ export interface _SERVICE {
   'getSessionVoteForClaim' : ActorMethod<[bigint, string], [] | [string]>,
   'getSessionVoteForEvidence' : ActorMethod<[bigint, string], [] | [string]>,
   'getSessionVoteForReply' : ActorMethod<[bigint, string], [] | [string]>,
+  'getSessionVoteForSource' : ActorMethod<[bigint, string], [] | [string]>,
+  'getSourceCredibilityForUrl' : ActorMethod<
+    [string],
+    {
+      'isTrusted' : boolean,
+      'sourceType' : string,
+      'bonusPct' : bigint,
+      'domain' : string,
+    }
+  >,
+  'getTrustedSources' : ActorMethod<[], Array<TrustedSourceInfo>>,
   'getVoteTally' : ActorMethod<
     [bigint],
     { 'trueCount' : bigint, 'falseCount' : bigint, 'unverifiedCount' : bigint }
@@ -156,7 +188,17 @@ export interface _SERVICE {
       { 'err' : string }
   >,
   'submitVote' : ActorMethod<[bigint, string, string], undefined>,
+  'suggestTrustedSource' : ActorMethod<
+    [string, string, string],
+    { 'ok' : bigint } |
+      { 'err' : string }
+  >,
   'voteEvidence' : ActorMethod<[bigint, string, string], undefined>,
+  'voteOnSource' : ActorMethod<
+    [bigint, string, string],
+    { 'ok' : null } |
+      { 'err' : string }
+  >,
   'voteReply' : ActorMethod<[bigint, string, string], undefined>,
   'likeReply' : ActorMethod<[bigint, string], undefined>,
   'getReplyLikeCount' : ActorMethod<[bigint], bigint>,

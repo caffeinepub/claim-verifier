@@ -49,6 +49,17 @@ export const Reply = IDL.Record({
   'sessionId' : IDL.Text,
   'evidenceId' : IDL.Nat,
 });
+export const TrustedSourceInfo = IDL.Record({
+  'id' : IDL.Nat,
+  'domain' : IDL.Text,
+  'sourceType' : IDL.Text,
+  'suggestedBy' : IDL.Text,
+  'timestamp' : IDL.Int,
+  'adminOverride' : IDL.Bool,
+  'upvotes' : IDL.Nat,
+  'downvotes' : IDL.Nat,
+  'isTrusted' : IDL.Bool,
+});
 
 export const idlService = IDL.Service({
   '_caffeineStorageBlobIsLive' : IDL.Func(
@@ -93,6 +104,16 @@ export const idlService = IDL.Service({
       [],
     ),
   'adminDeleteReply' : IDL.Func(
+      [IDL.Nat, IDL.Text],
+      [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
+      [],
+    ),
+  'adminOverrideSource' : IDL.Func(
+      [IDL.Nat, IDL.Bool, IDL.Text],
+      [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
+      [],
+    ),
+  'adminRemoveSource' : IDL.Func(
       [IDL.Nat, IDL.Text],
       [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
       [],
@@ -173,6 +194,24 @@ export const idlService = IDL.Service({
       [IDL.Opt(IDL.Text)],
       ['query'],
     ),
+  'getSessionVoteForSource' : IDL.Func(
+      [IDL.Nat, IDL.Text],
+      [IDL.Opt(IDL.Text)],
+      ['query'],
+    ),
+  'getSourceCredibilityForUrl' : IDL.Func(
+      [IDL.Text],
+      [
+        IDL.Record({
+          'isTrusted' : IDL.Bool,
+          'sourceType' : IDL.Text,
+          'bonusPct' : IDL.Nat,
+          'domain' : IDL.Text,
+        }),
+      ],
+      ['query'],
+    ),
+  'getTrustedSources' : IDL.Func([], [IDL.Vec(TrustedSourceInfo)], ['query']),
   'getVoteTally' : IDL.Func(
       [IDL.Nat],
       [
@@ -223,7 +262,17 @@ export const idlService = IDL.Service({
       [],
     ),
   'submitVote' : IDL.Func([IDL.Nat, IDL.Text, IDL.Text], [], []),
+  'suggestTrustedSource' : IDL.Func(
+      [IDL.Text, IDL.Text, IDL.Text],
+      [IDL.Variant({ 'ok' : IDL.Nat, 'err' : IDL.Text })],
+      [],
+    ),
   'voteEvidence' : IDL.Func([IDL.Nat, IDL.Text, IDL.Text], [], []),
+  'voteOnSource' : IDL.Func(
+      [IDL.Nat, IDL.Text, IDL.Text],
+      [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
+      [],
+    ),
   'voteReply' : IDL.Func([IDL.Nat, IDL.Text, IDL.Text], [], []),
 });
 
@@ -271,7 +320,18 @@ export const idlFactory = ({ IDL }) => {
     'sessionId' : IDL.Text,
     'evidenceId' : IDL.Nat,
   });
-  
+  const TrustedSourceInfo = IDL.Record({
+    'id' : IDL.Nat,
+    'domain' : IDL.Text,
+    'sourceType' : IDL.Text,
+    'suggestedBy' : IDL.Text,
+    'timestamp' : IDL.Int,
+    'adminOverride' : IDL.Bool,
+    'upvotes' : IDL.Nat,
+    'downvotes' : IDL.Nat,
+    'isTrusted' : IDL.Bool,
+  });
+
   return IDL.Service({
     '_caffeineStorageBlobIsLive' : IDL.Func(
         [IDL.Vec(IDL.Nat8)],
@@ -315,6 +375,16 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'adminDeleteReply' : IDL.Func(
+        [IDL.Nat, IDL.Text],
+        [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
+        [],
+      ),
+    'adminOverrideSource' : IDL.Func(
+        [IDL.Nat, IDL.Bool, IDL.Text],
+        [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
+        [],
+      ),
+    'adminRemoveSource' : IDL.Func(
         [IDL.Nat, IDL.Text],
         [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
         [],
@@ -395,6 +465,24 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Opt(IDL.Text)],
         ['query'],
       ),
+    'getSessionVoteForSource' : IDL.Func(
+        [IDL.Nat, IDL.Text],
+        [IDL.Opt(IDL.Text)],
+        ['query'],
+      ),
+    'getSourceCredibilityForUrl' : IDL.Func(
+        [IDL.Text],
+        [
+          IDL.Record({
+            'isTrusted' : IDL.Bool,
+            'sourceType' : IDL.Text,
+            'bonusPct' : IDL.Nat,
+            'domain' : IDL.Text,
+          }),
+        ],
+        ['query'],
+      ),
+    'getTrustedSources' : IDL.Func([], [IDL.Vec(TrustedSourceInfo)], ['query']),
     'getVoteTally' : IDL.Func(
         [IDL.Nat],
         [
@@ -445,7 +533,17 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'submitVote' : IDL.Func([IDL.Nat, IDL.Text, IDL.Text], [], []),
+    'suggestTrustedSource' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Text],
+        [IDL.Variant({ 'ok' : IDL.Nat, 'err' : IDL.Text })],
+        [],
+      ),
     'voteEvidence' : IDL.Func([IDL.Nat, IDL.Text, IDL.Text], [], []),
+    'voteOnSource' : IDL.Func(
+        [IDL.Nat, IDL.Text, IDL.Text],
+        [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
+        [],
+      ),
     'voteReply' : IDL.Func([IDL.Nat, IDL.Text, IDL.Text], [], []),
   });
 };

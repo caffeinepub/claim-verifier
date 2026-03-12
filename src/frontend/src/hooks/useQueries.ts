@@ -850,3 +850,156 @@ export function useReplyLikeCounts(evidenceId: bigint | null) {
     staleTime: 10_000,
   });
 }
+
+// ── Trusted Sources ───────────────────────────────────────────────────────────
+
+import type { TrustedSourceInfo } from "../backend.d";
+
+export function useTrustedSources() {
+  const { actor, isFetching } = useActor();
+  return useQuery<TrustedSourceInfo[]>({
+    queryKey: ["trusted-sources"],
+    queryFn: async () => {
+      if (!actor) return [];
+      return (actor as any).getTrustedSources();
+    },
+    enabled: !!actor && !isFetching,
+    staleTime: 30_000,
+  });
+}
+
+export function useSessionVoteForSource(
+  sourceId: bigint | null,
+  sessionId: string | null,
+) {
+  const { actor, isFetching } = useActor();
+  return useQuery<string | null>({
+    queryKey: ["source-vote", sourceId?.toString(), sessionId],
+    queryFn: async () => {
+      if (!actor || sourceId === null || !sessionId) return null;
+      return (actor as any).getSessionVoteForSource(sourceId, sessionId);
+    },
+    enabled: !!actor && !isFetching && sourceId !== null && !!sessionId,
+  });
+}
+
+export function useSuggestTrustedSource() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      domain,
+      sourceType,
+      sessionId,
+    }: {
+      domain: string;
+      sourceType: string;
+      sessionId: string;
+    }) => {
+      if (!actor) throw new Error("No actor");
+      const result = await (actor as any).suggestTrustedSource(
+        domain,
+        sourceType,
+        sessionId,
+      );
+      if (result && result.__kind__ === "err") {
+        throw new Error(result.err as string);
+      }
+      return result;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["trusted-sources"] });
+    },
+  });
+}
+
+export function useVoteOnSource() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      sourceId,
+      sessionId,
+      direction,
+    }: {
+      sourceId: bigint;
+      sessionId: string;
+      direction: string;
+    }) => {
+      if (!actor) throw new Error("No actor");
+      const result = await (actor as any).voteOnSource(
+        sourceId,
+        sessionId,
+        direction,
+      );
+      if (result && result.__kind__ === "err") {
+        throw new Error(result.err as string);
+      }
+      return result;
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["trusted-sources"] });
+      queryClient.invalidateQueries({
+        queryKey: ["source-vote", variables.sourceId.toString()],
+      });
+    },
+  });
+}
+
+export function useAdminRemoveSource() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      sourceId,
+      password,
+    }: {
+      sourceId: bigint;
+      password: string;
+    }) => {
+      if (!actor) throw new Error("No actor");
+      const result = await (actor as any).adminRemoveSource(sourceId, password);
+      if (result && result.__kind__ === "err") {
+        throw new Error(result.err as string);
+      }
+      return result;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["trusted-sources"] });
+    },
+  });
+}
+
+export function useAdminOverrideSource() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      sourceId,
+      approved,
+      password,
+    }: {
+      sourceId: bigint;
+      approved: boolean;
+      password: string;
+    }) => {
+      if (!actor) throw new Error("No actor");
+      const result = await (actor as any).adminOverrideSource(
+        sourceId,
+        approved,
+        password,
+      );
+      if (result && result.__kind__ === "err") {
+        throw new Error(result.err as string);
+      }
+      return result;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["trusted-sources"] });
+    },
+  });
+}

@@ -77,6 +77,21 @@ actor {
     sessionId : Text;
   };
 
+  type TrustedSource = {
+    id : Nat;
+    domain : Text;
+    sourceType : Text;
+    suggestedBy : Text;
+    timestamp : Int;
+    adminOverride : Bool; // if true, admin manually approved (bypasses vote threshold)
+  };
+
+  type SourceVote = {
+    sourceId : Nat;
+    sessionId : Text;
+    direction : Text; // "up" or "down"
+  };
+
   var claimsArray : [Claim] = [];
   var votesArray : [Vote] = [];
   var evidencesArray : [Evidence] = [];
@@ -85,10 +100,13 @@ actor {
   var repliesArray : [Reply] = [];
   var replyVotesArray : [ReplyVote] = [];
   var replyLikesArray : [ReplyLike] = [];
+  var trustedSourcesArray : [TrustedSource] = [];
+  var sourceVotesArray : [SourceVote] = [];
   var claimCount : Nat = 0;
   var evidenceCount : Nat = 0;
   var reportCount : Nat = 0;
   var replyCount : Nat = 0;
+  var sourceCount : Nat = 0;
 
   let claimCooldownsList = List.empty<(Text, Int)>();
   let evidenceCooldownsList = List.empty<(Text, Int)>();
@@ -100,7 +118,10 @@ actor {
   let REPORT_THRESHOLD : Nat = 10;
   let SIMILARITY_THRESHOLD : Float = 0.8;
   let ONE_DAY_NS : Int = 86_400_000_000_000;
-  let EVIDENCE_WEIGHT_MULTIPLIER : Float = 3.0; // kept for canister upgrade compatibility
+  let EVIDENCE_WEIGHT_MULTIPLIER : Float = 3.0;
+  // Trusted source thresholds
+  let SOURCE_MIN_VOTES : Nat = 25;
+  let SOURCE_MIN_UPVOTE_PCT : Nat = 60; // 60%
 
   func seedClaimsData() : [Claim] {
     let seeds = [
@@ -211,6 +232,92 @@ actor {
     cooldownList.clear();
     for (item in filtered.values()) { cooldownList.add(item) };
     cooldownList.add((sessionId, ts));
+  };
+
+  // Extract domain from a URL (strips protocol, path, www.)
+  func extractDomain(url : Text) : Text {
+    // Skip protocol prefix
+    let chars = url.chars();
+    let buf = List.empty<Char>();
+    for (c in chars) { buf.add(c) };
+    let arr = buf.toArray();
+    var start = 0;
+    let n = arr.size();
+    // Skip "https://" or "http://"
+    if (n >= 8 and arr[0] == 'h' and arr[1] == 't' and arr[2] == 't' and arr[3] == 'p') {
+      if (n >= 8 and arr[4] == 's' and arr[5] == ':' and arr[6] == '/' and arr[7] == '/') {
+        start := 8;
+      } else if (n >= 7 and arr[4] == ':' and arr[5] == '/' and arr[6] == '/') {
+        start := 7;
+      };
+    };
+    // Skip "www."
+    if (n >= start + 4 and arr[start] == 'w' and arr[start+1] == 'w' and arr[start+2] == 'w' and arr[start+3] == '.') {
+      start += 4;
+    };
+    // Read until '/' or end
+    var domain = "";
+    var i = start;
+    while (i < n and arr[i] != '/') {
+      domain := domain # Text.fromChar(arr[i]);
+      i += 1;
+    };
+    toLower(domain);
+  };
+
+  // Get source credibility bonus multiplier for a URL (returns bonus as parts-per-1000, e.g. 50 = 5%)
+  func getSourceBonus(url : Text) : Nat {
+    let domain = extractDomain(url);
+    for (src in trustedSourcesArray.values()) {
+      if (src.domain == domain) {
+        // Check if trusted: admin override OR meets vote threshold
+        var upvotes : Nat = 0;
+        var downvotes : Nat = 0;
+        for (v in sourceVotesArray.values()) {
+          if (v.sourceId == src.id) {
+            switch (v.direction) {
+              case ("up") { upvotes += 1 };
+              case ("down") { downvotes += 1 };
+              case (_) {};
+            };
+          };
+        };
+        let totalVotes = upvotes + downvotes;
+        let isTrusted = src.adminOverride or (
+          totalVotes >= SOURCE_MIN_VOTES and
+          upvotes * 100 >= totalVotes * SOURCE_MIN_UPVOTE_PCT
+        );
+        if (isTrusted) {
+          // Return bonus in parts-per-1000
+          let bonus : Nat = switch (src.sourceType) {
+            case ("peer-reviewed") { 50 }; // 5%
+            case ("government") { 40 };    // 4%
+            case ("major-news") { 30 };    // 3%
+            case ("independent") { 20 };   // 2%
+            case ("blog") { 10 };          // 1%
+            case ("social") { 5 };         // 0.5%
+            case (_) { 0 };
+          };
+          return bonus;
+        };
+      };
+    };
+    0;
+  };
+
+  // Apply source credibility bonus to an evidence net score
+  // Returns adjusted score (Int, floored at original value if no trusted source)
+  // Bonus only applies if netScore >= 3 (quality gate already applied before calling this)
+  func applySourceBonus(netScore : Int, evidenceUrls : [Text]) : Int {
+    var maxBonus : Nat = 0;
+    for (url in evidenceUrls.values()) {
+      let bonus = getSourceBonus(url);
+      if (bonus > maxBonus) { maxBonus := bonus };
+    };
+    if (maxBonus == 0) return netScore;
+    // Apply bonus: netScore * (1000 + maxBonus) / 1000, using integer math
+    let adjusted = (netScore * (1000 + maxBonus).toInt()) / 1000;
+    adjusted;
   };
 
   public shared func createClaim(
@@ -677,7 +784,6 @@ actor {
   // ── Reply Likes ────────────────────────────────────────────────────────────────────────────
 
   public shared func likeReply(replyId : Nat, sessionId : Text) : async () {
-    // Toggle: if already liked, remove the like
     let existing = replyLikesArray.find(func(l : ReplyLike) : Bool {
       l.replyId == replyId and l.sessionId == sessionId
     });
@@ -713,8 +819,6 @@ actor {
     };
   };
 
-  // ── Bulk like counts for all replies in an evidence thread ───────────────────────────────────────
-
   public query func getReplyLikeCounts(evidenceId : Nat) : async [(Nat, Nat)] {
     let result = List.empty<(Nat, Nat)>();
     for (r in repliesArray.values()) {
@@ -729,11 +833,201 @@ actor {
     result.toArray();
   };
 
-  // ── Enhanced Vote Tally with Multiplier System ─────────────────────────────────────────────
-  // Evidence quality gate: only counts if net score >= 3
-  // Multiplier formula: directVotes * min(5, max(1, 1 + 0.1 * evidenceScore))
-  // Multiplier only activates if directVotes >= 3; otherwise stays at 1x
-  // Multiplier capped at 5x (multiplierNum max = 50, divided by 10)
+  // ── Source Credibility Index ───────────────────────────────────────────────────────────────
+
+  public shared func suggestTrustedSource(domain : Text, sourceType : Text, sessionId : Text) : async {
+    #ok : Nat;
+    #err : Text;
+  } {
+    let cleanDomain = toLower(domain);
+    // Check for duplicate domain
+    switch (trustedSourcesArray.find(func(s : TrustedSource) : Bool { s.domain == cleanDomain })) {
+      case (?_) { return #err("Domain already suggested") };
+      case null {};
+    };
+    sourceCount += 1;
+    let src : TrustedSource = {
+      id = sourceCount;
+      domain = cleanDomain;
+      sourceType;
+      suggestedBy = sessionId;
+      timestamp = Time.now();
+      adminOverride = false;
+    };
+    let list = List.fromArray<TrustedSource>(trustedSourcesArray);
+    list.add(src);
+    trustedSourcesArray := list.toArray();
+    #ok(sourceCount);
+  };
+
+  public query func getTrustedSources() : async [{
+    id : Nat;
+    domain : Text;
+    sourceType : Text;
+    suggestedBy : Text;
+    timestamp : Int;
+    adminOverride : Bool;
+    upvotes : Nat;
+    downvotes : Nat;
+    isTrusted : Bool;
+  }] {
+    let result = List.empty<{
+      id : Nat;
+      domain : Text;
+      sourceType : Text;
+      suggestedBy : Text;
+      timestamp : Int;
+      adminOverride : Bool;
+      upvotes : Nat;
+      downvotes : Nat;
+      isTrusted : Bool;
+    }>();
+    for (src in trustedSourcesArray.values()) {
+      var upvotes : Nat = 0;
+      var downvotes : Nat = 0;
+      for (v in sourceVotesArray.values()) {
+        if (v.sourceId == src.id) {
+          switch (v.direction) {
+            case ("up") { upvotes += 1 };
+            case ("down") { downvotes += 1 };
+            case (_) {};
+          };
+        };
+      };
+      let totalVotes = upvotes + downvotes;
+      let isTrusted = src.adminOverride or (
+        totalVotes >= SOURCE_MIN_VOTES and
+        upvotes * 100 >= totalVotes * SOURCE_MIN_UPVOTE_PCT
+      );
+      result.add({
+        id = src.id;
+        domain = src.domain;
+        sourceType = src.sourceType;
+        suggestedBy = src.suggestedBy;
+        timestamp = src.timestamp;
+        adminOverride = src.adminOverride;
+        upvotes;
+        downvotes;
+        isTrusted;
+      });
+    };
+    result.toArray();
+  };
+
+  public shared func voteOnSource(sourceId : Nat, sessionId : Text, direction : Text) : async {
+    #ok;
+    #err : Text;
+  } {
+    // Validate source exists
+    switch (trustedSourcesArray.find(func(s : TrustedSource) : Bool { s.id == sourceId })) {
+      case null { return #err("Source not found") };
+      case (?_) {};
+    };
+    let idx = sourceVotesArray.findIndex(
+      func(v : SourceVote) : Bool { v.sourceId == sourceId and v.sessionId == sessionId }
+    );
+    switch (idx) {
+      case (null) {
+        let vote : SourceVote = { sourceId; sessionId; direction };
+        let list = List.fromArray<SourceVote>(sourceVotesArray);
+        list.add(vote);
+        sourceVotesArray := list.toArray();
+      };
+      case (?i) {
+        let existing = sourceVotesArray[i];
+        if (existing.direction == direction) {
+          // Toggle off
+          sourceVotesArray := sourceVotesArray.filter(
+            func(v : SourceVote) : Bool { not (v.sourceId == sourceId and v.sessionId == sessionId) }
+          );
+        } else {
+          sourceVotesArray := sourceVotesArray.map(
+            func(v : SourceVote) : SourceVote {
+              if (v.sourceId == sourceId and v.sessionId == sessionId) {
+                { sourceId = v.sourceId; sessionId = v.sessionId; direction };
+              } else { v };
+            }
+          );
+        };
+      };
+    };
+    #ok;
+  };
+
+  public query func getSessionVoteForSource(sourceId : Nat, sessionId : Text) : async ?Text {
+    switch (sourceVotesArray.find(func(v : SourceVote) : Bool { v.sourceId == sourceId and v.sessionId == sessionId })) {
+      case (null) { null };
+      case (?v) { ?v.direction };
+    };
+  };
+
+  public shared func adminRemoveSource(sourceId : Nat, password : Text) : async {
+    #ok;
+    #err : Text;
+  } {
+    if (password != ADMIN_PASSWORD) { return #err("Unauthorized") };
+    trustedSourcesArray := trustedSourcesArray.filter(func(s : TrustedSource) : Bool { s.id != sourceId });
+    sourceVotesArray := sourceVotesArray.filter(func(v : SourceVote) : Bool { v.sourceId != sourceId });
+    #ok;
+  };
+
+  public shared func adminOverrideSource(sourceId : Nat, approved : Bool, password : Text) : async {
+    #ok;
+    #err : Text;
+  } {
+    if (password != ADMIN_PASSWORD) { return #err("Unauthorized") };
+    trustedSourcesArray := trustedSourcesArray.map(func(s : TrustedSource) : TrustedSource {
+      if (s.id == sourceId) {
+        { id = s.id; domain = s.domain; sourceType = s.sourceType; suggestedBy = s.suggestedBy; timestamp = s.timestamp; adminOverride = approved };
+      } else { s };
+    });
+    #ok;
+  };
+
+  // Check if a URL matches a trusted source (for frontend badge display)
+  public query func getSourceCredibilityForUrl(url : Text) : async {
+    isTrusted : Bool;
+    sourceType : Text;
+    bonusPct : Nat; // e.g. 5 means 5%
+    domain : Text;
+  } {
+    let domain = extractDomain(url);
+    for (src in trustedSourcesArray.values()) {
+      if (src.domain == domain) {
+        var upvotes : Nat = 0;
+        var downvotes : Nat = 0;
+        for (v in sourceVotesArray.values()) {
+          if (v.sourceId == src.id) {
+            switch (v.direction) {
+              case ("up") { upvotes += 1 };
+              case ("down") { downvotes += 1 };
+              case (_) {};
+            };
+          };
+        };
+        let totalVotes = upvotes + downvotes;
+        let isTrusted = src.adminOverride or (
+          totalVotes >= SOURCE_MIN_VOTES and
+          upvotes * 100 >= totalVotes * SOURCE_MIN_UPVOTE_PCT
+        );
+        if (isTrusted) {
+          let bonusPct : Nat = switch (src.sourceType) {
+            case ("peer-reviewed") { 5 };
+            case ("government") { 4 };
+            case ("major-news") { 3 };
+            case ("independent") { 2 };
+            case ("blog") { 1 };
+            case ("social") { 1 }; // display as 1 but internally 0.5
+            case (_) { 0 };
+          };
+          return { isTrusted = true; sourceType = src.sourceType; bonusPct; domain };
+        };
+      };
+    };
+    { isTrusted = false; sourceType = ""; bonusPct = 0; domain };
+  };
+
+  // ── Enhanced Vote Tally with Multiplier + Source Credibility ──────────────────────────────
 
   public query func getEnhancedVoteTally(claimId : Nat) : async {
     trueCount : Int;
@@ -766,6 +1060,7 @@ actor {
     });
 
     // Sum qualifying evidence net scores per type (quality gate: net score >= 3)
+    // Apply source credibility bonus if evidence URLs match trusted sources
     var trueEvidenceScore : Int = 0;
     var falseEvidenceScore : Int = 0;
     var unverifiedEvidenceScore : Int = 0;
@@ -783,18 +1078,17 @@ actor {
       };
       // Quality gate: only count evidence with net score >= 3
       if (netVotes >= 3) {
+        // Apply source credibility bonus
+        let adjustedScore = applySourceBonus(netVotes, e.urls);
         switch (e.evidenceType) {
-          case ("True") { trueEvidenceScore += netVotes };
-          case ("False") { falseEvidenceScore += netVotes };
-          case (_) { unverifiedEvidenceScore += netVotes };
+          case ("True") { trueEvidenceScore += adjustedScore };
+          case ("False") { falseEvidenceScore += adjustedScore };
+          case (_) { unverifiedEvidenceScore += adjustedScore };
         };
       };
     };
 
     // Multiplier system using integer math (factor of 10):
-    // multiplierNum = min(50, max(10, 10 + evidenceScore))
-    // totalCount = directVotes * multiplierNum / 10
-    // Multiplier only activates if direct votes >= 3
     let trueMultNum : Int = if (trueDirect >= 3) {
       Int.min(50, Int.max(10, 10 + trueEvidenceScore))
     } else { 10 };

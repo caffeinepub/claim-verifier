@@ -918,6 +918,105 @@ export class Backend implements backendInterface {
             return result;
         }
     }
+
+    async getTrustedSources(): Promise<Array<import("./backend.d").TrustedSourceInfo>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getTrustedSources();
+                return result as any;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            return this.actor.getTrustedSources() as any;
+        }
+    }
+
+    async suggestTrustedSource(arg0: string, arg1: string, arg2: string): Promise<{ __kind__: "ok"; ok: bigint } | { __kind__: "err"; err: string }> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.suggestTrustedSource(arg0, arg1, arg2);
+                return result as any;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            return this.actor.suggestTrustedSource(arg0, arg1, arg2) as any;
+        }
+    }
+
+    async voteOnSource(arg0: bigint, arg1: string, arg2: string): Promise<{ __kind__: "ok"; ok: null } | { __kind__: "err"; err: string }> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.voteOnSource(arg0, arg1, arg2);
+                return result as any;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            return this.actor.voteOnSource(arg0, arg1, arg2) as any;
+        }
+    }
+
+    async getSessionVoteForSource(arg0: bigint, arg1: string): Promise<string | null> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getSessionVoteForSource(arg0, arg1);
+                return result.length === 0 ? null : result[0] as string;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getSessionVoteForSource(arg0, arg1);
+            return result.length === 0 ? null : result[0] as string;
+        }
+    }
+
+    async getSourceCredibilityForUrl(arg0: string): Promise<{ isTrusted: boolean; sourceType: string; bonusPct: bigint; domain: string }> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getSourceCredibilityForUrl(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            return this.actor.getSourceCredibilityForUrl(arg0);
+        }
+    }
+
+    async adminOverrideSource(arg0: bigint, arg1: boolean, arg2: string): Promise<{ __kind__: "ok"; ok: null } | { __kind__: "err"; err: string }> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.adminOverrideSource(arg0, arg1, arg2);
+                return result as any;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            return this.actor.adminOverrideSource(arg0, arg1, arg2) as any;
+        }
+    }
+
+    async adminRemoveSource(arg0: bigint, arg1: string): Promise<{ __kind__: "ok"; ok: null } | { __kind__: "err"; err: string }> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.adminRemoveSource(arg0, arg1);
+                return result as any;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            return this.actor.adminRemoveSource(arg0, arg1) as any;
+        }
+    }
 }
 function from_candid__CaffeineStorageRefillResult_n4(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: __CaffeineStorageRefillResult): _CaffeineStorageRefillResult {
     return from_candid_record_n5(_uploadFile, _downloadFile, value);

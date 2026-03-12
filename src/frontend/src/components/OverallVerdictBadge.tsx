@@ -1,10 +1,8 @@
 import { cn } from "@/lib/utils";
-import type { OverallVerdict, StabilityState } from "@/utils/verdict";
+import type { OverallVerdict } from "@/utils/verdict";
 import {
   BarChart2,
   CheckCircle2,
-  Flame,
-  Shield,
   Swords,
   TrendingDown,
   TrendingUp,
@@ -13,7 +11,6 @@ import {
 
 interface OverallVerdictBadgeProps {
   verdict: OverallVerdict;
-  stability?: StabilityState;
   className?: string;
 }
 
@@ -36,12 +33,12 @@ const config: Record<
     icon: XCircle,
   },
   "Leaning REBUNKED": {
-    label: "LEANING REBUNKED",
+    label: "LEANING TRUE",
     className: "bg-emerald-50 text-emerald-700 border-emerald-200",
     icon: TrendingUp,
   },
   "Leaning DEBUNKED": {
-    label: "LEANING DEBUNKED",
+    label: "LEANING FALSE",
     className: "bg-red-50 text-red-700 border-red-200",
     icon: TrendingDown,
   },
@@ -59,7 +56,6 @@ const config: Record<
 
 export function OverallVerdictBadge({
   verdict,
-  stability,
   className,
 }: OverallVerdictBadgeProps) {
   const { label, className: vcn, icon: Icon } = config[verdict];
@@ -73,12 +69,6 @@ export function OverallVerdictBadge({
     >
       <Icon className="w-3 h-3 flex-shrink-0" />
       {label}
-      {stability === "Volatile" && (
-        <Flame className="w-2.5 h-2.5 text-orange-500 flex-shrink-0" />
-      )}
-      {stability === "Stable" && (
-        <Shield className="w-2.5 h-2.5 text-sky-500 flex-shrink-0" />
-      )}
     </span>
   );
 }

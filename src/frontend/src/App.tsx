@@ -8,6 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Toaster } from "@/components/ui/sonner";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
 import { useAllClaims, useSessionId, useUsername } from "@/hooks/useQueries";
+import { TrustedSourcesPage } from "@/pages/TrustedSourcesPage";
 import { findClaimBySlug, getClaimSlug } from "@/utils/slug";
 import {
   BookOpen,
@@ -116,6 +117,7 @@ export default function App() {
   const [selectedClaimId, setSelectedClaimId] = useState<bigint | null>(null);
   const [isSubmitOpen, setIsSubmitOpen] = useState(false);
   const [isAdminOpen, setIsAdminOpen] = useState(false);
+  const [showSources, setShowSources] = useState(false);
 
   const { data: sessionId, isLoading: sessionLoading } = useSessionId();
   const { data: claims, isLoading: claimsLoading } = useAllClaims();
@@ -185,6 +187,7 @@ export default function App() {
 
   function goBack() {
     setSelectedClaimId(null);
+    setShowSources(false);
     window.history.pushState({}, "", "/");
   }
 
@@ -205,6 +208,7 @@ export default function App() {
     .sort((a, b) => Number(b.timestamp - a.timestamp));
 
   const showDetail = selectedClaimId !== null;
+  const isOnSources = showSources && selectedClaimId === null;
 
   return (
     <div className="min-h-screen bg-background noise-bg flex flex-col">
@@ -277,6 +281,8 @@ export default function App() {
               allClaims={claims ?? []}
               onBack={goBack}
             />
+          ) : isOnSources ? (
+            <TrustedSourcesPage key="sources" sessionId={sessionId ?? null} />
           ) : (
             <motion.div
               key="list"
@@ -441,9 +447,20 @@ export default function App() {
               </p>
               <button
                 type="button"
+                data-ocid="sources.link"
+                onClick={() => {
+                  setShowSources(true);
+                  setSelectedClaimId(null);
+                }}
+                className="text-xs text-muted-foreground hover:text-foreground font-body transition-colors select-none"
+              >
+                Sources
+              </button>
+              <button
+                type="button"
                 data-ocid="admin.open_modal_button"
                 onClick={() => setIsAdminOpen(true)}
-                className="text-xs text-muted-foreground/30 hover:text-muted-foreground/60 font-body transition-colors select-none"
+                className="text-xs text-muted-foreground hover:text-foreground font-body transition-colors select-none"
                 aria-label="Admin"
               >
                 Admin

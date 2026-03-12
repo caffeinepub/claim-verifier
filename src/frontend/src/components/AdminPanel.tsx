@@ -1,4 +1,4 @@
-import type { Claim, Evidence } from "@/backend.d";
+import type { Claim, Evidence, TrustedSourceInfo } from "@/backend.d";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,20 +11,30 @@ import {
   useAdminDeleteClaim,
   useAdminDeleteEvidence,
   useAdminDeleteReply,
+  useAdminOverrideSource,
+  useAdminRemoveSource,
   useGetHiddenClaims,
   useGetHiddenEvidence,
   useGetHiddenReplies,
   useRestoreClaim,
   useRestoreEvidence,
   useRestoreReply,
+  useTrustedSources,
 } from "@/hooks/useQueries";
 import { cn } from "@/lib/utils";
+import {
+  getSourceTypeBadgeClasses,
+  getSourceTypeBonus,
+  getSourceTypeLabel,
+} from "@/pages/TrustedSourcesPage";
 import { formatRelativeTime } from "@/utils/time";
 import {
   AlertTriangle,
+  CheckCircle2,
   Loader2,
   Lock,
   Shield,
+  ShieldCheck,
   Trash2,
   Undo2,
   X,
@@ -528,6 +538,177 @@ function HiddenReplyRow({
   );
 }
 
+// ── Trusted Sources Admin Tab ─────────────────────────────────────────────────
+
+function TrustedSourcesAdminTab({ password }: { password: string }) {
+  const { data: sources, isLoading, error } = useTrustedSources();
+  const adminRemove = useAdminRemoveSource();
+  const adminOverride = useAdminOverrideSource();
+
+  if (isLoading) {
+    return (
+      <div data-ocid="admin.sources.loading_state" className="space-y-3 p-1">
+        {[1, 2, 3].map((i) => (
+          <div key={i} className="p-4 bg-secondary rounded-sm space-y-2">
+            <Skeleton className="h-5 w-3/4" />
+            <Skeleton className="h-3 w-1/3" />
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div
+        data-ocid="admin.sources.error_state"
+        className="flex flex-col items-center py-12 text-muted-foreground"
+      >
+        <AlertTriangle className="h-8 w-8 mb-3 text-destructive opacity-60" />
+        <p className="text-sm font-body">Failed to load sources.</p>
+      </div>
+    );
+  }
+
+  if (!sources || sources.length === 0) {
+    return (
+      <div
+        data-ocid="admin.sources.empty_state"
+        className="flex flex-col items-center py-12 text-muted-foreground"
+      >
+        <Shield className="h-8 w-8 mb-3 opacity-20" />
+        <p className="text-sm font-body">No sources submitted yet.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3 p-1">
+      {sources.map((source: TrustedSourceInfo, idx: number) => {
+        const upvotes = Number(source.upvotes);
+        const downvotes = Number(source.downvotes);
+        const netScore = upvotes - downvotes;
+        const totalVotes = upvotes + downvotes;
+        const upvotePct =
+          totalVotes > 0 ? Math.round((upvotes / totalVotes) * 100) : 0;
+
+        return (
+          <motion.div
+            key={source.id.toString()}
+            data-ocid={`admin.sources.item.${idx + 1}`}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: idx * 0.04 }}
+            className="flex items-start gap-3 p-4 bg-secondary border border-border rounded-sm"
+          >
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap mb-1">
+                <span className="text-sm font-bold font-body text-foreground">
+                  {source.domain}
+                </span>
+                {source.isTrusted && (
+                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-500/15 text-emerald-600 border border-emerald-500/30">
+                    <ShieldCheck className="h-2.5 w-2.5" />
+                    TRUSTED
+                  </span>
+                )}
+                {source.adminOverride && (
+                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] bg-violet-500/15 text-violet-600 border border-violet-500/30">
+                    Admin Approved
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span
+                  className={cn(
+                    "inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-body border",
+                    getSourceTypeBadgeClasses(source.sourceType),
+                  )}
+                >
+                  {getSourceTypeLabel(source.sourceType)}
+                </span>
+                <span className="text-[10px] text-muted-foreground font-body">
+                  {getSourceTypeBonus(source.sourceType)} bonus
+                </span>
+                <span className="text-[10px] font-mono text-muted-foreground">
+                  {netScore > 0 ? "+" : ""}
+                  {netScore} votes ({totalVotes} total, {upvotePct}% approval)
+                </span>
+              </div>
+            </div>
+            <div className="flex items-center gap-1.5 flex-shrink-0 flex-wrap justify-end">
+              <Button
+                size="sm"
+                variant="outline"
+                data-ocid={`admin.sources.edit_button.${idx + 1}`}
+                onClick={async () => {
+                  try {
+                    await adminOverride.mutateAsync({
+                      sourceId: source.id,
+                      approved: !source.adminOverride,
+                      password,
+                    });
+                    toast.success(
+                      source.adminOverride
+                        ? "Override removed"
+                        : "Source force-approved",
+                    );
+                  } catch {
+                    toast.error("Failed to update source");
+                  }
+                }}
+                disabled={adminOverride.isPending}
+                className={cn(
+                  "h-8 px-2.5 font-body text-xs border-border",
+                  source.adminOverride
+                    ? "hover:border-amber-500/50 hover:text-amber-500"
+                    : "hover:border-emerald-500/50 hover:text-emerald-500",
+                )}
+              >
+                {adminOverride.isPending ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : source.adminOverride ? (
+                  <Shield className="h-3.5 w-3.5" />
+                ) : (
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                )}
+                <span className="ml-1.5 hidden sm:inline">
+                  {source.adminOverride ? "Revoke" : "Force Approve"}
+                </span>
+              </Button>
+              <Button
+                size="sm"
+                variant="destructive"
+                data-ocid={`admin.sources.delete_button.${idx + 1}`}
+                onClick={async () => {
+                  try {
+                    await adminRemove.mutateAsync({
+                      sourceId: source.id,
+                      password,
+                    });
+                    toast.success("Source removed");
+                  } catch {
+                    toast.error("Failed to remove source");
+                  }
+                }}
+                disabled={adminRemove.isPending}
+                className="h-8 px-2.5 font-body text-xs"
+              >
+                {adminRemove.isPending ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Trash2 className="h-3.5 w-3.5" />
+                )}
+                <span className="ml-1.5 hidden sm:inline">Remove</span>
+              </Button>
+            </div>
+          </motion.div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ── Password gate ─────────────────────────────────────────────────────────────
 
 interface PasswordGateProps {
@@ -696,6 +877,13 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
                 >
                   Hidden Replies
                 </TabsTrigger>
+                <TabsTrigger
+                  value="sources"
+                  data-ocid="admin.sources.tab"
+                  className="font-body text-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+                >
+                  Trusted Sources
+                </TabsTrigger>
               </TabsList>
 
               <TabsContent value="claims" className="flex-1 min-h-0 mt-0">
@@ -713,6 +901,12 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
               <TabsContent value="replies" className="flex-1 min-h-0 mt-0">
                 <ScrollArea className="h-full">
                   <HiddenRepliesTab password={password} />
+                </ScrollArea>
+              </TabsContent>
+
+              <TabsContent value="sources" className="flex-1 min-h-0 mt-0">
+                <ScrollArea className="h-full">
+                  <TrustedSourcesAdminTab password={password} />
                 </ScrollArea>
               </TabsContent>
             </Tabs>

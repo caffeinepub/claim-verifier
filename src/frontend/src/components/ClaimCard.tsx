@@ -13,16 +13,13 @@ import {
 import { useSessionGate } from "@/hooks/useSessionGate";
 import { cn } from "@/lib/utils";
 import { formatRelativeTime } from "@/utils/time";
-import {
-  computeOverallVerdict,
-  getVerdictStability,
-  recordVerdict,
-} from "@/utils/verdict";
+import { computeOverallVerdict } from "@/utils/verdict";
 import type { OverallVerdict } from "@/utils/verdict";
 import {
   BarChart2,
   CheckCircle2,
   Flag,
+  Flame,
   MoreHorizontal,
   Swords,
   TrendingDown,
@@ -83,12 +80,12 @@ const verdictBadgeConfig: Record<
     icon: BarChart2,
   },
   "Leaning REBUNKED": {
-    label: "LEANING REBUNKED",
+    label: "LEANING TRUE",
     textColor: "text-emerald-500",
     icon: TrendingUp,
   },
   "Leaning DEBUNKED": {
-    label: "LEANING DEBUNKED",
+    label: "LEANING FALSE",
     textColor: "text-red-500",
     icon: TrendingDown,
   },
@@ -147,12 +144,6 @@ export function ClaimCard({
       )
     : null;
 
-  // Record verdict for stability tracking
-  if (verdict) {
-    recordVerdict(claim.id.toString(), verdict);
-  }
-  const stability = getVerdictStability(claim.id.toString());
-
   // Confidence meter calculation
   const totalVotes = tally
     ? Math.max(0, Number(tally.trueCount)) +
@@ -167,6 +158,9 @@ export function ClaimCard({
     totalVotes >= 5 && tally
       ? Math.round((Math.max(0, Number(tally.falseCount)) / totalVotes) * 100)
       : null;
+
+  // Hot threshold: 10+ total votes as a proxy for activity
+  const isHot = totalVotes >= 10;
 
   // Meter bar color based on verdict
   const meterBarColor =
@@ -264,9 +258,17 @@ export function ClaimCard({
       </div>
 
       {/* Row 2: title only */}
-      <h3 className="font-display text-lg font-semibold text-foreground leading-snug group-hover:text-primary transition-colors mb-2">
-        {claim.title}
-      </h3>
+      <div className="flex items-start gap-2 mb-2">
+        <h3 className="font-display text-lg font-semibold text-foreground leading-snug group-hover:text-primary transition-colors flex-1">
+          {claim.title}
+        </h3>
+        {isHot && (
+          <Flame
+            className="w-4 h-4 text-orange-500 flex-shrink-0 mt-0.5"
+            aria-label="Hot claim"
+          />
+        )}
+      </div>
 
       {/* Row 3: description */}
       <p className="text-sm text-muted-foreground font-body leading-relaxed line-clamp-2 mb-3">
@@ -329,16 +331,6 @@ export function ClaimCard({
                   <span className="text-xs font-bold tracking-wider font-body">
                     {cfg.label}
                   </span>
-                  {stability === "Volatile" && (
-                    <span className="ml-1 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-orange-100 text-orange-600 border border-orange-200">
-                      🔥 Volatile
-                    </span>
-                  )}
-                  {stability === "Stable" && (
-                    <span className="ml-1 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-sky-100 text-sky-600 border border-sky-200">
-                      🛡️ Stable
-                    </span>
-                  )}
                 </div>
               );
             })()}
