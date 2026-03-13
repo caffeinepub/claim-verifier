@@ -186,6 +186,7 @@ export function ClaimDetail({
   onBack,
 }: ClaimDetailProps) {
   const [evidenceText, setEvidenceText] = useState("");
+  const [hotTooltipOpen, setHotTooltipOpen] = useState(false);
   const [evidenceImageUrls, setEvidenceImageUrls] = useState<string[]>([]);
   const [evidenceUrls, setEvidenceUrls] = useState<string[]>([]);
   const [sortOption, setSortOption] = useState<SortOption>("most_upvotes");
@@ -437,11 +438,18 @@ export function ClaimDetail({
                 {claim.title}
                 {claimTotalVotes >= 10 && (
                   <TooltipProvider>
-                    <Tooltip>
+                    <Tooltip
+                      open={hotTooltipOpen}
+                      onOpenChange={setHotTooltipOpen}
+                    >
                       <TooltipTrigger asChild>
                         <Flame
-                          className="inline w-6 h-6 text-orange-500 ml-2 align-middle relative -top-[4px]"
+                          className="inline w-6 h-6 text-orange-500 ml-2 align-middle relative -top-[3px] sm:-top-[4px] cursor-pointer"
                           aria-label="Hot claim"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setHotTooltipOpen((v) => !v);
+                          }}
                         />
                       </TooltipTrigger>
                       <TooltipContent>

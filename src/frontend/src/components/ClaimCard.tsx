@@ -274,7 +274,7 @@ export function ClaimCard({
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Flame
-                    className="inline w-4 h-4 text-orange-500 ml-1.5 align-middle relative -top-[3px]"
+                    className="inline w-4 h-4 text-orange-500 ml-1.5 align-middle relative -top-[2px] sm:-top-[3px]"
                     aria-label="Hot claim"
                   />
                 </TooltipTrigger>
