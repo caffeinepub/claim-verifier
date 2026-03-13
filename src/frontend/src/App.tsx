@@ -8,6 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Toaster } from "@/components/ui/sonner";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
 import { useAllClaims, useSessionId, useUsername } from "@/hooks/useQueries";
+import { SourceDetailPage } from "@/pages/SourceDetailPage";
 import { TrustedSourcesPage } from "@/pages/TrustedSourcesPage";
 import { findClaimBySlug, getClaimSlug } from "@/utils/slug";
 import {
@@ -76,7 +77,7 @@ const SEED_CLAIMS_VISIBLE_EMPTY = [
     id: 3n,
     title: "Coffee consumption linked to reduced risk of Type 2 diabetes",
     description:
-      "A meta-analysis published in Diabetologia found that drinking 3–4 cups of coffee per day is associated with a 25% lower risk of developing Type 2 diabetes compared to non-coffee drinkers.",
+      "A meta-analysis published in Diabetologia found that drinking 3\u20134 cups of coffee per day is associated with a 25% lower risk of developing Type 2 diabetes compared to non-coffee drinkers.",
     category: "Health",
     timestamp: BigInt(Date.now() - 172800000) * 1_000_000n,
     sessionId: "seed",
@@ -118,6 +119,7 @@ export default function App() {
   const [isSubmitOpen, setIsSubmitOpen] = useState(false);
   const [isAdminOpen, setIsAdminOpen] = useState(false);
   const [showSources, setShowSources] = useState(false);
+  const [showSourceDomain, setShowSourceDomain] = useState<string | null>(null);
 
   const { data: sessionId, isLoading: sessionLoading } = useSessionId();
   const { data: claims, isLoading: claimsLoading } = useAllClaims();
@@ -138,8 +140,14 @@ export default function App() {
       : null,
   );
 
-  // On mount: check if URL matches /claim/<slug> and open that claim
+  // On mount: check if URL matches /source/:domain or /claim/<slug> and navigate
   useEffect(() => {
+    const sourceDomainMatch =
+      window.location.pathname.match(/^\/source\/(.+)$/);
+    if (sourceDomainMatch) {
+      setShowSourceDomain(decodeURIComponent(sourceDomainMatch[1]));
+      return;
+    }
     if (!claims || claims.length === 0) return;
     const match = window.location.pathname.match(/^\/claim\/(.+)$/);
     if (match) {
@@ -156,17 +164,27 @@ export default function App() {
   // Listen to browser back/forward
   useEffect(() => {
     function handlePopState() {
+      const sourceDomainMatch =
+        window.location.pathname.match(/^\/source\/(.+)$/);
+      if (sourceDomainMatch) {
+        setShowSourceDomain(decodeURIComponent(sourceDomainMatch[1]));
+        setSelectedClaimId(null);
+        setShowSources(false);
+        return;
+      }
       const match = window.location.pathname.match(/^\/claim\/(.+)$/);
       if (match) {
         if (claims && claims.length > 0) {
           const found = findClaimBySlug(match[1], claims);
           if (found) {
             setSelectedClaimId(found.id);
+            setShowSourceDomain(null);
             return;
           }
         }
       }
       setSelectedClaimId(null);
+      setShowSourceDomain(null);
     }
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
@@ -174,6 +192,7 @@ export default function App() {
 
   function openClaim(id: bigint) {
     setSelectedClaimId(id);
+    setShowSourceDomain(null);
     if (claims && claims.length > 0) {
       const claim = claims.find((c) => c.id === id);
       if (claim) {
@@ -185,9 +204,24 @@ export default function App() {
     window.history.pushState({}, "", "/");
   }
 
+  function openSourceDetail(domain: string) {
+    setShowSourceDomain(domain);
+    setSelectedClaimId(null);
+    setShowSources(false);
+    window.history.pushState({}, "", `/source/${encodeURIComponent(domain)}`);
+  }
+
   function goBack() {
     setSelectedClaimId(null);
     setShowSources(false);
+    setShowSourceDomain(null);
+    window.history.pushState({}, "", "/");
+  }
+
+  function goBackToSources() {
+    setSelectedClaimId(null);
+    setShowSources(true);
+    setShowSourceDomain(null);
     window.history.pushState({}, "", "/");
   }
 
@@ -208,7 +242,10 @@ export default function App() {
     .sort((a, b) => Number(b.timestamp - a.timestamp));
 
   const showDetail = selectedClaimId !== null;
-  const isOnSources = showSources && selectedClaimId === null;
+  const isOnSourceDetail =
+    showSourceDomain !== null && selectedClaimId === null;
+  const isOnSources =
+    showSources && selectedClaimId === null && showSourceDomain === null;
 
   return (
     <div className="min-h-screen bg-background noise-bg flex flex-col">
@@ -281,8 +318,20 @@ export default function App() {
               allClaims={claims ?? []}
               onBack={goBack}
             />
+          ) : isOnSourceDetail && showSourceDomain ? (
+            <SourceDetailPage
+              key={`source-detail-${showSourceDomain}`}
+              domain={showSourceDomain}
+              sessionId={sessionId ?? null}
+              onBack={goBackToSources}
+              onClaimClick={(claim) => openClaim(claim.id)}
+            />
           ) : isOnSources ? (
-            <TrustedSourcesPage key="sources" sessionId={sessionId ?? null} />
+            <TrustedSourcesPage
+              key="sources"
+              sessionId={sessionId ?? null}
+              onSourceClick={openSourceDetail}
+            />
           ) : (
             <motion.div
               key="list"
@@ -422,7 +471,7 @@ export default function App() {
             <div className="flex items-center gap-2">
               <RotateCcw className="h-3.5 w-3.5 text-muted-foreground" />
               <span className="text-xs text-muted-foreground font-body">
-                Anonymous · Decentralized · Community-Verified
+                Anonymous \u00b7 Decentralized \u00b7 Community-Verified
               </span>
             </div>
             {username && (
@@ -435,14 +484,14 @@ export default function App() {
             )}
             <div className="flex items-center gap-3">
               <p className="text-xs text-muted-foreground font-body">
-                © {new Date().getFullYear()}.{" "}
+                \u00a9 {new Date().getFullYear()}.{" "}
                 <a
                   href={`https://caffeine.ai?utm_source=caffeine-footer&utm_medium=referral&utm_content=${encodeURIComponent(window.location.hostname)}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="hover:text-foreground transition-colors"
                 >
-                  Built with ❤ using caffeine.ai
+                  Built with \u2764 using caffeine.ai
                 </a>
               </p>
               <button
@@ -451,6 +500,8 @@ export default function App() {
                 onClick={() => {
                   setShowSources(true);
                   setSelectedClaimId(null);
+                  setShowSourceDomain(null);
+                  window.history.pushState({}, "", "/");
                 }}
                 className="text-xs text-muted-foreground hover:text-foreground font-body transition-colors select-none"
               >

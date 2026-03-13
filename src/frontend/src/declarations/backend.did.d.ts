@@ -40,16 +40,14 @@ export interface Reply {
   'sessionId' : string,
   'evidenceId' : bigint,
 }
-export interface TrustedSourceInfo {
+export interface SourceComment {
   'id' : bigint,
-  'domain' : string,
-  'sourceType' : string,
-  'suggestedBy' : string,
+  'authorUsername' : string,
+  'parentCommentId' : bigint,
+  'text' : string,
+  'sourceId' : bigint,
   'timestamp' : bigint,
-  'adminOverride' : boolean,
-  'upvotes' : bigint,
-  'downvotes' : bigint,
-  'isTrusted' : boolean,
+  'sessionId' : string,
 }
 export interface _CaffeineStorageCreateCertificateResult {
   'method' : string,
@@ -79,6 +77,11 @@ export interface _SERVICE {
   >,
   '_caffeineStorageUpdateGatewayPrincipals' : ActorMethod<[], undefined>,
   'addReply' : ActorMethod<
+    [bigint, bigint, string, string, string],
+    { 'ok' : null } |
+      { 'err' : string }
+  >,
+  'addSourceComment' : ActorMethod<
     [bigint, bigint, string, string, string],
     { 'ok' : null } |
       { 'err' : string }
@@ -137,32 +140,60 @@ export interface _SERVICE {
   'getHiddenEvidence' : ActorMethod<[string], Array<Evidence>>,
   'getHiddenReplies' : ActorMethod<[string], Array<Reply>>,
   'getReplies' : ActorMethod<[bigint], Array<Reply>>,
+  'getReplyLikeCount' : ActorMethod<[bigint], bigint>,
+  'getReplyLikeCounts' : ActorMethod<[bigint], Array<[bigint, bigint]>>,
   'getReplyVoteTally' : ActorMethod<[bigint], { 'netScore' : bigint }>,
   'getReportCount' : ActorMethod<[bigint, string], bigint>,
+  'getSessionLikeForReply' : ActorMethod<[bigint, string], boolean>,
+  'getSessionLikeForSourceComment' : ActorMethod<[bigint, string], boolean>,
   'getSessionVoteForClaim' : ActorMethod<[bigint, string], [] | [string]>,
   'getSessionVoteForEvidence' : ActorMethod<[bigint, string], [] | [string]>,
   'getSessionVoteForReply' : ActorMethod<[bigint, string], [] | [string]>,
   'getSessionVoteForSource' : ActorMethod<[bigint, string], [] | [string]>,
+  'getSourceCommentLikeCounts' : ActorMethod<[bigint], Array<[bigint, bigint]>>,
+  'getSourceComments' : ActorMethod<[bigint], Array<SourceComment>>,
   'getSourceCredibilityForUrl' : ActorMethod<
     [string],
     {
       'isTrusted' : boolean,
+      'domain' : string,
       'sourceType' : string,
       'bonusPct' : bigint,
-      'domain' : string,
     }
   >,
-  'getTrustedSources' : ActorMethod<[], Array<TrustedSourceInfo>>,
+  'getTrustedSources' : ActorMethod<
+    [],
+    Array<
+      {
+        'id' : bigint,
+        'upvotes' : bigint,
+        'suggestedBy' : string,
+        'isTrusted' : boolean,
+        'domain' : string,
+        'sourceType' : string,
+        'adminOverride' : boolean,
+        'timestamp' : bigint,
+        'downvotes' : bigint,
+      }
+    >
+  >,
   'getVoteTally' : ActorMethod<
     [bigint],
     { 'trueCount' : bigint, 'falseCount' : bigint, 'unverifiedCount' : bigint }
   >,
+  'likeReply' : ActorMethod<[bigint, string], undefined>,
+  'likeSourceComment' : ActorMethod<[bigint, string], undefined>,
   'reportContent' : ActorMethod<
     [bigint, string, string],
     { 'ok' : null } |
       { 'err' : string }
   >,
   'reportReply' : ActorMethod<
+    [bigint, string],
+    { 'ok' : null } |
+      { 'err' : string }
+  >,
+  'reportSourceComment' : ActorMethod<
     [bigint, string],
     { 'ok' : null } |
       { 'err' : string }
@@ -200,10 +231,6 @@ export interface _SERVICE {
       { 'err' : string }
   >,
   'voteReply' : ActorMethod<[bigint, string, string], undefined>,
-  'likeReply' : ActorMethod<[bigint, string], undefined>,
-  'getReplyLikeCount' : ActorMethod<[bigint], bigint>,
-  'getSessionLikeForReply' : ActorMethod<[bigint, string], boolean>,
-  'getReplyLikeCounts' : ActorMethod<[bigint], Array<[bigint, bigint]>>,
 }
 export declare const idlService: IDL.ServiceClass;
 export declare const idlInitArgs: IDL.Type[];

@@ -100,6 +100,27 @@ export interface Claim {
     category: string;
     sessionId: string;
 }
+export interface Reply {
+    id: bigint;
+    authorUsername: string;
+    text: string;
+    timestamp: bigint;
+    parentReplyId: bigint;
+    sessionId: string;
+    evidenceId: bigint;
+}
+export interface _CaffeineStorageRefillInformation {
+    proposed_top_up_amount?: bigint;
+}
+export interface SourceComment {
+    id: bigint;
+    authorUsername: string;
+    parentCommentId: bigint;
+    text: string;
+    sourceId: bigint;
+    timestamp: bigint;
+    sessionId: string;
+}
 export interface Evidence {
     id: bigint;
     imageUrls: Array<string>;
@@ -110,15 +131,6 @@ export interface Evidence {
     sessionId: string;
     evidenceType: string;
 }
-export interface Reply {
-    id: bigint;
-    authorUsername: string;
-    text: string;
-    timestamp: bigint;
-    parentReplyId: bigint;
-    sessionId: string;
-    evidenceId: bigint;
-}
 export interface _CaffeineStorageCreateCertificateResult {
     method: string;
     blob_hash: string;
@@ -126,9 +138,6 @@ export interface _CaffeineStorageCreateCertificateResult {
 export interface _CaffeineStorageRefillResult {
     success?: boolean;
     topped_up_amount?: bigint;
-}
-export interface _CaffeineStorageRefillInformation {
-    proposed_top_up_amount?: bigint;
 }
 export interface backendInterface {
     _caffeineStorageBlobIsLive(hash: Uint8Array): Promise<boolean>;
@@ -138,6 +147,13 @@ export interface backendInterface {
     _caffeineStorageRefillCashier(refillInformation: _CaffeineStorageRefillInformation | null): Promise<_CaffeineStorageRefillResult>;
     _caffeineStorageUpdateGatewayPrincipals(): Promise<void>;
     addReply(evidenceId: bigint, parentReplyId: bigint, text: string, authorUsername: string, sessionId: string): Promise<{
+        __kind__: "ok";
+        ok: null;
+    } | {
+        __kind__: "err";
+        err: string;
+    }>;
+    addSourceComment(sourceId: bigint, parentCommentId: bigint, text: string, authorUsername: string, sessionId: string): Promise<{
         __kind__: "ok";
         ok: null;
     } | {
@@ -159,6 +175,20 @@ export interface backendInterface {
         err: string;
     }>;
     adminDeleteReply(id: bigint, password: string): Promise<{
+        __kind__: "ok";
+        ok: null;
+    } | {
+        __kind__: "err";
+        err: string;
+    }>;
+    adminOverrideSource(sourceId: bigint, approved: boolean, password: string): Promise<{
+        __kind__: "ok";
+        ok: null;
+    } | {
+        __kind__: "err";
+        err: string;
+    }>;
+    adminRemoveSource(sourceId: bigint, password: string): Promise<{
         __kind__: "ok";
         ok: null;
     } | {
@@ -195,18 +225,44 @@ export interface backendInterface {
     getHiddenEvidence(password: string): Promise<Array<Evidence>>;
     getHiddenReplies(password: string): Promise<Array<Reply>>;
     getReplies(evidenceId: bigint): Promise<Array<Reply>>;
+    getReplyLikeCount(replyId: bigint): Promise<bigint>;
+    getReplyLikeCounts(evidenceId: bigint): Promise<Array<[bigint, bigint]>>;
     getReplyVoteTally(replyId: bigint): Promise<{
         netScore: bigint;
     }>;
     getReportCount(targetId: bigint, targetType: string): Promise<bigint>;
+    getSessionLikeForReply(replyId: bigint, sessionId: string): Promise<boolean>;
+    getSessionLikeForSourceComment(commentId: bigint, sessionId: string): Promise<boolean>;
     getSessionVoteForClaim(claimId: bigint, sessionId: string): Promise<string | null>;
     getSessionVoteForEvidence(evidenceId: bigint, sessionId: string): Promise<string | null>;
     getSessionVoteForReply(replyId: bigint, sessionId: string): Promise<string | null>;
+    getSessionVoteForSource(sourceId: bigint, sessionId: string): Promise<string | null>;
+    getSourceCommentLikeCounts(sourceId: bigint): Promise<Array<[bigint, bigint]>>;
+    getSourceComments(sourceId: bigint): Promise<Array<SourceComment>>;
+    getSourceCredibilityForUrl(url: string): Promise<{
+        isTrusted: boolean;
+        domain: string;
+        sourceType: string;
+        bonusPct: bigint;
+    }>;
+    getTrustedSources(): Promise<Array<{
+        id: bigint;
+        upvotes: bigint;
+        suggestedBy: string;
+        isTrusted: boolean;
+        domain: string;
+        sourceType: string;
+        adminOverride: boolean;
+        timestamp: bigint;
+        downvotes: bigint;
+    }>>;
     getVoteTally(claimId: bigint): Promise<{
         trueCount: bigint;
         falseCount: bigint;
         unverifiedCount: bigint;
     }>;
+    likeReply(replyId: bigint, sessionId: string): Promise<void>;
+    likeSourceComment(commentId: bigint, sessionId: string): Promise<void>;
     reportContent(targetId: bigint, targetType: string, sessionId: string): Promise<{
         __kind__: "ok";
         ok: null;
@@ -215,6 +271,13 @@ export interface backendInterface {
         err: string;
     }>;
     reportReply(replyId: bigint, sessionId: string): Promise<{
+        __kind__: "ok";
+        ok: null;
+    } | {
+        __kind__: "err";
+        err: string;
+    }>;
+    reportSourceComment(commentId: bigint, sessionId: string): Promise<{
         __kind__: "ok";
         ok: null;
     } | {
@@ -250,12 +313,22 @@ export interface backendInterface {
         err: string;
     }>;
     submitVote(claimId: bigint, sessionId: string, verdict: string): Promise<void>;
+    suggestTrustedSource(domain: string, sourceType: string, sessionId: string): Promise<{
+        __kind__: "ok";
+        ok: bigint;
+    } | {
+        __kind__: "err";
+        err: string;
+    }>;
     voteEvidence(evidenceId: bigint, sessionId: string, direction: string): Promise<void>;
+    voteOnSource(sourceId: bigint, sessionId: string, direction: string): Promise<{
+        __kind__: "ok";
+        ok: null;
+    } | {
+        __kind__: "err";
+        err: string;
+    }>;
     voteReply(replyId: bigint, sessionId: string, direction: string): Promise<void>;
-    likeReply(replyId: bigint, sessionId: string): Promise<void>;
-    getReplyLikeCount(replyId: bigint): Promise<bigint>;
-    getSessionLikeForReply(replyId: bigint, sessionId: string): Promise<boolean>;
-    getReplyLikeCounts(evidenceId: bigint): Promise<Array<[bigint, bigint]>>;
 }
 import type { _CaffeineStorageRefillInformation as __CaffeineStorageRefillInformation, _CaffeineStorageRefillResult as __CaffeineStorageRefillResult } from "./declarations/backend.did.d.ts";
 export class Backend implements backendInterface {
@@ -364,6 +437,26 @@ export class Backend implements backendInterface {
             return from_candid_variant_n8(this._uploadFile, this._downloadFile, result);
         }
     }
+    async addSourceComment(arg0: bigint, arg1: bigint, arg2: string, arg3: string, arg4: string): Promise<{
+        __kind__: "ok";
+        ok: null;
+    } | {
+        __kind__: "err";
+        err: string;
+    }> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.addSourceComment(arg0, arg1, arg2, arg3, arg4);
+                return from_candid_variant_n8(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.addSourceComment(arg0, arg1, arg2, arg3, arg4);
+            return from_candid_variant_n8(this._uploadFile, this._downloadFile, result);
+        }
+    }
     async adminDeleteClaim(arg0: bigint, arg1: string): Promise<{
         __kind__: "ok";
         ok: null;
@@ -421,6 +514,46 @@ export class Backend implements backendInterface {
             }
         } else {
             const result = await this.actor.adminDeleteReply(arg0, arg1);
+            return from_candid_variant_n8(this._uploadFile, this._downloadFile, result);
+        }
+    }
+    async adminOverrideSource(arg0: bigint, arg1: boolean, arg2: string): Promise<{
+        __kind__: "ok";
+        ok: null;
+    } | {
+        __kind__: "err";
+        err: string;
+    }> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.adminOverrideSource(arg0, arg1, arg2);
+                return from_candid_variant_n8(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.adminOverrideSource(arg0, arg1, arg2);
+            return from_candid_variant_n8(this._uploadFile, this._downloadFile, result);
+        }
+    }
+    async adminRemoveSource(arg0: bigint, arg1: string): Promise<{
+        __kind__: "ok";
+        ok: null;
+    } | {
+        __kind__: "err";
+        err: string;
+    }> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.adminRemoveSource(arg0, arg1);
+                return from_candid_variant_n8(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.adminRemoveSource(arg0, arg1);
             return from_candid_variant_n8(this._uploadFile, this._downloadFile, result);
         }
     }
@@ -610,6 +743,34 @@ export class Backend implements backendInterface {
             return result;
         }
     }
+    async getReplyLikeCount(arg0: bigint): Promise<bigint> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getReplyLikeCount(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getReplyLikeCount(arg0);
+            return result;
+        }
+    }
+    async getReplyLikeCounts(arg0: bigint): Promise<Array<[bigint, bigint]>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getReplyLikeCounts(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getReplyLikeCounts(arg0);
+            return result;
+        }
+    }
     async getReplyVoteTally(arg0: bigint): Promise<{
         netScore: bigint;
     }> {
@@ -637,6 +798,34 @@ export class Backend implements backendInterface {
             }
         } else {
             const result = await this.actor.getReportCount(arg0, arg1);
+            return result;
+        }
+    }
+    async getSessionLikeForReply(arg0: bigint, arg1: string): Promise<boolean> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getSessionLikeForReply(arg0, arg1);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getSessionLikeForReply(arg0, arg1);
+            return result;
+        }
+    }
+    async getSessionLikeForSourceComment(arg0: bigint, arg1: string): Promise<boolean> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getSessionLikeForSourceComment(arg0, arg1);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getSessionLikeForSourceComment(arg0, arg1);
             return result;
         }
     }
@@ -682,6 +871,91 @@ export class Backend implements backendInterface {
             return from_candid_opt_n9(this._uploadFile, this._downloadFile, result);
         }
     }
+    async getSessionVoteForSource(arg0: bigint, arg1: string): Promise<string | null> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getSessionVoteForSource(arg0, arg1);
+                return from_candid_opt_n9(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getSessionVoteForSource(arg0, arg1);
+            return from_candid_opt_n9(this._uploadFile, this._downloadFile, result);
+        }
+    }
+    async getSourceCommentLikeCounts(arg0: bigint): Promise<Array<[bigint, bigint]>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getSourceCommentLikeCounts(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getSourceCommentLikeCounts(arg0);
+            return result;
+        }
+    }
+    async getSourceComments(arg0: bigint): Promise<Array<SourceComment>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getSourceComments(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getSourceComments(arg0);
+            return result;
+        }
+    }
+    async getSourceCredibilityForUrl(arg0: string): Promise<{
+        isTrusted: boolean;
+        domain: string;
+        sourceType: string;
+        bonusPct: bigint;
+    }> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getSourceCredibilityForUrl(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getSourceCredibilityForUrl(arg0);
+            return result;
+        }
+    }
+    async getTrustedSources(): Promise<Array<{
+        id: bigint;
+        upvotes: bigint;
+        suggestedBy: string;
+        isTrusted: boolean;
+        domain: string;
+        sourceType: string;
+        adminOverride: boolean;
+        timestamp: bigint;
+        downvotes: bigint;
+    }>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getTrustedSources();
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getTrustedSources();
+            return result;
+        }
+    }
     async getVoteTally(arg0: bigint): Promise<{
         trueCount: bigint;
         falseCount: bigint;
@@ -697,6 +971,34 @@ export class Backend implements backendInterface {
             }
         } else {
             const result = await this.actor.getVoteTally(arg0);
+            return result;
+        }
+    }
+    async likeReply(arg0: bigint, arg1: string): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.likeReply(arg0, arg1);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.likeReply(arg0, arg1);
+            return result;
+        }
+    }
+    async likeSourceComment(arg0: bigint, arg1: string): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.likeSourceComment(arg0, arg1);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.likeSourceComment(arg0, arg1);
             return result;
         }
     }
@@ -737,6 +1039,26 @@ export class Backend implements backendInterface {
             }
         } else {
             const result = await this.actor.reportReply(arg0, arg1);
+            return from_candid_variant_n8(this._uploadFile, this._downloadFile, result);
+        }
+    }
+    async reportSourceComment(arg0: bigint, arg1: string): Promise<{
+        __kind__: "ok";
+        ok: null;
+    } | {
+        __kind__: "err";
+        err: string;
+    }> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.reportSourceComment(arg0, arg1);
+                return from_candid_variant_n8(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.reportSourceComment(arg0, arg1);
             return from_candid_variant_n8(this._uploadFile, this._downloadFile, result);
         }
     }
@@ -834,6 +1156,26 @@ export class Backend implements backendInterface {
             return result;
         }
     }
+    async suggestTrustedSource(arg0: string, arg1: string, arg2: string): Promise<{
+        __kind__: "ok";
+        ok: bigint;
+    } | {
+        __kind__: "err";
+        err: string;
+    }> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.suggestTrustedSource(arg0, arg1, arg2);
+                return from_candid_variant_n10(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.suggestTrustedSource(arg0, arg1, arg2);
+            return from_candid_variant_n10(this._uploadFile, this._downloadFile, result);
+        }
+    }
     async voteEvidence(arg0: bigint, arg1: string, arg2: string): Promise<void> {
         if (this.processError) {
             try {
@@ -848,6 +1190,26 @@ export class Backend implements backendInterface {
             return result;
         }
     }
+    async voteOnSource(arg0: bigint, arg1: string, arg2: string): Promise<{
+        __kind__: "ok";
+        ok: null;
+    } | {
+        __kind__: "err";
+        err: string;
+    }> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.voteOnSource(arg0, arg1, arg2);
+                return from_candid_variant_n8(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.voteOnSource(arg0, arg1, arg2);
+            return from_candid_variant_n8(this._uploadFile, this._downloadFile, result);
+        }
+    }
     async voteReply(arg0: bigint, arg1: string, arg2: string): Promise<void> {
         if (this.processError) {
             try {
@@ -860,161 +1222,6 @@ export class Backend implements backendInterface {
         } else {
             const result = await this.actor.voteReply(arg0, arg1, arg2);
             return result;
-        }
-    }
-    async likeReply(arg0: bigint, arg1: string): Promise<void> {
-        if (this.processError) {
-            try {
-                const result = await this.actor.likeReply(arg0, arg1);
-                return result;
-            } catch (e) {
-                this.processError(e);
-                throw new Error("unreachable");
-            }
-        } else {
-            const result = await this.actor.likeReply(arg0, arg1);
-            return result;
-        }
-    }
-    async getReplyLikeCount(arg0: bigint): Promise<bigint> {
-        if (this.processError) {
-            try {
-                const result = await this.actor.getReplyLikeCount(arg0);
-                return result;
-            } catch (e) {
-                this.processError(e);
-                throw new Error("unreachable");
-            }
-        } else {
-            const result = await this.actor.getReplyLikeCount(arg0);
-            return result;
-        }
-    }
-    async getSessionLikeForReply(arg0: bigint, arg1: string): Promise<boolean> {
-        if (this.processError) {
-            try {
-                const result = await this.actor.getSessionLikeForReply(arg0, arg1);
-                return result;
-            } catch (e) {
-                this.processError(e);
-                throw new Error("unreachable");
-            }
-        } else {
-            const result = await this.actor.getSessionLikeForReply(arg0, arg1);
-            return result;
-        }
-    }
-    async getReplyLikeCounts(arg0: bigint): Promise<Array<[bigint, bigint]>> {
-        if (this.processError) {
-            try {
-                const result = await this.actor.getReplyLikeCounts(arg0);
-                return result;
-            } catch (e) {
-                this.processError(e);
-                throw new Error("unreachable");
-            }
-        } else {
-            const result = await this.actor.getReplyLikeCounts(arg0);
-            return result;
-        }
-    }
-
-    async getTrustedSources(): Promise<Array<import("./backend.d").TrustedSourceInfo>> {
-        if (this.processError) {
-            try {
-                const result = await this.actor.getTrustedSources();
-                return result as any;
-            } catch (e) {
-                this.processError(e);
-                throw new Error("unreachable");
-            }
-        } else {
-            return this.actor.getTrustedSources() as any;
-        }
-    }
-
-    async suggestTrustedSource(arg0: string, arg1: string, arg2: string): Promise<{ __kind__: "ok"; ok: bigint } | { __kind__: "err"; err: string }> {
-        if (this.processError) {
-            try {
-                const result = await this.actor.suggestTrustedSource(arg0, arg1, arg2);
-                return result as any;
-            } catch (e) {
-                this.processError(e);
-                throw new Error("unreachable");
-            }
-        } else {
-            return this.actor.suggestTrustedSource(arg0, arg1, arg2) as any;
-        }
-    }
-
-    async voteOnSource(arg0: bigint, arg1: string, arg2: string): Promise<{ __kind__: "ok"; ok: null } | { __kind__: "err"; err: string }> {
-        if (this.processError) {
-            try {
-                const result = await this.actor.voteOnSource(arg0, arg1, arg2);
-                return result as any;
-            } catch (e) {
-                this.processError(e);
-                throw new Error("unreachable");
-            }
-        } else {
-            return this.actor.voteOnSource(arg0, arg1, arg2) as any;
-        }
-    }
-
-    async getSessionVoteForSource(arg0: bigint, arg1: string): Promise<string | null> {
-        if (this.processError) {
-            try {
-                const result = await this.actor.getSessionVoteForSource(arg0, arg1);
-                return result.length === 0 ? null : result[0] as string;
-            } catch (e) {
-                this.processError(e);
-                throw new Error("unreachable");
-            }
-        } else {
-            const result = await this.actor.getSessionVoteForSource(arg0, arg1);
-            return result.length === 0 ? null : result[0] as string;
-        }
-    }
-
-    async getSourceCredibilityForUrl(arg0: string): Promise<{ isTrusted: boolean; sourceType: string; bonusPct: bigint; domain: string }> {
-        if (this.processError) {
-            try {
-                const result = await this.actor.getSourceCredibilityForUrl(arg0);
-                return result;
-            } catch (e) {
-                this.processError(e);
-                throw new Error("unreachable");
-            }
-        } else {
-            return this.actor.getSourceCredibilityForUrl(arg0);
-        }
-    }
-
-    async adminOverrideSource(arg0: bigint, arg1: boolean, arg2: string): Promise<{ __kind__: "ok"; ok: null } | { __kind__: "err"; err: string }> {
-        if (this.processError) {
-            try {
-                const result = await this.actor.adminOverrideSource(arg0, arg1, arg2);
-                return result as any;
-            } catch (e) {
-                this.processError(e);
-                throw new Error("unreachable");
-            }
-        } else {
-            return this.actor.adminOverrideSource(arg0, arg1, arg2) as any;
-        }
-    }
-
-    async adminRemoveSource(arg0: bigint, arg1: string): Promise<{ __kind__: "ok"; ok: null } | { __kind__: "err"; err: string }> {
-        if (this.processError) {
-            try {
-                const result = await this.actor.adminRemoveSource(arg0, arg1);
-                return result as any;
-            } catch (e) {
-                this.processError(e);
-                throw new Error("unreachable");
-            }
-        } else {
-            return this.actor.adminRemoveSource(arg0, arg1) as any;
         }
     }
 }
@@ -1041,6 +1248,25 @@ function from_candid_record_n5(_uploadFile: (file: ExternalBlob) => Promise<Uint
         success: record_opt_to_undefined(from_candid_opt_n6(_uploadFile, _downloadFile, value.success)),
         topped_up_amount: record_opt_to_undefined(from_candid_opt_n7(_uploadFile, _downloadFile, value.topped_up_amount))
     };
+}
+function from_candid_variant_n10(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
+    ok: bigint;
+} | {
+    err: string;
+}): {
+    __kind__: "ok";
+    ok: bigint;
+} | {
+    __kind__: "err";
+    err: string;
+} {
+    return "ok" in value ? {
+        __kind__: "ok",
+        ok: value.ok
+    } : "err" in value ? {
+        __kind__: "err",
+        err: value.err
+    } : value;
 }
 function from_candid_variant_n8(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
     ok: null;

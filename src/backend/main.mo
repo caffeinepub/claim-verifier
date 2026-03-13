@@ -7,6 +7,7 @@ import Char "mo:core/Char";
 import Float "mo:core/Float";
 import Runtime "mo:core/Runtime";
 import MixinStorage "blob-storage/Mixin";
+import Iter "mo:core/Iter";
 
 
 
@@ -83,13 +84,28 @@ actor {
     sourceType : Text;
     suggestedBy : Text;
     timestamp : Int;
-    adminOverride : Bool; // if true, admin manually approved (bypasses vote threshold)
+    adminOverride : Bool;
   };
 
   type SourceVote = {
     sourceId : Nat;
     sessionId : Text;
-    direction : Text; // "up" or "down"
+    direction : Text;
+  };
+
+  type SourceComment = {
+    id : Nat;
+    sourceId : Nat;
+    parentCommentId : Nat;
+    text : Text;
+    authorUsername : Text;
+    sessionId : Text;
+    timestamp : Int;
+  };
+
+  type SourceCommentLike = {
+    commentId : Nat;
+    sessionId : Text;
   };
 
   var claimsArray : [Claim] = [];
@@ -102,15 +118,19 @@ actor {
   var replyLikesArray : [ReplyLike] = [];
   var trustedSourcesArray : [TrustedSource] = [];
   var sourceVotesArray : [SourceVote] = [];
+  var sourceCommentsArray : [SourceComment] = [];
+  var sourceCommentLikesArray : [SourceCommentLike] = [];
   var claimCount : Nat = 0;
   var evidenceCount : Nat = 0;
   var reportCount : Nat = 0;
   var replyCount : Nat = 0;
   var sourceCount : Nat = 0;
+  var sourceCommentCount : Nat = 0;
 
   let claimCooldownsList = List.empty<(Text, Int)>();
   let evidenceCooldownsList = List.empty<(Text, Int)>();
   let replyCooldownsList = List.empty<(Text, Int)>();
+  let sourceCommentCooldownsList = List.empty<(Text, Int)>();
 
   let ADMIN_PASSWORD = "lunasimbaliamsammy123!";
   let CLAIM_COOLDOWN_NS : Int = 300_000_000_000;
@@ -121,7 +141,7 @@ actor {
   let EVIDENCE_WEIGHT_MULTIPLIER : Float = 3.0;
   // Trusted source thresholds
   let SOURCE_MIN_VOTES : Nat = 25;
-  let SOURCE_MIN_UPVOTE_PCT : Nat = 60; // 60%
+  let SOURCE_MIN_UPVOTE_PCT : Nat = 60;
 
   func seedClaimsData() : [Claim] {
     let seeds = [
@@ -320,7 +340,7 @@ actor {
     adjusted;
   };
 
-  public shared func createClaim(
+  public shared ({ caller }) func createClaim(
     title : Text,
     description : Text,
     category : Text,
@@ -372,35 +392,35 @@ actor {
     #ok;
   };
 
-  public query func getAllClaims() : async [Claim] {
+  public query ({ caller }) func getAllClaims() : async [Claim] {
     claimsArray.filter(func(c : Claim) : Bool { not isHidden(c.id, "claim") });
   };
 
-  public query func getClaimById(id : Nat) : async Claim {
+  public query ({ caller }) func getClaimById(id : Nat) : async Claim {
     switch (claimsArray.find(func(c : Claim) : Bool { c.id == id })) {
       case (null) { Runtime.trap("Claim not found") };
       case (?c) { c };
     };
   };
 
-  public query func getClaimsByCategory(category : Text) : async [Claim] {
+  public query ({ caller }) func getClaimsByCategory(category : Text) : async [Claim] {
     claimsArray.filter(func(c : Claim) : Bool {
       c.category == category and not isHidden(c.id, "claim");
     });
   };
 
-  public shared func generateSessionId() : async Text {
+  public shared ({ caller }) func generateSessionId() : async Text {
     Time.now().toText();
   };
 
-  public shared func submitVote(claimId : Nat, sessionId : Text, verdict : Text) : async () {
+  public shared ({ caller }) func submitVote(claimId : Nat, sessionId : Text, verdict : Text) : async () {
     let vote : Vote = { claimId; sessionId; verdict };
     let list = List.fromArray<Vote>(votesArray);
     list.add(vote);
     votesArray := list.toArray();
   };
 
-  public query func getVoteTally(claimId : Nat) : async {
+  public query ({ caller }) func getVoteTally(claimId : Nat) : async {
     trueCount : Nat;
     falseCount : Nat;
     unverifiedCount : Nat;
@@ -421,14 +441,14 @@ actor {
     { trueCount; falseCount; unverifiedCount };
   };
 
-  public query func getSessionVoteForClaim(claimId : Nat, sessionId : Text) : async ?Text {
+  public query ({ caller }) func getSessionVoteForClaim(claimId : Nat, sessionId : Text) : async ?Text {
     switch (votesArray.find(func(v : Vote) : Bool { v.claimId == claimId and v.sessionId == sessionId })) {
       case (null) { null };
       case (?v) { ?v.verdict };
     };
   };
 
-  public shared func submitEvidence(
+  public shared ({ caller }) func submitEvidence(
     claimId : Nat,
     sessionId : Text,
     text : Text,
@@ -475,13 +495,13 @@ actor {
     #ok;
   };
 
-  public query func getEvidenceForClaim(claimId : Nat) : async [Evidence] {
+  public query ({ caller }) func getEvidenceForClaim(claimId : Nat) : async [Evidence] {
     evidencesArray.filter(func(e : Evidence) : Bool {
       e.claimId == claimId and not isHidden(e.id, "evidence");
     });
   };
 
-  public shared func voteEvidence(evidenceId : Nat, sessionId : Text, direction : Text) : async () {
+  public shared ({ caller }) func voteEvidence(evidenceId : Nat, sessionId : Text, direction : Text) : async () {
     let idx = evidenceVotesArray.findIndex(
       func(v : EvidenceVote) : Bool { v.evidenceId == evidenceId and v.sessionId == sessionId }
     );
@@ -511,7 +531,7 @@ actor {
     };
   };
 
-  public query func getEvidenceVoteTally(evidenceId : Nat) : async { netScore : Int } {
+  public query ({ caller }) func getEvidenceVoteTally(evidenceId : Nat) : async { netScore : Int } {
     var up : Int = 0;
     var down : Int = 0;
     for (v in evidenceVotesArray.values()) {
@@ -526,14 +546,14 @@ actor {
     { netScore = up - down : Int };
   };
 
-  public query func getSessionVoteForEvidence(evidenceId : Nat, sessionId : Text) : async ?Text {
+  public query ({ caller }) func getSessionVoteForEvidence(evidenceId : Nat, sessionId : Text) : async ?Text {
     switch (evidenceVotesArray.find(func(v : EvidenceVote) : Bool { v.evidenceId == evidenceId and v.sessionId == sessionId })) {
       case (null) { null };
       case (?v) { ?v.direction };
     };
   };
 
-  public shared func reportContent(targetId : Nat, targetType : Text, sessionId : Text) : async {
+  public shared ({ caller }) func reportContent(targetId : Nat, targetType : Text, sessionId : Text) : async {
     #ok;
     #err : Text;
   } {
@@ -551,21 +571,21 @@ actor {
     #ok;
   };
 
-  public query func getReportCount(targetId : Nat, targetType : Text) : async Nat {
+  public query ({ caller }) func getReportCount(targetId : Nat, targetType : Text) : async Nat {
     getReportCountFor(targetId, targetType);
   };
 
-  public query func getHiddenClaims(password : Text) : async [Claim] {
+  public query ({ caller }) func getHiddenClaims(password : Text) : async [Claim] {
     if (password != ADMIN_PASSWORD) { Runtime.trap("Unauthorized") };
     claimsArray.filter(func(c : Claim) : Bool { isHidden(c.id, "claim") });
   };
 
-  public query func getHiddenEvidence(password : Text) : async [Evidence] {
+  public query ({ caller }) func getHiddenEvidence(password : Text) : async [Evidence] {
     if (password != ADMIN_PASSWORD) { Runtime.trap("Unauthorized") };
     evidencesArray.filter(func(e : Evidence) : Bool { isHidden(e.id, "evidence") });
   };
 
-  public shared func restoreClaim(id : Nat, password : Text) : async {
+  public shared ({ caller }) func restoreClaim(id : Nat, password : Text) : async {
     #ok;
     #err : Text;
   } {
@@ -576,7 +596,7 @@ actor {
     #ok;
   };
 
-  public shared func restoreEvidence(id : Nat, password : Text) : async {
+  public shared ({ caller }) func restoreEvidence(id : Nat, password : Text) : async {
     #ok;
     #err : Text;
   } {
@@ -587,7 +607,7 @@ actor {
     #ok;
   };
 
-  public shared func adminDeleteClaim(id : Nat, password : Text) : async {
+  public shared ({ caller }) func adminDeleteClaim(id : Nat, password : Text) : async {
     #ok;
     #err : Text;
   } {
@@ -610,7 +630,7 @@ actor {
     #ok;
   };
 
-  public shared func adminDeleteEvidence(id : Nat, password : Text) : async {
+  public shared ({ caller }) func adminDeleteEvidence(id : Nat, password : Text) : async {
     #ok;
     #err : Text;
   } {
@@ -623,7 +643,7 @@ actor {
     #ok;
   };
 
-  public shared func addReply(
+  public shared ({ caller }) func addReply(
     evidenceId : Nat,
     parentReplyId : Nat,
     text : Text,
@@ -669,13 +689,13 @@ actor {
     #ok;
   };
 
-  public query func getReplies(evidenceId : Nat) : async [Reply] {
+  public query ({ caller }) func getReplies(evidenceId : Nat) : async [Reply] {
     repliesArray.filter(func(r : Reply) : Bool {
       r.evidenceId == evidenceId and not isHidden(r.id, "reply");
     });
   };
 
-  public shared func voteReply(replyId : Nat, sessionId : Text, direction : Text) : async () {
+  public shared ({ caller }) func voteReply(replyId : Nat, sessionId : Text, direction : Text) : async () {
     let idx = replyVotesArray.findIndex(
       func(v : ReplyVote) : Bool { v.replyId == replyId and v.sessionId == sessionId }
     );
@@ -705,7 +725,7 @@ actor {
     };
   };
 
-  public query func getReplyVoteTally(replyId : Nat) : async { netScore : Int } {
+  public query ({ caller }) func getReplyVoteTally(replyId : Nat) : async { netScore : Int } {
     var up : Int = 0;
     var down : Int = 0;
     for (v in replyVotesArray.values()) {
@@ -720,14 +740,14 @@ actor {
     { netScore = up - down : Int };
   };
 
-  public query func getSessionVoteForReply(replyId : Nat, sessionId : Text) : async ?Text {
+  public query ({ caller }) func getSessionVoteForReply(replyId : Nat, sessionId : Text) : async ?Text {
     switch (replyVotesArray.find(func(v : ReplyVote) : Bool { v.replyId == replyId and v.sessionId == sessionId })) {
       case (null) { null };
       case (?v) { ?v.direction };
     };
   };
 
-  public shared func reportReply(replyId : Nat, sessionId : Text) : async {
+  public shared ({ caller }) func reportReply(replyId : Nat, sessionId : Text) : async {
     #ok;
     #err : Text;
   } {
@@ -751,12 +771,12 @@ actor {
     #ok;
   };
 
-  public query func getHiddenReplies(password : Text) : async [Reply] {
+  public query ({ caller }) func getHiddenReplies(password : Text) : async [Reply] {
     if (password != ADMIN_PASSWORD) { Runtime.trap("Unauthorized") };
     repliesArray.filter(func(r : Reply) : Bool { isHidden(r.id, "reply") });
   };
 
-  public shared func restoreReply(id : Nat, password : Text) : async {
+  public shared ({ caller }) func restoreReply(id : Nat, password : Text) : async {
     #ok;
     #err : Text;
   } {
@@ -767,7 +787,7 @@ actor {
     #ok;
   };
 
-  public shared func adminDeleteReply(id : Nat, password : Text) : async {
+  public shared ({ caller }) func adminDeleteReply(id : Nat, password : Text) : async {
     #ok;
     #err : Text;
   } {
@@ -781,9 +801,7 @@ actor {
     #ok;
   };
 
-  // ── Reply Likes ────────────────────────────────────────────────────────────────────────────
-
-  public shared func likeReply(replyId : Nat, sessionId : Text) : async () {
+  public shared ({ caller }) func likeReply(replyId : Nat, sessionId : Text) : async () {
     let existing = replyLikesArray.find(func(l : ReplyLike) : Bool {
       l.replyId == replyId and l.sessionId == sessionId
     });
@@ -802,7 +820,7 @@ actor {
     };
   };
 
-  public query func getReplyLikeCount(replyId : Nat) : async Nat {
+  public query ({ caller }) func getReplyLikeCount(replyId : Nat) : async Nat {
     var count = 0;
     for (l in replyLikesArray.values()) {
       if (l.replyId == replyId) { count += 1 };
@@ -810,7 +828,7 @@ actor {
     count;
   };
 
-  public query func getSessionLikeForReply(replyId : Nat, sessionId : Text) : async Bool {
+  public query ({ caller }) func getSessionLikeForReply(replyId : Nat, sessionId : Text) : async Bool {
     switch (replyLikesArray.find(func(l : ReplyLike) : Bool {
       l.replyId == replyId and l.sessionId == sessionId
     })) {
@@ -819,7 +837,7 @@ actor {
     };
   };
 
-  public query func getReplyLikeCounts(evidenceId : Nat) : async [(Nat, Nat)] {
+  public query ({ caller }) func getReplyLikeCounts(evidenceId : Nat) : async [(Nat, Nat)] {
     let result = List.empty<(Nat, Nat)>();
     for (r in repliesArray.values()) {
       if (r.evidenceId == evidenceId) {
@@ -833,9 +851,7 @@ actor {
     result.toArray();
   };
 
-  // ── Source Credibility Index ───────────────────────────────────────────────────────────────
-
-  public shared func suggestTrustedSource(domain : Text, sourceType : Text, sessionId : Text) : async {
+  public shared ({ caller }) func suggestTrustedSource(domain : Text, sourceType : Text, sessionId : Text) : async {
     #ok : Nat;
     #err : Text;
   } {
@@ -860,7 +876,7 @@ actor {
     #ok(sourceCount);
   };
 
-  public query func getTrustedSources() : async [{
+  public query ({ caller }) func getTrustedSources() : async [{
     id : Nat;
     domain : Text;
     sourceType : Text;
@@ -914,7 +930,7 @@ actor {
     result.toArray();
   };
 
-  public shared func voteOnSource(sourceId : Nat, sessionId : Text, direction : Text) : async {
+  public shared ({ caller }) func voteOnSource(sourceId : Nat, sessionId : Text, direction : Text) : async {
     #ok;
     #err : Text;
   } {
@@ -954,14 +970,14 @@ actor {
     #ok;
   };
 
-  public query func getSessionVoteForSource(sourceId : Nat, sessionId : Text) : async ?Text {
+  public query ({ caller }) func getSessionVoteForSource(sourceId : Nat, sessionId : Text) : async ?Text {
     switch (sourceVotesArray.find(func(v : SourceVote) : Bool { v.sourceId == sourceId and v.sessionId == sessionId })) {
       case (null) { null };
       case (?v) { ?v.direction };
     };
   };
 
-  public shared func adminRemoveSource(sourceId : Nat, password : Text) : async {
+  public shared ({ caller }) func adminRemoveSource(sourceId : Nat, password : Text) : async {
     #ok;
     #err : Text;
   } {
@@ -971,7 +987,7 @@ actor {
     #ok;
   };
 
-  public shared func adminOverrideSource(sourceId : Nat, approved : Bool, password : Text) : async {
+  public shared ({ caller }) func adminOverrideSource(sourceId : Nat, approved : Bool, password : Text) : async {
     #ok;
     #err : Text;
   } {
@@ -985,7 +1001,7 @@ actor {
   };
 
   // Check if a URL matches a trusted source (for frontend badge display)
-  public query func getSourceCredibilityForUrl(url : Text) : async {
+  public query ({ caller }) func getSourceCredibilityForUrl(url : Text) : async {
     isTrusted : Bool;
     sourceType : Text;
     bonusPct : Nat; // e.g. 5 means 5%
@@ -1029,7 +1045,7 @@ actor {
 
   // ── Enhanced Vote Tally with Multiplier + Source Credibility ──────────────────────────────
 
-  public query func getEnhancedVoteTally(claimId : Nat) : async {
+  public query ({ caller }) func getEnhancedVoteTally(claimId : Nat) : async {
     trueCount : Int;
     falseCount : Int;
     unverifiedCount : Int;
@@ -1088,20 +1104,10 @@ actor {
       };
     };
 
-    // Multiplier system using integer math (factor of 10):
-    let trueMultNum : Int = if (trueDirect >= 3) {
-      Int.min(50, Int.max(10, 10 + trueEvidenceScore))
-    } else { 10 };
-    let falseMultNum : Int = if (falseDirect >= 3) {
-      Int.min(50, Int.max(10, 10 + falseEvidenceScore))
-    } else { 10 };
-    let unverifiedMultNum : Int = if (unverifiedDirect >= 3) {
-      Int.min(50, Int.max(10, 10 + unverifiedEvidenceScore))
-    } else { 10 };
-
-    let trueTotal : Int = (trueDirect * trueMultNum) / 10;
-    let falseTotal : Int = (falseDirect * falseMultNum) / 10;
-    let unverifiedTotal : Int = (unverifiedDirect * unverifiedMultNum) / 10;
+    // 1:1 additive model: tally = directVotes + evidenceNetScore (negative floored at 0)
+    let trueTotal : Int = trueDirect + Int.max(0, trueEvidenceScore);
+    let falseTotal : Int = falseDirect + Int.max(0, falseEvidenceScore);
+    let unverifiedTotal : Int = unverifiedDirect + Int.max(0, unverifiedEvidenceScore);
 
     {
       trueCount = trueTotal;
@@ -1114,5 +1120,117 @@ actor {
       falseFromEvidence = falseTotal - falseDirect;
       unverifiedFromEvidence = unverifiedTotal - unverifiedDirect;
     };
+  };
+
+  // ========= ADDED COMMENTS FEATURES ============
+  public shared ({ caller }) func addSourceComment(sourceId : Nat, parentCommentId : Nat, text : Text, authorUsername : Text, sessionId : Text) : async {
+    #ok;
+    #err : Text;
+  } {
+    let now = Time.now();
+    switch (getCooldown(sourceCommentCooldownsList, sessionId)) {
+      case (?lastTs) {
+        let elapsed = now - lastTs;
+        if (elapsed < EVIDENCE_COOLDOWN_NS) {
+          let remainingSecs = (EVIDENCE_COOLDOWN_NS - elapsed) / 1_000_000_000;
+          return #err("cooldown:" # remainingSecs.toText());
+        };
+      };
+      case null {};
+    };
+    let sourceComments = sourceCommentsArray.filter(func(c : SourceComment) : Bool { c.sourceId == sourceId });
+    for (existingComment in sourceComments.values()) {
+      let sim = jaccardSimilarity(text, existingComment.text);
+      if (sim >= SIMILARITY_THRESHOLD) {
+        return #err("duplicate:Similar comment already exists");
+      };
+    };
+    updateCooldown(sourceCommentCooldownsList, sessionId, now);
+    sourceCommentCount += 1;
+    let comment : SourceComment = {
+      id = sourceCommentCount;
+      sourceId;
+      parentCommentId;
+      text;
+      authorUsername;
+      sessionId;
+      timestamp = now;
+    };
+    let list = List.fromArray<SourceComment>(sourceCommentsArray);
+    list.add(comment);
+    sourceCommentsArray := list.toArray();
+    #ok;
+  };
+
+  public query ({ caller }) func getSourceComments(sourceId : Nat) : async [SourceComment] {
+    sourceCommentsArray.filter(func(c : SourceComment) : Bool {
+      c.sourceId == sourceId and not isHidden(c.id, "sourceComment");
+    });
+  };
+
+  public shared ({ caller }) func likeSourceComment(commentId : Nat, sessionId : Text) : async () {
+    let existing = sourceCommentLikesArray.find(func(l : SourceCommentLike) : Bool {
+      l.commentId == commentId and l.sessionId == sessionId
+    });
+    switch (existing) {
+      case (?_) {
+        sourceCommentLikesArray := sourceCommentLikesArray.filter(func(l : SourceCommentLike) : Bool {
+          not (l.commentId == commentId and l.sessionId == sessionId)
+        });
+      };
+      case null {
+        let like : SourceCommentLike = { commentId; sessionId };
+        let list = List.fromArray<SourceCommentLike>(sourceCommentLikesArray);
+        list.add(like);
+        sourceCommentLikesArray := list.toArray();
+      };
+    };
+  };
+
+  public query ({ caller }) func getSessionLikeForSourceComment(commentId : Nat, sessionId : Text) : async Bool {
+    switch (sourceCommentLikesArray.find(func(l : SourceCommentLike) : Bool {
+      l.commentId == commentId and l.sessionId == sessionId
+    })) {
+      case (?_) { true };
+      case null { false };
+    };
+  };
+
+  public query ({ caller }) func getSourceCommentLikeCounts(sourceId : Nat) : async [(Nat, Nat)] {
+    let result = List.empty<(Nat, Nat)>();
+    for (c in sourceCommentsArray.values()) {
+      if (c.sourceId == sourceId) {
+        var count = 0;
+        for (l in sourceCommentLikesArray.values()) {
+          if (l.commentId == c.id) { count += 1 };
+        };
+        result.add((c.id, count));
+      };
+    };
+    result.toArray();
+  };
+
+  public shared ({ caller }) func reportSourceComment(commentId : Nat, sessionId : Text) : async {
+    #ok;
+    #err : Text;
+  } {
+    switch (reportsArray.find(func(r : Report) : Bool {
+      r.targetId == commentId and r.targetType == "sourceComment" and r.sessionId == sessionId
+    })) {
+      case (?_) { return #err("Already reported") };
+      case null {};
+    };
+    reportCount += 1;
+    let report : Report = {
+      id = reportCount;
+      targetId = commentId;
+      targetType = "sourceComment";
+      sessionId;
+      timestamp = Time.now();
+    };
+    let list = List.fromArray<Report>(reportsArray);
+    list.add(report);
+    reportsArray := list.toArray();
+    #ok;
   };
 };

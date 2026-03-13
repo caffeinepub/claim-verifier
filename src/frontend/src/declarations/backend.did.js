@@ -49,16 +49,14 @@ export const Reply = IDL.Record({
   'sessionId' : IDL.Text,
   'evidenceId' : IDL.Nat,
 });
-export const TrustedSourceInfo = IDL.Record({
+export const SourceComment = IDL.Record({
   'id' : IDL.Nat,
-  'domain' : IDL.Text,
-  'sourceType' : IDL.Text,
-  'suggestedBy' : IDL.Text,
+  'authorUsername' : IDL.Text,
+  'parentCommentId' : IDL.Nat,
+  'text' : IDL.Text,
+  'sourceId' : IDL.Nat,
   'timestamp' : IDL.Int,
-  'adminOverride' : IDL.Bool,
-  'upvotes' : IDL.Nat,
-  'downvotes' : IDL.Nat,
-  'isTrusted' : IDL.Bool,
+  'sessionId' : IDL.Text,
 });
 
 export const idlService = IDL.Service({
@@ -89,6 +87,11 @@ export const idlService = IDL.Service({
     ),
   '_caffeineStorageUpdateGatewayPrincipals' : IDL.Func([], [], []),
   'addReply' : IDL.Func(
+      [IDL.Nat, IDL.Nat, IDL.Text, IDL.Text, IDL.Text],
+      [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
+      [],
+    ),
+  'addSourceComment' : IDL.Func(
       [IDL.Nat, IDL.Nat, IDL.Text, IDL.Text, IDL.Text],
       [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
       [],
@@ -179,6 +182,11 @@ export const idlService = IDL.Service({
       [IDL.Bool],
       ['query'],
     ),
+  'getSessionLikeForSourceComment' : IDL.Func(
+      [IDL.Nat, IDL.Text],
+      [IDL.Bool],
+      ['query'],
+    ),
   'getSessionVoteForClaim' : IDL.Func(
       [IDL.Nat, IDL.Text],
       [IDL.Opt(IDL.Text)],
@@ -199,19 +207,47 @@ export const idlService = IDL.Service({
       [IDL.Opt(IDL.Text)],
       ['query'],
     ),
+  'getSourceCommentLikeCounts' : IDL.Func(
+      [IDL.Nat],
+      [IDL.Vec(IDL.Tuple(IDL.Nat, IDL.Nat))],
+      ['query'],
+    ),
+  'getSourceComments' : IDL.Func(
+      [IDL.Nat],
+      [IDL.Vec(SourceComment)],
+      ['query'],
+    ),
   'getSourceCredibilityForUrl' : IDL.Func(
       [IDL.Text],
       [
         IDL.Record({
           'isTrusted' : IDL.Bool,
+          'domain' : IDL.Text,
           'sourceType' : IDL.Text,
           'bonusPct' : IDL.Nat,
-          'domain' : IDL.Text,
         }),
       ],
       ['query'],
     ),
-  'getTrustedSources' : IDL.Func([], [IDL.Vec(TrustedSourceInfo)], ['query']),
+  'getTrustedSources' : IDL.Func(
+      [],
+      [
+        IDL.Vec(
+          IDL.Record({
+            'id' : IDL.Nat,
+            'upvotes' : IDL.Nat,
+            'suggestedBy' : IDL.Text,
+            'isTrusted' : IDL.Bool,
+            'domain' : IDL.Text,
+            'sourceType' : IDL.Text,
+            'adminOverride' : IDL.Bool,
+            'timestamp' : IDL.Int,
+            'downvotes' : IDL.Nat,
+          })
+        ),
+      ],
+      ['query'],
+    ),
   'getVoteTally' : IDL.Func(
       [IDL.Nat],
       [
@@ -224,12 +260,18 @@ export const idlService = IDL.Service({
       ['query'],
     ),
   'likeReply' : IDL.Func([IDL.Nat, IDL.Text], [], []),
+  'likeSourceComment' : IDL.Func([IDL.Nat, IDL.Text], [], []),
   'reportContent' : IDL.Func(
       [IDL.Nat, IDL.Text, IDL.Text],
       [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
       [],
     ),
   'reportReply' : IDL.Func(
+      [IDL.Nat, IDL.Text],
+      [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
+      [],
+    ),
+  'reportSourceComment' : IDL.Func(
       [IDL.Nat, IDL.Text],
       [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
       [],
@@ -320,18 +362,16 @@ export const idlFactory = ({ IDL }) => {
     'sessionId' : IDL.Text,
     'evidenceId' : IDL.Nat,
   });
-  const TrustedSourceInfo = IDL.Record({
+  const SourceComment = IDL.Record({
     'id' : IDL.Nat,
-    'domain' : IDL.Text,
-    'sourceType' : IDL.Text,
-    'suggestedBy' : IDL.Text,
+    'authorUsername' : IDL.Text,
+    'parentCommentId' : IDL.Nat,
+    'text' : IDL.Text,
+    'sourceId' : IDL.Nat,
     'timestamp' : IDL.Int,
-    'adminOverride' : IDL.Bool,
-    'upvotes' : IDL.Nat,
-    'downvotes' : IDL.Nat,
-    'isTrusted' : IDL.Bool,
+    'sessionId' : IDL.Text,
   });
-
+  
   return IDL.Service({
     '_caffeineStorageBlobIsLive' : IDL.Func(
         [IDL.Vec(IDL.Nat8)],
@@ -360,6 +400,11 @@ export const idlFactory = ({ IDL }) => {
       ),
     '_caffeineStorageUpdateGatewayPrincipals' : IDL.Func([], [], []),
     'addReply' : IDL.Func(
+        [IDL.Nat, IDL.Nat, IDL.Text, IDL.Text, IDL.Text],
+        [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
+        [],
+      ),
+    'addSourceComment' : IDL.Func(
         [IDL.Nat, IDL.Nat, IDL.Text, IDL.Text, IDL.Text],
         [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
         [],
@@ -450,6 +495,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Bool],
         ['query'],
       ),
+    'getSessionLikeForSourceComment' : IDL.Func(
+        [IDL.Nat, IDL.Text],
+        [IDL.Bool],
+        ['query'],
+      ),
     'getSessionVoteForClaim' : IDL.Func(
         [IDL.Nat, IDL.Text],
         [IDL.Opt(IDL.Text)],
@@ -470,19 +520,47 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Opt(IDL.Text)],
         ['query'],
       ),
+    'getSourceCommentLikeCounts' : IDL.Func(
+        [IDL.Nat],
+        [IDL.Vec(IDL.Tuple(IDL.Nat, IDL.Nat))],
+        ['query'],
+      ),
+    'getSourceComments' : IDL.Func(
+        [IDL.Nat],
+        [IDL.Vec(SourceComment)],
+        ['query'],
+      ),
     'getSourceCredibilityForUrl' : IDL.Func(
         [IDL.Text],
         [
           IDL.Record({
             'isTrusted' : IDL.Bool,
+            'domain' : IDL.Text,
             'sourceType' : IDL.Text,
             'bonusPct' : IDL.Nat,
-            'domain' : IDL.Text,
           }),
         ],
         ['query'],
       ),
-    'getTrustedSources' : IDL.Func([], [IDL.Vec(TrustedSourceInfo)], ['query']),
+    'getTrustedSources' : IDL.Func(
+        [],
+        [
+          IDL.Vec(
+            IDL.Record({
+              'id' : IDL.Nat,
+              'upvotes' : IDL.Nat,
+              'suggestedBy' : IDL.Text,
+              'isTrusted' : IDL.Bool,
+              'domain' : IDL.Text,
+              'sourceType' : IDL.Text,
+              'adminOverride' : IDL.Bool,
+              'timestamp' : IDL.Int,
+              'downvotes' : IDL.Nat,
+            })
+          ),
+        ],
+        ['query'],
+      ),
     'getVoteTally' : IDL.Func(
         [IDL.Nat],
         [
@@ -495,12 +573,18 @@ export const idlFactory = ({ IDL }) => {
         ['query'],
       ),
     'likeReply' : IDL.Func([IDL.Nat, IDL.Text], [], []),
+    'likeSourceComment' : IDL.Func([IDL.Nat, IDL.Text], [], []),
     'reportContent' : IDL.Func(
         [IDL.Nat, IDL.Text, IDL.Text],
         [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
         [],
       ),
     'reportReply' : IDL.Func(
+        [IDL.Nat, IDL.Text],
+        [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
+        [],
+      ),
+    'reportSourceComment' : IDL.Func(
         [IDL.Nat, IDL.Text],
         [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
         [],

@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { Claim, Evidence, Reply } from "../backend.d";
+import type { Claim, Evidence, Reply, SourceComment } from "../backend.d";
 import { useActor } from "./useActor";
 
 // ── Session ──────────────────────────────────────────────────────────────────
@@ -1000,6 +1000,150 @@ export function useAdminOverrideSource() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["trusted-sources"] });
+    },
+  });
+}
+
+// ── Source Comments ───────────────────────────────────────────────────────────
+
+export type { SourceComment };
+
+export function useSourceComments(sourceId: bigint | null) {
+  const { actor, isFetching } = useActor();
+  return useQuery<SourceComment[]>({
+    queryKey: ["source-comments", sourceId?.toString()],
+    queryFn: async () => {
+      if (!actor || sourceId === null) return [];
+      return actor.getSourceComments(sourceId);
+    },
+    enabled: !!actor && !isFetching && sourceId !== null,
+  });
+}
+
+export function useAddSourceComment() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      sourceId,
+      parentCommentId,
+      text,
+      authorUsername,
+      sessionId,
+    }: {
+      sourceId: bigint;
+      parentCommentId: bigint;
+      text: string;
+      authorUsername: string;
+      sessionId: string;
+    }) => {
+      if (!actor) throw new Error("No actor");
+      const result = await actor.addSourceComment(
+        sourceId,
+        parentCommentId,
+        text,
+        authorUsername,
+        sessionId,
+      );
+      if (result && result.__kind__ === "err") {
+        throw new Error(result.err as string);
+      }
+      return result;
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: ["source-comments", variables.sourceId.toString()],
+      });
+    },
+  });
+}
+
+export function useLikeSourceComment() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      commentId,
+      sessionId,
+      sourceId: _sourceId,
+    }: {
+      commentId: bigint;
+      sessionId: string;
+      sourceId: bigint;
+    }) => {
+      if (!actor) throw new Error("No actor");
+      return actor.likeSourceComment(commentId, sessionId);
+    },
+    onSuccess: (
+      _data: unknown,
+      variables: { commentId: bigint; sessionId: string; sourceId: bigint },
+    ) => {
+      queryClient.invalidateQueries({
+        queryKey: [
+          "source-comment-like-session",
+          variables.commentId.toString(),
+        ],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["source-comment-like-counts", variables.sourceId.toString()],
+      });
+    },
+  });
+}
+
+export function useSessionLikeForSourceComment(
+  commentId: bigint | null,
+  sessionId: string | null,
+) {
+  const { actor, isFetching } = useActor();
+  return useQuery<boolean>({
+    queryKey: ["source-comment-like-session", commentId?.toString(), sessionId],
+    queryFn: async () => {
+      if (!actor || commentId === null || !sessionId) return false;
+      return actor.getSessionLikeForSourceComment(commentId, sessionId);
+    },
+    enabled: !!actor && !isFetching && commentId !== null && !!sessionId,
+  });
+}
+
+export function useSourceCommentLikeCounts(sourceId: bigint | null) {
+  const { actor, isFetching } = useActor();
+  return useQuery<Record<string, number>>({
+    queryKey: ["source-comment-like-counts", sourceId?.toString()],
+    queryFn: async () => {
+      if (!actor || sourceId === null) return {};
+      const counts: Array<[bigint, bigint]> =
+        await actor.getSourceCommentLikeCounts(sourceId);
+      const result: Record<string, number> = {};
+      for (const [id, count] of counts) {
+        result[id.toString()] = Number(count);
+      }
+      return result;
+    },
+    enabled: !!actor && !isFetching && sourceId !== null,
+    staleTime: 10_000,
+  });
+}
+
+export function useReportSourceComment() {
+  const { actor } = useActor();
+
+  return useMutation({
+    mutationFn: async ({
+      commentId,
+      sessionId,
+    }: {
+      commentId: bigint;
+      sessionId: string;
+    }) => {
+      if (!actor) throw new Error("No actor");
+      const result = await actor.reportSourceComment(commentId, sessionId);
+      if (result && result.__kind__ === "err") {
+        throw new Error(result.err as string);
+      }
+      return result;
     },
   });
 }

@@ -51,21 +51,31 @@ export function TrustedSourceBadgeList({ urls }: TrustedSourceBadgeListProps) {
 
   if (matches.length === 0) return null;
 
+  function handleBadgeClick(e: React.MouseEvent, domain: string) {
+    e.preventDefault();
+    e.stopPropagation();
+    window.history.pushState({}, "", `/source/${encodeURIComponent(domain)}`);
+    window.dispatchEvent(new PopStateEvent("popstate"));
+  }
+
   return (
     <div className="flex flex-wrap gap-1.5 mt-2">
       {matches.map((s) => (
-        <span
+        <button
           key={s.domain}
+          type="button"
+          data-ocid="source.link"
+          onClick={(e) => handleBadgeClick(e, s.domain)}
           className={cn(
-            "inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-body font-medium border",
+            "inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-body font-medium border cursor-pointer hover:opacity-80 transition-opacity",
             getSourceTypeBadgeClasses(s.sourceType),
           )}
-          title={`${getSourceTypeLabel(s.sourceType)} — ${getSourceTypeBonus(s.sourceType)} credibility bonus`}
+          title={`${getSourceTypeLabel(s.sourceType)} \u2014 ${getSourceTypeBonus(s.sourceType)} credibility bonus. Click to view details.`}
         >
           <ShieldCheck className="h-2.5 w-2.5" />
           <span>{s.domain}</span>
           <span className="opacity-70">{getSourceTypeBonus(s.sourceType)}</span>
-        </span>
+        </button>
       ))}
     </div>
   );

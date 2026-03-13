@@ -19,20 +19,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  useSessionVoteForSource,
-  useSuggestTrustedSource,
-  useTrustedSources,
-  useVoteOnSource,
-} from "@/hooks/useQueries";
+import { useSuggestTrustedSource, useTrustedSources } from "@/hooks/useQueries";
 import { useSessionGate } from "@/hooks/useSessionGate";
 import { cn } from "@/lib/utils";
 import {
   Award,
-  CheckCircle2,
-  ChevronDown,
-  ChevronUp,
   ExternalLink,
+  Globe,
   Loader2,
   Plus,
   Shield,
@@ -88,95 +81,48 @@ function stripDomain(input: string): string {
     .toLowerCase();
 }
 
-function SourceVoteButtons({
-  source,
-  sessionId,
+/** Tries Clearbit logo → Google favicon → Globe icon */
+function SourceLogo({
+  domain,
+  size = "sm",
 }: {
-  source: TrustedSourceInfo;
-  sessionId: string | null;
+  domain: string;
+  size?: "sm" | "lg";
 }) {
-  const { checkVoteAction } = useSessionGate();
-  const voteOnSource = useVoteOnSource();
-  const { data: sessionVote } = useSessionVoteForSource(source.id, sessionId);
+  const [step, setStep] = useState<0 | 1 | 2>(0);
+  const sizeClass = size === "lg" ? "w-10 h-10" : "w-6 h-6";
+  const iconSize = size === "lg" ? "h-5 w-5" : "h-3.5 w-3.5";
 
-  const upvotes = Number(source.upvotes);
-  const downvotes = Number(source.downvotes);
-  const netScore = upvotes - downvotes;
-
-  async function handleVote(direction: "up" | "down") {
-    if (!sessionId) return;
-    if (!checkVoteAction()) return;
-    try {
-      await voteOnSource.mutateAsync({
-        sourceId: source.id,
-        sessionId,
-        direction,
-      });
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Failed to vote";
-      toast.error(msg);
-    }
+  if (step === 2) {
+    return (
+      <Globe className={cn(iconSize, "text-muted-foreground flex-shrink-0")} />
+    );
   }
 
-  const hasUp = sessionVote === "up";
-  const hasDown = sessionVote === "down";
+  const src =
+    step === 0
+      ? `https://logo.clearbit.com/${domain}`
+      : `https://www.google.com/s2/favicons?domain=${domain}&sz=64`;
 
   return (
-    <div className="flex items-center gap-0.5">
-      <button
-        type="button"
-        data-ocid="source.toggle"
-        onClick={() => handleVote("up")}
-        disabled={voteOnSource.isPending}
-        className={cn(
-          "flex items-center justify-center w-7 h-7 rounded transition-colors",
-          hasUp
-            ? "text-primary bg-primary/10"
-            : "text-muted-foreground hover:text-primary hover:bg-primary/10",
-        )}
-        aria-label="Upvote"
-      >
-        <ChevronUp className="h-4 w-4" />
-      </button>
-      <span
-        className={cn(
-          "text-xs font-bold font-mono w-6 text-center",
-          netScore > 0
-            ? "text-primary"
-            : netScore < 0
-              ? "text-destructive"
-              : "text-muted-foreground",
-        )}
-      >
-        {netScore}
-      </span>
-      <button
-        type="button"
-        data-ocid="source.toggle"
-        onClick={() => handleVote("down")}
-        disabled={voteOnSource.isPending}
-        className={cn(
-          "flex items-center justify-center w-7 h-7 rounded transition-colors",
-          hasDown
-            ? "text-destructive bg-destructive/10"
-            : "text-muted-foreground hover:text-destructive hover:bg-destructive/10",
-        )}
-        aria-label="Downvote"
-      >
-        <ChevronDown className="h-4 w-4" />
-      </button>
-    </div>
+    <img
+      src={src}
+      alt={domain}
+      className={cn(sizeClass, "rounded object-contain flex-shrink-0")}
+      onError={() => setStep((s) => (s < 2 ? ((s + 1) as 0 | 1 | 2) : 2))}
+    />
   );
 }
 
 function SourceCard({
   source,
   index,
-  sessionId,
+  onSourceClick,
 }: {
   source: TrustedSourceInfo;
   index: number;
   sessionId: string | null;
+  onSourceClick?: (domain: string) => void;
 }) {
   const upvotes = Number(source.upvotes);
   const downvotes = Number(source.downvotes);
@@ -196,21 +142,27 @@ function SourceCard({
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.04 }}
+      onClick={() => onSourceClick?.(source.domain)}
       className={cn(
-        "p-4 bg-card border rounded-sm transition-all",
+        "p-4 bg-card border rounded-sm transition-all cursor-pointer",
         source.isTrusted
-          ? "border-emerald-500/30 shadow-sm shadow-emerald-500/10"
-          : "border-border",
+          ? "border-emerald-500/30 shadow-sm shadow-emerald-500/10 hover:border-emerald-500/60 hover:shadow-emerald-500/20"
+          : "border-border hover:border-primary/40 hover:shadow-sm",
+        onSourceClick && "hover:bg-secondary/40",
       )}
     >
       {/* Header row */}
-      <div className="flex items-start justify-between gap-3 mb-3">
+      <div className="flex items-start gap-3 mb-3">
+        <div className="flex-shrink-0 mt-0.5">
+          <SourceLogo domain={source.domain} size="sm" />
+        </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap mb-1">
             <a
               href={`https://${source.domain}`}
               target="_blank"
               rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
               className="text-sm font-bold font-body text-foreground hover:text-primary transition-colors flex items-center gap-1"
             >
               {source.domain}
@@ -242,7 +194,6 @@ function SourceCard({
             </span>
           </div>
         </div>
-        <SourceVoteButtons source={source} sessionId={sessionId} />
       </div>
 
       {/* Progress toward trust */}
@@ -389,7 +340,7 @@ function SuggestSourceDialog({ sessionId }: { sessionId: string | null }) {
                 data-ocid="sources.select"
                 className="font-body bg-secondary border-border"
               >
-                <SelectValue placeholder="Select a type…" />
+                <SelectValue placeholder="Select a type\u2026" />
               </SelectTrigger>
               <SelectContent>
                 {SOURCE_TYPES.map((t) => (
@@ -439,8 +390,10 @@ function SuggestSourceDialog({ sessionId }: { sessionId: string | null }) {
 
 export function TrustedSourcesPage({
   sessionId,
+  onSourceClick,
 }: {
   sessionId: string | null;
+  onSourceClick?: (domain: string) => void;
 }) {
   const { data: sources, isLoading, error } = useTrustedSources();
 
@@ -545,6 +498,7 @@ export function TrustedSourcesPage({
                       source={s}
                       index={i + 1}
                       sessionId={sessionId}
+                      onSourceClick={onSourceClick}
                     />
                   ))}
                 </AnimatePresence>
@@ -566,6 +520,7 @@ export function TrustedSourcesPage({
                       source={s}
                       index={i + 1}
                       sessionId={sessionId}
+                      onSourceClick={onSourceClick}
                     />
                   ))}
                 </AnimatePresence>

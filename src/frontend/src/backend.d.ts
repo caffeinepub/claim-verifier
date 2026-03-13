@@ -18,16 +18,6 @@ export interface Claim {
     category: string;
     sessionId: string;
 }
-export interface Evidence {
-    id: bigint;
-    imageUrls: Array<string>;
-    text: string;
-    urls: Array<string>;
-    claimId: bigint;
-    timestamp: bigint;
-    sessionId: string;
-    evidenceType: string;
-}
 export interface Reply {
     id: bigint;
     authorUsername: string;
@@ -36,6 +26,15 @@ export interface Reply {
     parentReplyId: bigint;
     sessionId: string;
     evidenceId: bigint;
+}
+export interface SourceComment {
+    id: bigint;
+    authorUsername: string;
+    parentCommentId: bigint;
+    text: string;
+    sourceId: bigint;
+    timestamp: bigint;
+    sessionId: string;
 }
 export interface TrustedSourceInfo {
     id: bigint;
@@ -48,8 +47,25 @@ export interface TrustedSourceInfo {
     downvotes: bigint;
     isTrusted: boolean;
 }
+export interface Evidence {
+    id: bigint;
+    imageUrls: Array<string>;
+    text: string;
+    urls: Array<string>;
+    claimId: bigint;
+    timestamp: bigint;
+    sessionId: string;
+    evidenceType: string;
+}
 export interface backendInterface {
     addReply(evidenceId: bigint, parentReplyId: bigint, text: string, authorUsername: string, sessionId: string): Promise<{
+        __kind__: "ok";
+        ok: null;
+    } | {
+        __kind__: "err";
+        err: string;
+    }>;
+    addSourceComment(sourceId: bigint, parentCommentId: bigint, text: string, authorUsername: string, sessionId: string): Promise<{
         __kind__: "ok";
         ok: null;
     } | {
@@ -128,23 +144,37 @@ export interface backendInterface {
     }>;
     getReportCount(targetId: bigint, targetType: string): Promise<bigint>;
     getSessionLikeForReply(replyId: bigint, sessionId: string): Promise<boolean>;
+    getSessionLikeForSourceComment(commentId: bigint, sessionId: string): Promise<boolean>;
     getSessionVoteForClaim(claimId: bigint, sessionId: string): Promise<string | null>;
     getSessionVoteForEvidence(evidenceId: bigint, sessionId: string): Promise<string | null>;
     getSessionVoteForReply(replyId: bigint, sessionId: string): Promise<string | null>;
     getSessionVoteForSource(sourceId: bigint, sessionId: string): Promise<string | null>;
+    getSourceCommentLikeCounts(sourceId: bigint): Promise<Array<[bigint, bigint]>>;
+    getSourceComments(sourceId: bigint): Promise<Array<SourceComment>>;
     getSourceCredibilityForUrl(url: string): Promise<{
         isTrusted: boolean;
+        domain: string;
         sourceType: string;
         bonusPct: bigint;
-        domain: string;
     }>;
-    getTrustedSources(): Promise<Array<TrustedSourceInfo>>;
+    getTrustedSources(): Promise<Array<{
+        id: bigint;
+        upvotes: bigint;
+        suggestedBy: string;
+        isTrusted: boolean;
+        domain: string;
+        sourceType: string;
+        adminOverride: boolean;
+        timestamp: bigint;
+        downvotes: bigint;
+    }>>;
     getVoteTally(claimId: bigint): Promise<{
         trueCount: bigint;
         falseCount: bigint;
         unverifiedCount: bigint;
     }>;
     likeReply(replyId: bigint, sessionId: string): Promise<void>;
+    likeSourceComment(commentId: bigint, sessionId: string): Promise<void>;
     reportContent(targetId: bigint, targetType: string, sessionId: string): Promise<{
         __kind__: "ok";
         ok: null;
@@ -153,6 +183,13 @@ export interface backendInterface {
         err: string;
     }>;
     reportReply(replyId: bigint, sessionId: string): Promise<{
+        __kind__: "ok";
+        ok: null;
+    } | {
+        __kind__: "err";
+        err: string;
+    }>;
+    reportSourceComment(commentId: bigint, sessionId: string): Promise<{
         __kind__: "ok";
         ok: null;
     } | {

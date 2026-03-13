@@ -444,7 +444,7 @@ export function ClaimDetail({
                     >
                       <TooltipTrigger asChild>
                         <Flame
-                          className="inline w-6 h-6 text-orange-500 ml-2 align-middle relative -top-[3px] sm:-top-[4px] cursor-pointer"
+                          className="inline w-6 h-6 text-orange-500 ml-2 align-middle relative -top-[3px] sm:-top-[3px] cursor-pointer"
                           aria-label="Hot claim"
                           onClick={(e) => {
                             e.stopPropagation();
