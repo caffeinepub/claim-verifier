@@ -38,14 +38,14 @@ const config: Record<
     iconClass: "text-red-400",
     labelClass: "text-red-700",
   },
-  "Leaning REBUNKED": {
+  "Leaning TRUE": {
     label: "LEANING TRUE",
     icon: TrendingUp,
     bannerClass: "bg-emerald-50/60 border-emerald-200",
     iconClass: "text-emerald-400",
     labelClass: "text-emerald-600",
   },
-  "Leaning DEBUNKED": {
+  "Leaning FALSE": {
     label: "LEANING FALSE",
     icon: TrendingDown,
     bannerClass: "bg-red-50/60 border-red-200",

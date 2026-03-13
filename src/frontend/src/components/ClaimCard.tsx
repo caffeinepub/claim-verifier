@@ -6,6 +6,12 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   useEnhancedVoteTally,
   useReportContent,
   useUsername,
@@ -48,8 +54,8 @@ const verdictBorderClass: Record<string, string> = {
   DEBUNKED: "border-l-red-500",
   Contested: "border-l-amber-500",
   "Insufficient Data": "border-l-border",
-  "Leaning REBUNKED": "border-l-emerald-300",
-  "Leaning DEBUNKED": "border-l-red-300",
+  "Leaning TRUE": "border-l-emerald-300",
+  "Leaning FALSE": "border-l-red-300",
 };
 
 const verdictBadgeConfig: Record<
@@ -80,12 +86,12 @@ const verdictBadgeConfig: Record<
     textColor: "text-slate-500",
     icon: BarChart2,
   },
-  "Leaning REBUNKED": {
+  "Leaning TRUE": {
     label: "LEANING TRUE",
     textColor: "text-emerald-500",
     icon: TrendingUp,
   },
-  "Leaning DEBUNKED": {
+  "Leaning FALSE": {
     label: "LEANING FALSE",
     textColor: "text-red-500",
     icon: TrendingDown,
@@ -171,15 +177,15 @@ export function ClaimCard({
         ? "bg-red-500"
         : verdict === "Contested"
           ? "bg-amber-400"
-          : verdict === "Leaning REBUNKED"
+          : verdict === "Leaning TRUE"
             ? "bg-emerald-400"
-            : verdict === "Leaning DEBUNKED"
+            : verdict === "Leaning FALSE"
               ? "bg-red-400"
               : "bg-muted-foreground";
 
   // Meter fill % (true % for positive verdicts, false % for false verdict)
   const meterFill =
-    verdict === "DEBUNKED" || verdict === "Leaning DEBUNKED"
+    verdict === "DEBUNKED" || verdict === "Leaning FALSE"
       ? (falsePercent ?? 0)
       : (truePercent ?? 0);
 
@@ -260,16 +266,25 @@ export function ClaimCard({
       </div>
 
       {/* Row 2: title only */}
-      <div className="flex items-start gap-2 mb-2">
-        <h3 className="font-display text-lg font-semibold text-foreground leading-snug group-hover:text-primary transition-colors flex-1">
+      <div className="mb-2">
+        <h3 className="font-display text-lg font-semibold text-foreground leading-snug group-hover:text-primary transition-colors">
           {claim.title}
+          {isHot && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Flame
+                    className="inline w-4 h-4 text-orange-500 ml-1.5 align-middle relative -top-[3px]"
+                    aria-label="Hot claim"
+                  />
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>High activity in the last 24 hours</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
         </h3>
-        {isHot && (
-          <Flame
-            className="w-4 h-4 text-orange-500 flex-shrink-0 mt-0.5"
-            aria-label="Hot claim"
-          />
-        )}
       </div>
 
       {/* Row 3: description */}
@@ -347,7 +362,7 @@ export function ClaimCard({
             <div className="space-y-1">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold font-body text-foreground">
-                  {verdict === "DEBUNKED" || verdict === "Leaning DEBUNKED"
+                  {verdict === "DEBUNKED" || verdict === "Leaning FALSE"
                     ? `${falsePercent}% False`
                     : `${truePercent}% True`}
                 </span>

@@ -1,12 +1,13 @@
 export type OverallVerdict =
   | "REBUNKED"
   | "DEBUNKED"
-  | "Leaning REBUNKED"
-  | "Leaning DEBUNKED"
+  | "Leaning TRUE"
+  | "Leaning FALSE"
   | "Contested"
   | "Insufficient Data";
 
-const SUPERMAJORITY = 0.6;
+const SUPERMAJORITY = 0.66;
+const LEANING_THRESHOLD = 0.55;
 const MIN_VOTES = 5;
 
 export function computeOverallVerdict(
@@ -14,8 +15,8 @@ export function computeOverallVerdict(
   falseCount: number,
   unverifiedCount: number,
   hasQualifyingEvidence = true,
-  trueDirect = 0,
-  falseDirect = 0,
+  _trueDirect = 0,
+  _falseDirect = 0,
 ): OverallVerdict {
   if (!hasQualifyingEvidence) return "Insufficient Data";
 
@@ -24,27 +25,28 @@ export function computeOverallVerdict(
   const uc = Math.max(0, unverifiedCount);
   const total = tc + fc + uc;
 
-  // Need at least one True or False direct vote for definitive verdict
-  if (trueDirect + falseDirect === 0 && trueDirect !== -1) {
-    // Only enforce this check when direct counts are explicitly provided
-    // trueDirect === -1 means "not provided", fall back to old behavior
-  }
-
   if (total < MIN_VOTES) return "Insufficient Data";
 
-  // Only True vs False compete for the majority (Unverified excluded from ratio)
+  // Need at least one True or False vote to determine a direction
   const tfTotal = tc + fc;
   if (tfTotal === 0) return "Insufficient Data";
 
-  const trueRatio = tc / tfTotal;
+  // Ratios are out of the full total (including Unverified) so that a large
+  // Unverified contingent dilutes the confidence in the verdict.
+  const trueRatio = tc / total;
+  const falseRatio = fc / total;
 
-  // 60% supermajority for definitive verdict
+  // 66%+ supermajority for definitive verdict
   if (trueRatio >= SUPERMAJORITY) return "REBUNKED";
-  if (trueRatio <= 1 - SUPERMAJORITY) return "DEBUNKED";
+  if (falseRatio >= SUPERMAJORITY) return "DEBUNKED";
 
-  // Threshold met but no supermajority
-  if (trueRatio > 0.5) return "Leaning REBUNKED";
-  if (trueRatio < 0.5) return "Leaning DEBUNKED";
+  // 55–66%: Leaning
+  if (trueRatio >= LEANING_THRESHOLD && trueRatio > falseRatio)
+    return "Leaning TRUE";
+  if (falseRatio >= LEANING_THRESHOLD && falseRatio > trueRatio)
+    return "Leaning FALSE";
+
+  // Below 55% on both sides (includes near-ties and Unverified-dominant splits)
   return "Contested";
 }
 
@@ -70,7 +72,6 @@ function getHistory(claimId: string): VerdictHistoryEntry[] {
 export function recordVerdict(claimId: string, verdict: OverallVerdict): void {
   const history = getHistory(claimId);
   const now = Date.now();
-  // Only record if verdict changed
   if (history.length > 0 && history[history.length - 1].verdict === verdict)
     return;
   history.push({ verdict, timestamp: now });
@@ -86,9 +87,7 @@ export function getVerdictStability(claimId: string): StabilityState {
   const now = Date.now();
   const last = history[history.length - 1];
   const secondToLast = history[history.length - 2];
-  // Volatile if changed in last 10 minutes
   if (now - secondToLast.timestamp < 10 * 60 * 1000) return "Volatile";
-  // Stable if current verdict has held for 30+ minutes
   if (now - last.timestamp >= 30 * 60 * 1000) return "Stable";
   return null;
 }

@@ -11,6 +11,12 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   useAllEvidenceTallies,
   useClaimById,
   useEnhancedVoteTally,
@@ -426,16 +432,25 @@ export function ClaimDetail({
                   : "Anonymous"}
               </span>
             </div>
-            <div className="flex items-start gap-3 mb-4">
-              <h1 className="font-display text-3xl font-bold leading-tight text-foreground flex-1">
+            <div className="mb-4">
+              <h1 className="font-display text-3xl font-bold leading-tight text-foreground">
                 {claim.title}
+                {claimTotalVotes >= 10 && (
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Flame
+                          className="inline w-6 h-6 text-orange-500 ml-2 align-middle relative -top-[4px]"
+                          aria-label="Hot claim"
+                        />
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>High activity in the last 24 hours</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                )}
               </h1>
-              {claimTotalVotes >= 10 && (
-                <Flame
-                  className="w-6 h-6 text-orange-500 flex-shrink-0 mt-1"
-                  aria-label="Hot claim"
-                />
-              )}
             </div>
             <p className="font-body text-base text-muted-foreground leading-relaxed">
               {claim.description}

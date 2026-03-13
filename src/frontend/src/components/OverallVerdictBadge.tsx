@@ -32,12 +32,12 @@ const config: Record<
     className: "bg-red-100 text-red-800 border-red-300",
     icon: XCircle,
   },
-  "Leaning REBUNKED": {
+  "Leaning TRUE": {
     label: "LEANING TRUE",
     className: "bg-emerald-50 text-emerald-700 border-emerald-200",
     icon: TrendingUp,
   },
-  "Leaning DEBUNKED": {
+  "Leaning FALSE": {
     label: "LEANING FALSE",
     className: "bg-red-50 text-red-700 border-red-200",
     icon: TrendingDown,
