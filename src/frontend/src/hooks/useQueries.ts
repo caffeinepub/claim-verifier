@@ -853,7 +853,21 @@ export function useReplyLikeCounts(evidenceId: bigint | null) {
 
 // ── Trusted Sources ───────────────────────────────────────────────────────────
 
-import type { TrustedSourceInfo } from "../backend.d";
+// TrustedSourceInfo type derived from backend
+export type TrustedSourceInfo = {
+  id: bigint;
+  upvotes: bigint;
+  downvotes: bigint;
+  isTrusted: boolean;
+  domain: string;
+  sourceType: string;
+  adminOverride: boolean;
+  adminOverrideNote: string;
+  aboutBlurb: string;
+  pinnedAdminComment: string;
+  timestamp: bigint;
+  suggestedByUsername: string;
+};
 
 export function useTrustedSources() {
   const { actor, isFetching } = useActor();
@@ -892,16 +906,19 @@ export function useSuggestTrustedSource() {
       domain,
       sourceType,
       sessionId,
+      username,
     }: {
       domain: string;
       sourceType: string;
       sessionId: string;
+      username: string;
     }) => {
       if (!actor) throw new Error("No actor");
       const result = await (actor as any).suggestTrustedSource(
         domain,
         sourceType,
         sessionId,
+        username,
       );
       if (result && result.__kind__ === "err") {
         throw new Error(result.err as string);
@@ -981,16 +998,78 @@ export function useAdminOverrideSource() {
     mutationFn: async ({
       sourceId,
       approved,
+      note,
       password,
     }: {
       sourceId: bigint;
       approved: boolean;
+      note: string;
       password: string;
     }) => {
       if (!actor) throw new Error("No actor");
       const result = await (actor as any).adminOverrideSource(
         sourceId,
         approved,
+        note,
+        password,
+      );
+      if (result && result.__kind__ === "err") {
+        throw new Error(result.err as string);
+      }
+      return result;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["trusted-sources"] });
+    },
+  });
+}
+
+export function useAdminSetPinnedComment() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      sourceId,
+      comment,
+      password,
+    }: {
+      sourceId: bigint;
+      comment: string;
+      password: string;
+    }) => {
+      if (!actor) throw new Error("No actor");
+      const result = await (actor as any).adminSetPinnedComment(
+        sourceId,
+        comment,
+        password,
+      );
+      if (result && result.__kind__ === "err") {
+        throw new Error(result.err as string);
+      }
+      return result;
+    },
+    onSuccess: (_data, _vars) => {
+      queryClient.invalidateQueries({ queryKey: ["trusted-sources"] });
+    },
+  });
+}
+
+export function useAdminFetchAboutBlurb() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      sourceId,
+      password,
+    }: {
+      sourceId: bigint;
+      password: string;
+    }) => {
+      if (!actor) throw new Error("No actor");
+      const result = await (actor as any).adminFetchAboutBlurb(
+        sourceId,
         password,
       );
       if (result && result.__kind__ === "err") {
@@ -1145,5 +1224,29 @@ export function useReportSourceComment() {
       }
       return result;
     },
+  });
+}
+
+export function useWikipediaBlurb(domain: string | null) {
+  return useQuery<string | null>({
+    queryKey: ["wikipedia-blurb", domain],
+    queryFn: async () => {
+      if (!domain) return null;
+      const firstSegment = domain.split(".")[0];
+      const title =
+        firstSegment.charAt(0).toUpperCase() + firstSegment.slice(1);
+      try {
+        const res = await fetch(
+          `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`,
+        );
+        if (!res.ok) return null;
+        const data = await res.json();
+        return (data.extract as string) || null;
+      } catch {
+        return null;
+      }
+    },
+    enabled: !!domain,
+    staleTime: 1000 * 60 * 60,
   });
 }

@@ -1,32 +1,35 @@
 # Rebunked
 
 ## Current State
-The app has a `useSessionGate` hook in `src/frontend/src/hooks/useSessionGate.ts` that enforces a 15-minute read-only period for new sessions. All write actions call `checkAction()` before proceeding; if the session is under 15 minutes old, a toast is shown with the remaining wait time.
 
-There is currently no rate limiting on the number of votes a session can cast within a time window.
+Rebunked is a community-driven claim verification platform with:
+- Claim cards, claim detail pages, evidence voting
+- Source Credibility Index with a Sources directory (TrustedSourcesPage) and Source Detail pages (SourceDetailPage)
+- Source discussion via SourceDiscussion component (threaded comments with likes)
+- Source status badges (icon-only: ShieldCheck for trusted, Clock for pending, ShieldX for not trusted) with tooltips
+- Source categories: Peer-reviewed (5%), Government (4%), Major News Org (3%), Independent journalism (2%), Blog/opinion (1%), Social media (0.5%)
+- Admin controls section visible on SourceDetailPage (password-protected but the section/panel is always rendered)
 
 ## Requested Changes (Diff)
 
 ### Add
-- A vote rate limiter in `useSessionGate.ts` (or a new `useVoteRateLimit.ts` hook): tracks timestamps of votes cast by the session using localStorage (`rebunked_vote_timestamps`). A "vote" counts as: direct claim votes (True/False/Unverified) and evidence upvotes/downvotes. Reply likes are excluded.
-- Rate limit: 3 votes per 10-minute rolling window per session.
-- When the limit is hit, show a toast/banner with the same pattern as the session gate: "You've reached the vote limit. Please wait X minutes before voting again." The toast ID should be unique to avoid stacking.
-- A `checkVoteAction()` function exported from the gate hook/utility, called before any vote is cast (claim vote buttons + evidence vote buttons).
+- Two new source categories: "Reference/encyclopedia" at 2% bonus and "Archive" at 1.5% bonus
+- Image upload support in source discussion comments (inline in comment body, using existing blob storage/ImageUploader)
+- Link submission support in source discussion comments (plain hyperlinks, using existing UrlInputList)
 
 ### Modify
-- `ClaimDetail.tsx`: wrap direct claim vote action with `checkVoteAction()` before submitting.
-- `EvidenceVoteButtons.tsx`: wrap evidence upvote/downvote actions with `checkVoteAction()` before submitting.
-- `useSessionGate.ts`: add `checkVoteAction()` alongside existing `checkAction()`.
+- Source discussion: replace heart likes with upvotes only (no downvotes) — change the interaction model from likes to thumbs-up upvote counts
+- Source status badges: remove background color and border styling — make them fully transparent/bare (icon + color only, no pill/badge container)
+- Rename "Major News Org" category label to "Major News Organization" everywhere it appears (TrustedSourcesPage, SourceDetailPage, SubmitClaimDialog, any source type constants)
+- Admin controls section on SourceDetailPage: hide the entire section (not just the controls) when not authenticated as admin
 
 ### Remove
-- Nothing removed.
+- Nothing removed
 
 ## Implementation Plan
-1. Add `checkVoteAction()` to `useSessionGate.ts`:
-   - Read `rebunked_vote_timestamps` from localStorage (array of ISO timestamp strings).
-   - Filter to only timestamps within the last 10 minutes.
-   - If filtered count >= 3, show toast with minutes until oldest vote expires, return false.
-   - If under limit, append current timestamp to array (trimmed to last 20 entries max), save to localStorage, return true.
-2. Update `useSessionGate` hook return to include `checkVoteAction`.
-3. In `ClaimDetail.tsx`, call `checkVoteAction()` before submitting a direct claim vote.
-4. In `EvidenceVoteButtons.tsx`, call `checkVoteAction()` before submitting an evidence vote.
+
+1. **Source category constants** — Add "Reference/encyclopedia" (2%) and "Archive" (1.5%) to the source type list/map wherever categories are defined. Rename "Major News Org" to "Major News Organization".
+2. **Source status badges** — In TrustedSourceBadgeList.tsx and anywhere source status badges are rendered, remove background/border classes so only the icon and its color remain (no pill, no bg, no border).
+3. **Admin controls section** — In SourceDetailPage.tsx, wrap the entire admin controls section in a conditional so it only renders when `isAdminAuthenticated` (or equivalent auth state) is true.
+4. **SourceDiscussion** — Replace like (heart) interactions with upvote-only. Change the vote button from a heart icon to a ThumbsUp icon. Remove any downvote/dislike UI. Update sorting to use upvote count.
+5. **SourceDiscussion image+link support** — Add ImageUploader (inline images) and UrlInputList (plain hyperlinks) to the comment submission form. Render uploaded images inline in comment body and URLs as anchor tags.

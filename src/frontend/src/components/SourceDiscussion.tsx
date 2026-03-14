@@ -1,3 +1,5 @@
+import { ImageUploader } from "@/components/ImageUploader";
+import { UrlInputList } from "@/components/UrlInputList";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -24,12 +26,13 @@ import {
   Clock,
   CornerDownRight,
   Flag,
-  Heart,
+  Link2,
   Loader2,
   MessageSquare,
   MoreHorizontal,
   Send,
   Share2,
+  ThumbsUp,
   X,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
@@ -62,6 +65,9 @@ function CommentForm({
   placeholder = "Write a comment…",
 }: CommentFormProps) {
   const [text, setText] = useState("");
+  const [imageUrls, setImageUrls] = useState<string[]>([]);
+  const [urls, setUrls] = useState<string[]>([]);
+  const [showLinks, setShowLinks] = useState(false);
   const [cooldownLeft, setCooldownLeft] = useState(0);
   const addComment = useAddSourceComment();
   const { checkAction } = useSessionGate();
@@ -99,6 +105,9 @@ function CommentForm({
         sessionId,
       });
       setText("");
+      setImageUrls([]);
+      setUrls([]);
+      setShowLinks(false);
       onSuccess?.();
     } catch (err) {
       const msg = err instanceof Error ? err.message : "";
@@ -124,6 +133,46 @@ function CommentForm({
         autoFocus={autoFocus}
         className="bg-card border-border font-body resize-none text-sm min-h-[4rem]"
       />
+      {/* Image uploader */}
+      <ImageUploader
+        onUploaded={setImageUrls}
+        maxFiles={3}
+        ocidPrefix={`${ocidPrefix}.image`}
+      />
+      {/* Uploaded image previews in comment body */}
+      {imageUrls.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {imageUrls.map((url) => (
+            <img
+              key={url}
+              src={url}
+              alt="Attachment"
+              className="h-16 w-16 object-cover rounded border border-border"
+            />
+          ))}
+        </div>
+      )}
+      {/* Link input toggle */}
+      <div>
+        <button
+          type="button"
+          onClick={() => setShowLinks((v) => !v)}
+          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground font-body transition-colors"
+        >
+          <Link2 className="h-3 w-3" />
+          {showLinks ? "Hide links" : "Add links"}
+        </button>
+        {showLinks && (
+          <div className="mt-2">
+            <UrlInputList
+              urls={urls}
+              onChange={setUrls}
+              ocidPrefix={`${ocidPrefix}.url`}
+              placeholder="https://example.com/source"
+            />
+          </div>
+        )}
+      </div>
       {cooldownLeft > 0 && (
         <div className="flex items-center gap-2 text-xs text-amber-400 font-body bg-amber-400/10 border border-amber-400/20 rounded-sm px-2 py-1.5">
           <Clock className="h-3 w-3 flex-shrink-0" />
@@ -189,6 +238,7 @@ interface CommentCardProps {
   onToggleReply: (commentId: bigint | null) => void;
   children?: React.ReactNode;
   likeCounts: Record<string, number>;
+  localAttachments?: { imageUrls: string[]; urls: string[] };
 }
 
 function CommentCard({
@@ -204,6 +254,7 @@ function CommentCard({
   onToggleReply,
   children,
   likeCounts,
+  localAttachments,
 }: CommentCardProps) {
   const isOwnComment = comment.sessionId === sessionId;
   const displayAuthor = isOwnComment ? username : comment.authorUsername;
@@ -260,8 +311,39 @@ function CommentCard({
         <p className="text-sm text-foreground font-body leading-relaxed mb-2">
           {comment.text}
         </p>
+        {/* Local attachments — images */}
+        {localAttachments && localAttachments.imageUrls.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 mb-2">
+            {localAttachments.imageUrls.map((url) => (
+              <img
+                key={url}
+                src={url}
+                alt="Attachment"
+                className="h-24 max-w-[200px] object-cover rounded border border-border"
+              />
+            ))}
+          </div>
+        )}
+        {/* Local attachments — links */}
+        {localAttachments &&
+          localAttachments.urls.filter(Boolean).length > 0 && (
+            <div className="flex flex-col gap-0.5 mb-2">
+              {localAttachments.urls.filter(Boolean).map((url) => (
+                <a
+                  key={url}
+                  href={url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-primary hover:underline font-body flex items-center gap-1 truncate"
+                >
+                  <Link2 className="h-2.5 w-2.5 flex-shrink-0" />
+                  {url}
+                </a>
+              ))}
+            </div>
+          )}
 
-        {/* Actions row: [Reply] [Heart + count] [spacer] [⋯] */}
+        {/* Actions row: [Reply] [ThumbsUp + count] [spacer] [⋯] */}
         <div className="flex items-center gap-1">
           {/* Reply button — only for top-level (depth 0) to allow 2-level threading */}
           {depth === 0 && (
@@ -282,7 +364,7 @@ function CommentCard({
             </button>
           )}
 
-          {/* Like button */}
+          {/* Upvote button */}
           <button
             type="button"
             data-ocid={`source_discussion.toggle.${index}`}
@@ -290,14 +372,14 @@ function CommentCard({
             disabled={likeComment.isPending}
             className={cn(
               "flex items-center gap-1 text-xs font-body rounded px-1.5 py-0.5 transition-colors",
-              "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-rose-400/60",
+              "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/60",
               "disabled:opacity-50 disabled:cursor-not-allowed",
               isLiked
-                ? "text-rose-500"
-                : "text-muted-foreground hover:text-rose-400",
+                ? "text-primary"
+                : "text-muted-foreground hover:text-primary",
             )}
           >
-            <Heart className={cn("h-3 w-3", isLiked && "fill-rose-500")} />
+            <ThumbsUp className={cn("h-3 w-3", isLiked && "fill-primary")} />
             {likeCount > 0 && <span>{likeCount}</span>}
           </button>
 

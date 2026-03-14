@@ -1,4 +1,4 @@
-import type { Claim, Evidence, TrustedSourceInfo } from "@/backend.d";
+import type { Claim, Evidence } from "@/backend.d";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,6 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   type Reply,
+  type TrustedSourceInfo,
   useAdminDeleteClaim,
   useAdminDeleteEvidence,
   useAdminDeleteReply,
@@ -646,6 +647,7 @@ function TrustedSourcesAdminTab({ password }: { password: string }) {
                     await adminOverride.mutateAsync({
                       sourceId: source.id,
                       approved: !source.adminOverride,
+                      note: "",
                       password,
                     });
                     toast.success(

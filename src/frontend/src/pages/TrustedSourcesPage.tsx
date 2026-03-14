@@ -1,4 +1,3 @@
-import type { TrustedSourceInfo } from "@/backend.d";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -19,7 +18,17 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useSuggestTrustedSource, useTrustedSources } from "@/hooks/useQueries";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
+  type TrustedSourceInfo,
+  useSuggestTrustedSource,
+  useTrustedSources,
+} from "@/hooks/useQueries";
 import { useSessionGate } from "@/hooks/useSessionGate";
 import { cn } from "@/lib/utils";
 import {
@@ -39,9 +48,11 @@ import { toast } from "sonner";
 const SOURCE_TYPES = [
   { value: "peer-reviewed", label: "Peer-Reviewed Study", bonus: "+5%" },
   { value: "government", label: "Government Data", bonus: "+4%" },
-  { value: "major-news", label: "Major News Org", bonus: "+3%" },
+  { value: "major-news", label: "Major News Organization", bonus: "+3%" },
   { value: "independent", label: "Independent Journalism", bonus: "+2%" },
+  { value: "reference", label: "Reference / Encyclopedia", bonus: "+2%" },
   { value: "blog", label: "Blog / Opinion", bonus: "+1%" },
+  { value: "archive", label: "Archive", bonus: "+1.5%" },
   { value: "social", label: "Social Media", bonus: "+0.5%" },
 ];
 
@@ -67,6 +78,10 @@ export function getSourceTypeBadgeClasses(type: string): string {
       return "bg-yellow-500/15 text-yellow-600 border-yellow-500/30";
     case "social":
       return "bg-zinc-500/15 text-zinc-500 border-zinc-500/30";
+    case "reference":
+      return "bg-sky-500/15 text-sky-600 border-sky-500/30";
+    case "archive":
+      return "bg-teal-500/15 text-teal-600 border-teal-500/30";
     default:
       return "bg-secondary text-muted-foreground border-border";
   }
@@ -169,10 +184,19 @@ function SourceCard({
               <ExternalLink className="h-3 w-3 opacity-60" />
             </a>
             {source.isTrusted && (
-              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold font-body bg-emerald-500/15 text-emerald-600 border border-emerald-500/30">
-                <ShieldCheck className="h-2.5 w-2.5" />
-                TRUSTED
-              </span>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="inline-flex items-center cursor-default text-emerald-600">
+                      <ShieldCheck className="h-3.5 w-3.5" />
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="text-xs max-w-[220px]">
+                    Trusted source — verified by the community with 60%+
+                    approval
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             )}
             {source.adminOverride && (
               <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-body bg-violet-500/15 text-violet-600 border border-violet-500/30">
@@ -250,7 +274,9 @@ function SourceCard({
         </span>
         <span className="text-[10px] font-body text-muted-foreground">
           Suggested by{" "}
-          <span className="font-mono">{source.suggestedBy.slice(0, 8)}</span>
+          <span className="font-mono">
+            {source.suggestedByUsername || "unknown"}
+          </span>
         </span>
       </div>
     </motion.div>
@@ -274,10 +300,13 @@ function SuggestSourceDialog({ sessionId }: { sessionId: string | null }) {
       return;
     }
     try {
+      const username =
+        localStorage.getItem("claim_verifier_username") ?? "anonymous";
       await suggestSource.mutateAsync({
         domain: cleanDomain,
         sourceType,
         sessionId,
+        username,
       });
       toast.success(`"${cleanDomain}" submitted for community review`);
       setOpen(false);

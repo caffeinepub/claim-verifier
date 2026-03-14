@@ -111,13 +111,23 @@ export const idlService = IDL.Service({
       [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
       [],
     ),
+  'adminFetchAboutBlurb' : IDL.Func(
+      [IDL.Nat, IDL.Text],
+      [IDL.Variant({ 'ok' : IDL.Text, 'err' : IDL.Text })],
+      [],
+    ),
   'adminOverrideSource' : IDL.Func(
-      [IDL.Nat, IDL.Bool, IDL.Text],
+      [IDL.Nat, IDL.Bool, IDL.Text, IDL.Text],
       [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
       [],
     ),
   'adminRemoveSource' : IDL.Func(
       [IDL.Nat, IDL.Text],
+      [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
+      [],
+    ),
+  'adminSetPinnedComment' : IDL.Func(
+      [IDL.Nat, IDL.Text, IDL.Text],
       [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
       [],
     ),
@@ -236,13 +246,16 @@ export const idlService = IDL.Service({
           IDL.Record({
             'id' : IDL.Nat,
             'upvotes' : IDL.Nat,
-            'suggestedBy' : IDL.Text,
+            'adminOverrideNote' : IDL.Text,
+            'aboutBlurb' : IDL.Text,
             'isTrusted' : IDL.Bool,
             'domain' : IDL.Text,
             'sourceType' : IDL.Text,
             'adminOverride' : IDL.Bool,
             'timestamp' : IDL.Int,
+            'pinnedAdminComment' : IDL.Text,
             'downvotes' : IDL.Nat,
+            'suggestedByUsername' : IDL.Text,
           })
         ),
       ],
@@ -305,7 +318,7 @@ export const idlService = IDL.Service({
     ),
   'submitVote' : IDL.Func([IDL.Nat, IDL.Text, IDL.Text], [], []),
   'suggestTrustedSource' : IDL.Func(
-      [IDL.Text, IDL.Text, IDL.Text],
+      [IDL.Text, IDL.Text, IDL.Text, IDL.Text],
       [IDL.Variant({ 'ok' : IDL.Nat, 'err' : IDL.Text })],
       [],
     ),
@@ -424,13 +437,23 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
         [],
       ),
+    'adminFetchAboutBlurb' : IDL.Func(
+        [IDL.Nat, IDL.Text],
+        [IDL.Variant({ 'ok' : IDL.Text, 'err' : IDL.Text })],
+        [],
+      ),
     'adminOverrideSource' : IDL.Func(
-        [IDL.Nat, IDL.Bool, IDL.Text],
+        [IDL.Nat, IDL.Bool, IDL.Text, IDL.Text],
         [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
         [],
       ),
     'adminRemoveSource' : IDL.Func(
         [IDL.Nat, IDL.Text],
+        [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
+        [],
+      ),
+    'adminSetPinnedComment' : IDL.Func(
+        [IDL.Nat, IDL.Text, IDL.Text],
         [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
         [],
       ),
@@ -549,13 +572,16 @@ export const idlFactory = ({ IDL }) => {
             IDL.Record({
               'id' : IDL.Nat,
               'upvotes' : IDL.Nat,
-              'suggestedBy' : IDL.Text,
+              'adminOverrideNote' : IDL.Text,
+              'aboutBlurb' : IDL.Text,
               'isTrusted' : IDL.Bool,
               'domain' : IDL.Text,
               'sourceType' : IDL.Text,
               'adminOverride' : IDL.Bool,
               'timestamp' : IDL.Int,
+              'pinnedAdminComment' : IDL.Text,
               'downvotes' : IDL.Nat,
+              'suggestedByUsername' : IDL.Text,
             })
           ),
         ],
@@ -618,7 +644,7 @@ export const idlFactory = ({ IDL }) => {
       ),
     'submitVote' : IDL.Func([IDL.Nat, IDL.Text, IDL.Text], [], []),
     'suggestTrustedSource' : IDL.Func(
-        [IDL.Text, IDL.Text, IDL.Text],
+        [IDL.Text, IDL.Text, IDL.Text, IDL.Text],
         [IDL.Variant({ 'ok' : IDL.Nat, 'err' : IDL.Text })],
         [],
       ),

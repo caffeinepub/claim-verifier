@@ -101,13 +101,23 @@ export interface _SERVICE {
     { 'ok' : null } |
       { 'err' : string }
   >,
+  'adminFetchAboutBlurb' : ActorMethod<
+    [bigint, string],
+    { 'ok' : string } |
+      { 'err' : string }
+  >,
   'adminOverrideSource' : ActorMethod<
-    [bigint, boolean, string],
+    [bigint, boolean, string, string],
     { 'ok' : null } |
       { 'err' : string }
   >,
   'adminRemoveSource' : ActorMethod<
     [bigint, string],
+    { 'ok' : null } |
+      { 'err' : string }
+  >,
+  'adminSetPinnedComment' : ActorMethod<
+    [bigint, string, string],
     { 'ok' : null } |
       { 'err' : string }
   >,
@@ -167,13 +177,16 @@ export interface _SERVICE {
       {
         'id' : bigint,
         'upvotes' : bigint,
-        'suggestedBy' : string,
+        'adminOverrideNote' : string,
+        'aboutBlurb' : string,
         'isTrusted' : boolean,
         'domain' : string,
         'sourceType' : string,
         'adminOverride' : boolean,
         'timestamp' : bigint,
+        'pinnedAdminComment' : string,
         'downvotes' : bigint,
+        'suggestedByUsername' : string,
       }
     >
   >,
@@ -220,7 +233,7 @@ export interface _SERVICE {
   >,
   'submitVote' : ActorMethod<[bigint, string, string], undefined>,
   'suggestTrustedSource' : ActorMethod<
-    [string, string, string],
+    [string, string, string, string],
     { 'ok' : bigint } |
       { 'err' : string }
   >,

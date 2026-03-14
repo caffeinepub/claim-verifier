@@ -6,9 +6,9 @@ import Text "mo:core/Text";
 import Char "mo:core/Char";
 import Float "mo:core/Float";
 import Runtime "mo:core/Runtime";
-import MixinStorage "blob-storage/Mixin";
 import Iter "mo:core/Iter";
 
+import MixinStorage "blob-storage/Mixin";
 
 
 actor {
@@ -82,9 +82,12 @@ actor {
     id : Nat;
     domain : Text;
     sourceType : Text;
-    suggestedBy : Text;
+    suggestedByUsername : Text;
     timestamp : Int;
     adminOverride : Bool;
+    aboutBlurb : Text;
+    pinnedAdminComment : Text;
+    adminOverrideNote : Text;
   };
 
   type SourceVote = {
@@ -851,7 +854,7 @@ actor {
     result.toArray();
   };
 
-  public shared ({ caller }) func suggestTrustedSource(domain : Text, sourceType : Text, sessionId : Text) : async {
+  public shared ({ caller }) func suggestTrustedSource(domain : Text, sourceType : Text, sessionId : Text, username : Text) : async {
     #ok : Nat;
     #err : Text;
   } {
@@ -866,9 +869,12 @@ actor {
       id = sourceCount;
       domain = cleanDomain;
       sourceType;
-      suggestedBy = sessionId;
+      suggestedByUsername = username;
       timestamp = Time.now();
       adminOverride = false;
+      aboutBlurb = "";
+      pinnedAdminComment = "";
+      adminOverrideNote = "";
     };
     let list = List.fromArray<TrustedSource>(trustedSourcesArray);
     list.add(src);
@@ -880,23 +886,29 @@ actor {
     id : Nat;
     domain : Text;
     sourceType : Text;
-    suggestedBy : Text;
+    suggestedByUsername : Text;
     timestamp : Int;
     adminOverride : Bool;
     upvotes : Nat;
     downvotes : Nat;
     isTrusted : Bool;
+    aboutBlurb : Text;
+    pinnedAdminComment : Text;
+    adminOverrideNote : Text;
   }] {
     let result = List.empty<{
       id : Nat;
       domain : Text;
       sourceType : Text;
-      suggestedBy : Text;
+      suggestedByUsername : Text;
       timestamp : Int;
       adminOverride : Bool;
       upvotes : Nat;
       downvotes : Nat;
       isTrusted : Bool;
+      aboutBlurb : Text;
+      pinnedAdminComment : Text;
+      adminOverrideNote : Text;
     }>();
     for (src in trustedSourcesArray.values()) {
       var upvotes : Nat = 0;
@@ -919,12 +931,15 @@ actor {
         id = src.id;
         domain = src.domain;
         sourceType = src.sourceType;
-        suggestedBy = src.suggestedBy;
+        suggestedByUsername = src.suggestedByUsername;
         timestamp = src.timestamp;
         adminOverride = src.adminOverride;
         upvotes;
         downvotes;
         isTrusted;
+        aboutBlurb = src.aboutBlurb;
+        pinnedAdminComment = src.pinnedAdminComment;
+        adminOverrideNote = src.adminOverrideNote;
       });
     };
     result.toArray();
@@ -987,17 +1002,82 @@ actor {
     #ok;
   };
 
-  public shared ({ caller }) func adminOverrideSource(sourceId : Nat, approved : Bool, password : Text) : async {
+  public shared ({ caller }) func adminOverrideSource(sourceId : Nat, approved : Bool, note : Text, password : Text) : async {
     #ok;
     #err : Text;
   } {
     if (password != ADMIN_PASSWORD) { return #err("Unauthorized") };
     trustedSourcesArray := trustedSourcesArray.map(func(s : TrustedSource) : TrustedSource {
       if (s.id == sourceId) {
-        { id = s.id; domain = s.domain; sourceType = s.sourceType; suggestedBy = s.suggestedBy; timestamp = s.timestamp; adminOverride = approved };
+        {
+          id = s.id;
+          domain = s.domain;
+          sourceType = s.sourceType;
+          suggestedByUsername = s.suggestedByUsername;
+          timestamp = s.timestamp;
+          adminOverride = approved;
+          aboutBlurb = s.aboutBlurb;
+          pinnedAdminComment = s.pinnedAdminComment;
+          adminOverrideNote = note;
+        };
       } else { s };
     });
     #ok;
+  };
+
+  public shared ({ caller }) func adminSetPinnedComment(sourceId : Nat, comment : Text, password : Text) : async {
+    #ok;
+    #err : Text;
+  } {
+    if (password != ADMIN_PASSWORD) { return #err("Unauthorized") };
+    trustedSourcesArray := trustedSourcesArray.map(func(s : TrustedSource) : TrustedSource {
+      if (s.id == sourceId) {
+        {
+          id = s.id;
+          domain = s.domain;
+          sourceType = s.sourceType;
+          suggestedByUsername = s.suggestedByUsername;
+          timestamp = s.timestamp;
+          adminOverride = s.adminOverride;
+          aboutBlurb = s.aboutBlurb;
+          pinnedAdminComment = comment;
+          adminOverrideNote = s.adminOverrideNote;
+        };
+      } else { s };
+    });
+    #ok;
+  };
+
+  public shared ({ caller }) func adminFetchAboutBlurb(sourceId : Nat, password : Text) : async {
+    #ok : Text;
+    #err : Text;
+  } {
+    if (password != ADMIN_PASSWORD) { return #err("Unauthorized") };
+    switch (trustedSourcesArray.find(func(s : TrustedSource) : Bool { s.id == sourceId })) {
+      case (null) { return #err("Source not found") };
+      case (?source) {
+        let url = "https://en.wikipedia.org/api/rest_v1/page/summary/" # source.domain;
+        let simulatedBlurb = "Simulated blurb for (url): " # url;
+        trustedSourcesArray := trustedSourcesArray.map(
+          func(s : TrustedSource) : TrustedSource {
+            if (s.id == sourceId) {
+              {
+                id = s.id;
+                domain = s.domain;
+                sourceType = s.sourceType;
+                suggestedByUsername = s.suggestedByUsername;
+                timestamp = s.timestamp;
+                adminOverride = s.adminOverride;
+                aboutBlurb = simulatedBlurb;
+                pinnedAdminComment = s.pinnedAdminComment;
+                adminOverrideNote = s.adminOverrideNote;
+              };
+            } else { s };
+          }
+        );
+        #ok(simulatedBlurb);
+      };
+    };
   };
 
   // Check if a URL matches a trusted source (for frontend badge display)

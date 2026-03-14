@@ -1,4 +1,4 @@
-import type { Claim, Evidence, TrustedSourceInfo } from "@/backend.d";
+import type { Claim, Evidence } from "@/backend.d";
 import { SourceDiscussion } from "@/components/SourceDiscussion";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -10,14 +10,17 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useActor } from "@/hooks/useActor";
+import type { TrustedSourceInfo } from "@/hooks/useQueries";
 import {
   useAdminOverrideSource,
   useAdminRemoveSource,
+  useAdminSetPinnedComment,
   useAllClaims,
   useEnhancedVoteTally,
   useSessionVoteForSource,
   useTrustedSources,
   useVoteOnSource,
+  useWikipediaBlurb,
 } from "@/hooks/useQueries";
 import { useSessionGate } from "@/hooks/useSessionGate";
 import { cn } from "@/lib/utils";
@@ -32,15 +35,20 @@ import {
   AlertTriangle,
   ArrowLeft,
   BarChart2,
+  BookOpen,
   ChevronDown,
   ChevronUp,
+  Clock,
   ExternalLink,
   FileQuestion,
   Flag,
   Globe,
   Loader2,
+  Pin,
   Shield,
   ShieldCheck,
+  ThumbsDown,
+  ThumbsUp,
   Users,
 } from "lucide-react";
 import { motion } from "motion/react";
@@ -483,10 +491,13 @@ function AdminControls({ source }: { source: TrustedSourceInfo }) {
   const [password, setPassword] = useState("");
   const [authenticated, setAuthenticated] = useState(false);
   const [confirmRemove, setConfirmRemove] = useState(false);
-
+  const [overrideNote, setOverrideNote] = useState("");
+  const [pinnedComment, setPinnedComment] = useState(
+    source.pinnedAdminComment ?? "",
+  );
   const overrideSource = useAdminOverrideSource();
   const removeSource = useAdminRemoveSource();
-
+  const setPinnedCommentMutation = useAdminSetPinnedComment();
   function tryAuth() {
     if (password === ADMIN_PASSWORD) {
       setAuthenticated(true);
@@ -500,14 +511,16 @@ function AdminControls({ source }: { source: TrustedSourceInfo }) {
     try {
       await overrideSource.mutateAsync({
         sourceId: source.id,
-        password: ADMIN_PASSWORD,
         approved: !source.isTrusted,
+        note: overrideNote,
+        password: ADMIN_PASSWORD,
       });
       toast.success(
         source.isTrusted
           ? "Source marked as not trusted"
           : "Source marked as trusted",
       );
+      setOverrideNote("");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Override failed");
     }
@@ -530,22 +543,56 @@ function AdminControls({ source }: { source: TrustedSourceInfo }) {
     }
   }
 
+  async function handleSetPinnedComment() {
+    try {
+      await setPinnedCommentMutation.mutateAsync({
+        sourceId: source.id,
+        comment: pinnedComment,
+        password: ADMIN_PASSWORD,
+      });
+      toast.success(
+        pinnedComment.trim()
+          ? "Pinned comment updated"
+          : "Pinned comment cleared",
+      );
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to set pinned comment",
+      );
+    }
+  }
+
   return (
     <div className="mt-8 border border-border rounded-sm">
-      <button
-        type="button"
-        data-ocid="source_detail.toggle"
-        onClick={() => setIsOpen(!isOpen)}
-        className="w-full flex items-center justify-between p-3 text-left hover:bg-secondary/60 transition-colors"
-      >
-        <span className="text-xs font-body font-medium text-muted-foreground uppercase tracking-wider">
-          Admin Controls
-        </span>
-        <Shield className="h-3.5 w-3.5 text-muted-foreground" />
-      </button>
+      {/* Hidden admin login trigger — triple-click the shield or Ctrl+Shift+A */}
+      {!authenticated && (
+        <button
+          type="button"
+          data-ocid="source_detail.toggle"
+          onClick={() => setIsOpen(!isOpen)}
+          aria-label="Admin login"
+          className="w-full flex items-center justify-center py-1.5 opacity-0 hover:opacity-30 transition-opacity duration-300"
+          title="Admin"
+        >
+          <Shield className="h-3 w-3 text-muted-foreground" />
+        </button>
+      )}
+      {authenticated && (
+        <button
+          type="button"
+          data-ocid="source_detail.toggle"
+          onClick={() => setIsOpen(!isOpen)}
+          className="w-full flex items-center justify-between p-3 text-left hover:bg-secondary/60 transition-colors"
+        >
+          <span className="text-xs font-body font-medium text-muted-foreground uppercase tracking-wider">
+            Admin Controls
+          </span>
+          <Shield className="h-3.5 w-3.5 text-muted-foreground" />
+        </button>
+      )}
 
       {isOpen && (
-        <div className="p-4 border-t border-border space-y-4">
+        <div className="p-4 border-t border-border space-y-5">
           {!authenticated ? (
             <div className="space-y-2">
               <p className="text-xs text-muted-foreground font-body">
@@ -572,55 +619,113 @@ function AdminControls({ source }: { source: TrustedSourceInfo }) {
               </div>
             </div>
           ) : (
-            <div className="flex flex-wrap gap-2">
-              <Button
-                size="sm"
-                data-ocid="source_detail.secondary_button"
-                onClick={handleOverride}
-                disabled={overrideSource.isPending}
-                className="text-xs font-body"
-                variant="outline"
-              >
-                {overrideSource.isPending ? (
-                  <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                ) : null}
-                {source.isTrusted ? "Revoke Trust" : "Override Trust"}
-              </Button>
-              {!confirmRemove ? (
-                <Button
-                  size="sm"
-                  data-ocid="source_detail.delete_button"
-                  onClick={() => setConfirmRemove(true)}
-                  variant="outline"
-                  className="text-xs font-body border-destructive/40 text-destructive hover:bg-destructive/10"
-                >
-                  Remove Source
-                </Button>
-              ) : (
-                <div className="flex gap-2">
+            <div className="space-y-5">
+              {/* Override trust + note */}
+              <div className="space-y-2">
+                <p className="text-xs font-body font-medium text-muted-foreground uppercase tracking-wider">
+                  Override Trust
+                </p>
+                <input
+                  type="text"
+                  data-ocid="source_detail.input"
+                  placeholder="Override note (optional, e.g. 'Known misinformation outlet')"
+                  value={overrideNote}
+                  onChange={(e) => setOverrideNote(e.target.value)}
+                  className="w-full h-8 px-3 text-xs bg-secondary border border-border rounded font-body focus:outline-none focus:ring-1 focus:ring-primary/40"
+                />
+                <div className="flex flex-wrap gap-2">
                   <Button
                     size="sm"
-                    data-ocid="source_detail.confirm_button"
-                    onClick={handleRemove}
-                    disabled={removeSource.isPending}
-                    className="text-xs font-body bg-destructive text-white hover:bg-destructive/90"
+                    data-ocid="source_detail.secondary_button"
+                    onClick={handleOverride}
+                    disabled={overrideSource.isPending}
+                    className="text-xs font-body"
+                    variant="outline"
                   >
-                    {removeSource.isPending ? (
+                    {overrideSource.isPending ? (
                       <Loader2 className="mr-1 h-3 w-3 animate-spin" />
                     ) : null}
-                    Confirm Remove
+                    {source.isTrusted ? "Revoke Trust" : "Override Trust"}
                   </Button>
-                  <Button
-                    size="sm"
-                    data-ocid="source_detail.cancel_button"
-                    onClick={() => setConfirmRemove(false)}
-                    variant="outline"
-                    className="text-xs font-body"
-                  >
-                    Cancel
-                  </Button>
+                  {!confirmRemove ? (
+                    <Button
+                      size="sm"
+                      data-ocid="source_detail.delete_button"
+                      onClick={() => setConfirmRemove(true)}
+                      variant="outline"
+                      className="text-xs font-body border-destructive/40 text-destructive hover:bg-destructive/10"
+                    >
+                      Remove Source
+                    </Button>
+                  ) : (
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        data-ocid="source_detail.confirm_button"
+                        onClick={handleRemove}
+                        disabled={removeSource.isPending}
+                        className="text-xs font-body bg-destructive text-white hover:bg-destructive/90"
+                      >
+                        {removeSource.isPending ? (
+                          <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                        ) : null}
+                        Confirm Remove
+                      </Button>
+                      <Button
+                        size="sm"
+                        data-ocid="source_detail.cancel_button"
+                        onClick={() => setConfirmRemove(false)}
+                        variant="outline"
+                        className="text-xs font-body"
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  )}
                 </div>
-              )}
+              </div>
+
+              {/* Pinned comment */}
+              <div className="space-y-2">
+                <p className="text-xs font-body font-medium text-muted-foreground uppercase tracking-wider">
+                  Pinned Admin Comment
+                </p>
+                <textarea
+                  data-ocid="source_detail.textarea"
+                  placeholder="Enter a pinned comment visible to all users (leave empty to clear)"
+                  value={pinnedComment}
+                  onChange={(e) => setPinnedComment(e.target.value)}
+                  rows={3}
+                  className="w-full px-3 py-2 text-xs bg-secondary border border-border rounded font-body focus:outline-none focus:ring-1 focus:ring-primary/40 resize-none"
+                />
+                <Button
+                  size="sm"
+                  data-ocid="source_detail.save_button"
+                  onClick={handleSetPinnedComment}
+                  disabled={setPinnedCommentMutation.isPending}
+                  className="text-xs font-body"
+                  variant="outline"
+                >
+                  {setPinnedCommentMutation.isPending ? (
+                    <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                  ) : (
+                    <Pin className="mr-1 h-3 w-3" />
+                  )}
+                  {pinnedComment.trim()
+                    ? "Update Pinned Comment"
+                    : "Clear Pinned Comment"}
+                </Button>
+              </div>
+
+              {/* About Blurb */}
+              <div className="space-y-2">
+                <p className="text-xs font-body font-medium text-muted-foreground uppercase tracking-wider">
+                  About Blurb
+                </p>
+                <p className="text-xs font-body text-muted-foreground">
+                  About blurb is auto-fetched from Wikipedia on page load.
+                </p>
+              </div>
             </div>
           )}
         </div>
@@ -671,6 +776,11 @@ export function SourceDetailPage({
   const { data: reportCount } = useSourceReportCount(source?.id ?? BigInt(0));
   const isFlagged = Number(reportCount ?? 0n) >= 3;
 
+  // Auto-fetched Wikipedia blurb
+  const { data: wikiBlurb, isLoading: wikiLoading } = useWikipediaBlurb(
+    source?.domain ?? null,
+  );
+
   return (
     <TooltipProvider>
       <motion.div
@@ -683,9 +793,9 @@ export function SourceDetailPage({
         {/* Back button */}
         <Button
           variant="ghost"
-          data-ocid="source_detail.link"
           onClick={onBack}
-          className="-ml-2 mb-6 font-body text-muted-foreground hover:text-foreground gap-2"
+          data-ocid="source_detail.link"
+          className="-ml-2 font-body text-muted-foreground hover:text-foreground gap-2 mb-6"
         >
           <ArrowLeft className="h-4 w-4" />
           Back to Sources
@@ -745,15 +855,35 @@ export function SourceDetailPage({
                       <ExternalLink className="h-4 w-4 opacity-50" />
                     </a>
                     {source.isTrusted ? (
-                      <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded text-xs font-bold font-body bg-emerald-500/15 text-emerald-600 border border-emerald-500/30">
-                        <ShieldCheck className="h-3 w-3" />
-                        TRUSTED
-                      </span>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="inline-flex items-center cursor-default text-emerald-600">
+                            <ShieldCheck className="h-3.5 w-3.5" />
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent
+                          side="top"
+                          className="text-xs max-w-[220px]"
+                        >
+                          Trusted source — verified by the community with 60%+
+                          approval
+                        </TooltipContent>
+                      </Tooltip>
                     ) : (
-                      <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded text-xs font-bold font-body bg-amber-500/15 text-amber-600 border border-amber-500/30">
-                        <Shield className="h-3 w-3" />
-                        PENDING REVIEW
-                      </span>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="inline-flex items-center cursor-default text-amber-600">
+                            <Clock className="h-3.5 w-3.5" />
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent
+                          side="top"
+                          className="text-xs max-w-[240px]"
+                        >
+                          Pending Review — not yet trusted. Needs 25 votes with
+                          at least 60% approval to become trusted
+                        </TooltipContent>
+                      </Tooltip>
                     )}
                     {source.adminOverride && (
                       <span className="inline-flex items-center px-2 py-1 rounded text-xs font-body bg-violet-500/15 text-violet-600 border border-violet-500/30">
@@ -786,19 +916,21 @@ export function SourceDetailPage({
                   </div>
                 </div>
 
-                <div className="flex flex-col items-end gap-1.5 text-xs text-muted-foreground font-body">
-                  <div className="flex items-center gap-1.5">
-                    <Users className="h-3.5 w-3.5" />
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-body">
+                  <Users className="h-3.5 w-3.5" />
+                  <span>
                     Suggested by{" "}
                     <span className="font-mono">
-                      {source.suggestedBy.slice(0, 8)}
+                      {source.suggestedByUsername ||
+                        source.suggestedByUsername ||
+                        "unknown"}
                     </span>
                     {suggestedRelative && suggestedFull && (
                       <>
-                        <span className="mx-0.5">·</span>
+                        {" · "}
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <span className="cursor-default text-muted-foreground/70">
+                            <span className="cursor-default">
                               {suggestedRelative}
                             </span>
                           </TooltipTrigger>
@@ -808,8 +940,19 @@ export function SourceDetailPage({
                         </Tooltip>
                       </>
                     )}
-                  </div>
+                  </span>
                 </div>
+
+                {/* Admin override note */}
+                {source.adminOverrideNote?.trim() && (
+                  <div className="flex items-start gap-2 mt-2 px-3 py-2 rounded-sm bg-violet-50 border border-violet-200 text-violet-700">
+                    <Shield className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" />
+                    <p className="text-xs font-body">
+                      <span className="font-semibold">Admin note:</span>{" "}
+                      {source.adminOverrideNote}
+                    </p>
+                  </div>
+                )}
               </div>
 
               {/* Narrowly trusted indicator */}
@@ -825,6 +968,48 @@ export function SourceDetailPage({
                   </p>
                 </div>
               )}
+
+              {/* Trust score breakdown */}
+              <div className="grid grid-cols-3 gap-3 mb-5">
+                <div className="p-3 bg-secondary rounded-sm text-center">
+                  <div className="flex items-center justify-center gap-1 mb-0.5">
+                    <ThumbsUp className="h-3 w-3 text-emerald-600" />
+                    <span className="text-xs font-body text-muted-foreground">
+                      Upvotes
+                    </span>
+                  </div>
+                  <span className="text-xl font-bold font-mono text-emerald-600">
+                    {upvotes}
+                  </span>
+                </div>
+                <div className="p-3 bg-secondary rounded-sm text-center">
+                  <div className="flex items-center justify-center gap-1 mb-0.5">
+                    <ThumbsDown className="h-3 w-3 text-destructive" />
+                    <span className="text-xs font-body text-muted-foreground">
+                      Downvotes
+                    </span>
+                  </div>
+                  <span className="text-xl font-bold font-mono text-destructive">
+                    {downvotes}
+                  </span>
+                </div>
+                <div className="p-3 bg-secondary rounded-sm text-center">
+                  <div className="flex items-center justify-center gap-1 mb-0.5">
+                    <ShieldCheck className="h-3 w-3 text-primary" />
+                    <span className="text-xs font-body text-muted-foreground">
+                      Approval
+                    </span>
+                  </div>
+                  <span
+                    className={cn(
+                      "text-xl font-bold font-mono",
+                      upvotePct >= 60 ? "text-emerald-600" : "text-amber-600",
+                    )}
+                  >
+                    {upvotePct}%
+                  </span>
+                </div>
+              </div>
 
               {/* Progress bars */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
@@ -874,6 +1059,34 @@ export function SourceDetailPage({
               </div>
             </div>
 
+            {/* ── About Blurb ──────────────────────────────────── */}
+            {wikiLoading ? (
+              <section>
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="w-1 h-5 bg-primary rounded-full" />
+                  <h2 className="font-display text-lg font-bold text-foreground">
+                    About
+                  </h2>
+                </div>
+                <Skeleton className="h-16 w-full rounded-sm" />
+              </section>
+            ) : wikiBlurb ? (
+              <section>
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="w-1 h-5 bg-primary rounded-full" />
+                  <h2 className="font-display text-lg font-bold text-foreground">
+                    About
+                  </h2>
+                </div>
+                <div className="flex gap-3 p-4 bg-secondary border border-border rounded-sm">
+                  <BookOpen className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+                  <p className="text-sm font-body text-foreground leading-relaxed">
+                    {wikiBlurb}
+                  </p>
+                </div>
+              </section>
+            ) : null}
+
             {/* ── Claims Citing This Source ─────────────────────── */}
             <section>
               <div className="flex items-center gap-2 mb-4">
@@ -907,6 +1120,22 @@ export function SourceDetailPage({
                   Discussion
                 </h2>
               </div>
+              {/* Pinned admin comment */}
+              {source.pinnedAdminComment?.trim() && (
+                <div className="flex gap-3 p-3 mb-4 bg-violet-50 border border-violet-200 rounded-sm">
+                  <Pin className="h-4 w-4 text-violet-600 flex-shrink-0 mt-0.5" />
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <span className="text-[10px] font-bold font-body uppercase tracking-wider text-violet-600">
+                        Pinned Admin Note
+                      </span>
+                    </div>
+                    <p className="text-sm font-body text-violet-800 leading-relaxed">
+                      {source.pinnedAdminComment}
+                    </p>
+                  </div>
+                </div>
+              )}
               {sessionId ? (
                 <SourceDiscussion sourceId={source.id} sessionId={sessionId} />
               ) : (

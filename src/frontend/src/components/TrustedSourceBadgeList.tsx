@@ -1,5 +1,10 @@
-import type { TrustedSourceInfo } from "@/backend.d";
-import { useTrustedSources } from "@/hooks/useQueries";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { type TrustedSourceInfo, useTrustedSources } from "@/hooks/useQueries";
 import { cn } from "@/lib/utils";
 import {
   getSourceTypeBadgeClasses,
@@ -7,6 +12,7 @@ import {
   getSourceTypeLabel,
 } from "@/pages/TrustedSourcesPage";
 import { ShieldCheck } from "lucide-react";
+import { useState } from "react";
 
 function extractDomain(url: string): string {
   try {

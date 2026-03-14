@@ -36,17 +36,6 @@ export interface SourceComment {
     timestamp: bigint;
     sessionId: string;
 }
-export interface TrustedSourceInfo {
-    id: bigint;
-    domain: string;
-    sourceType: string;
-    suggestedBy: string;
-    timestamp: bigint;
-    adminOverride: boolean;
-    upvotes: bigint;
-    downvotes: bigint;
-    isTrusted: boolean;
-}
 export interface Evidence {
     id: bigint;
     imageUrls: Array<string>;
@@ -93,7 +82,14 @@ export interface backendInterface {
         __kind__: "err";
         err: string;
     }>;
-    adminOverrideSource(sourceId: bigint, approved: boolean, password: string): Promise<{
+    adminFetchAboutBlurb(sourceId: bigint, password: string): Promise<{
+        __kind__: "ok";
+        ok: string;
+    } | {
+        __kind__: "err";
+        err: string;
+    }>;
+    adminOverrideSource(sourceId: bigint, approved: boolean, note: string, password: string): Promise<{
         __kind__: "ok";
         ok: null;
     } | {
@@ -101,6 +97,13 @@ export interface backendInterface {
         err: string;
     }>;
     adminRemoveSource(sourceId: bigint, password: string): Promise<{
+        __kind__: "ok";
+        ok: null;
+    } | {
+        __kind__: "err";
+        err: string;
+    }>;
+    adminSetPinnedComment(sourceId: bigint, comment: string, password: string): Promise<{
         __kind__: "ok";
         ok: null;
     } | {
@@ -160,13 +163,16 @@ export interface backendInterface {
     getTrustedSources(): Promise<Array<{
         id: bigint;
         upvotes: bigint;
-        suggestedBy: string;
+        adminOverrideNote: string;
+        aboutBlurb: string;
         isTrusted: boolean;
         domain: string;
         sourceType: string;
         adminOverride: boolean;
         timestamp: bigint;
+        pinnedAdminComment: string;
         downvotes: bigint;
+        suggestedByUsername: string;
     }>>;
     getVoteTally(claimId: bigint): Promise<{
         trueCount: bigint;
@@ -225,7 +231,7 @@ export interface backendInterface {
         err: string;
     }>;
     submitVote(claimId: bigint, sessionId: string, verdict: string): Promise<void>;
-    suggestTrustedSource(domain: string, sourceType: string, sessionId: string): Promise<{
+    suggestTrustedSource(domain: string, sourceType: string, sessionId: string, username: string): Promise<{
         __kind__: "ok";
         ok: bigint;
     } | {
