@@ -32,7 +32,6 @@ import {
 import { useSessionGate } from "@/hooks/useSessionGate";
 import { cn } from "@/lib/utils";
 import {
-  Award,
   ExternalLink,
   Globe,
   Loader2,
@@ -456,34 +455,22 @@ export function TrustedSourcesPage({
         </div>
       </div>
 
-      {/* Stats bar */}
+      {/* Stats summary — Option C: inline prose sentence */}
       {!isLoading && sources && sources.length > 0 && (
-        <div className="flex items-center gap-6 mb-6 p-3 bg-secondary border border-border rounded-sm">
-          <div className="flex items-center gap-2">
-            <ShieldCheck className="h-4 w-4 text-emerald-500" />
-            <span className="text-sm font-body">
-              <span className="font-bold text-foreground">
-                {trustedSources.length}
-              </span>{" "}
-              <span className="text-muted-foreground">trusted</span>
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <Shield className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm font-body">
-              <span className="font-bold text-foreground">
-                {pendingSources.length}
-              </span>{" "}
-              <span className="text-muted-foreground">pending review</span>
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <Award className="h-4 w-4 text-primary" />
-            <span className="text-sm font-body text-muted-foreground">
-              Upvote good sources to help them reach trusted status
-            </span>
-          </div>
-        </div>
+        <p className="mb-6 text-sm font-body text-muted-foreground leading-relaxed">
+          There are{" "}
+          <span className="font-semibold text-primary tabular-nums">
+            {trustedSources.length} trusted
+          </span>{" "}
+          and{" "}
+          <span className="font-semibold text-foreground tabular-nums">
+            {pendingSources.length} pending
+          </span>{" "}
+          sources.{" "}
+          <span className="text-muted-foreground/70">
+            Upvote good sources to help them reach trusted status.
+          </span>
+        </p>
       )}
 
       {isLoading ? (

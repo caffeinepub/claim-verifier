@@ -562,21 +562,20 @@ function AdminControls({ source }: { source: TrustedSourceInfo }) {
     }
   }
 
+  // Hidden trigger when not authenticated and not open
+  if (!authenticated && !isOpen) {
+    return (
+      <button
+        type="button"
+        onClick={() => setIsOpen(true)}
+        className="opacity-0 w-0 h-0 overflow-hidden absolute"
+        aria-label="Admin"
+      />
+    );
+  }
+
   return (
     <div className="mt-8 border border-border rounded-sm">
-      {/* Hidden admin login trigger — triple-click the shield or Ctrl+Shift+A */}
-      {!authenticated && (
-        <button
-          type="button"
-          data-ocid="source_detail.toggle"
-          onClick={() => setIsOpen(!isOpen)}
-          aria-label="Admin login"
-          className="w-full flex items-center justify-center py-1.5 opacity-0 hover:opacity-30 transition-opacity duration-300"
-          title="Admin"
-        >
-          <Shield className="h-3 w-3 text-muted-foreground" />
-        </button>
-      )}
       {authenticated && (
         <button
           type="button"

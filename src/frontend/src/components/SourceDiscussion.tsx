@@ -23,6 +23,7 @@ import { useSessionGate } from "@/hooks/useSessionGate";
 import { cn } from "@/lib/utils";
 import { formatRelativeTime } from "@/utils/time";
 import {
+  ChevronUp,
   Clock,
   CornerDownRight,
   Flag,
@@ -32,12 +33,46 @@ import {
   MoreHorizontal,
   Send,
   Share2,
-  ThumbsUp,
   X,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+
+// ── Attachment helpers ────────────────────────────────────────────────────────
+
+const ATTACHMENT_SEP = "\u0000";
+
+function encodeAttachments(
+  text: string,
+  imageUrls: string[],
+  urls: string[],
+): string {
+  const filteredUrls = urls.filter(Boolean);
+  if (imageUrls.length === 0 && filteredUrls.length === 0) return text;
+  return (
+    text + ATTACHMENT_SEP + JSON.stringify({ imageUrls, urls: filteredUrls })
+  );
+}
+
+function decodeAttachments(raw: string): {
+  text: string;
+  imageUrls: string[];
+  urls: string[];
+} {
+  const idx = raw.indexOf(ATTACHMENT_SEP);
+  if (idx === -1) return { text: raw, imageUrls: [], urls: [] };
+  try {
+    const parsed = JSON.parse(raw.slice(idx + 1));
+    return {
+      text: raw.slice(0, idx),
+      imageUrls: parsed.imageUrls ?? [],
+      urls: parsed.urls ?? [],
+    };
+  } catch {
+    return { text: raw, imageUrls: [], urls: [] };
+  }
+}
 
 // ── Comment Form ──────────────────────────────────────────────────────────────
 
@@ -62,7 +97,7 @@ function CommentForm({
   onSuccess,
   autoFocus = false,
   ocidPrefix,
-  placeholder = "Write a comment…",
+  placeholder = "Write a comment\u2026",
 }: CommentFormProps) {
   const [text, setText] = useState("");
   const [imageUrls, setImageUrls] = useState<string[]>([]);
@@ -100,7 +135,7 @@ function CommentForm({
       await addComment.mutateAsync({
         sourceId,
         parentCommentId,
-        text: text.trim(),
+        text: encodeAttachments(text.trim(), imageUrls, urls),
         authorUsername,
         sessionId,
       });
@@ -238,7 +273,6 @@ interface CommentCardProps {
   onToggleReply: (commentId: bigint | null) => void;
   children?: React.ReactNode;
   likeCounts: Record<string, number>;
-  localAttachments?: { imageUrls: string[]; urls: string[] };
 }
 
 function CommentCard({
@@ -254,8 +288,13 @@ function CommentCard({
   onToggleReply,
   children,
   likeCounts,
-  localAttachments,
 }: CommentCardProps) {
+  const {
+    text: displayText,
+    imageUrls: attachedImages,
+    urls: attachedUrls,
+  } = decodeAttachments(comment.text);
+
   const isOwnComment = comment.sessionId === sessionId;
   const displayAuthor = isOwnComment ? username : comment.authorUsername;
   const isReplying = replyingToId === comment.id;
@@ -293,7 +332,11 @@ function CommentCard({
       data-ocid={`source_discussion.item.${index}`}
       className={cn(
         "relative",
-        depth === 1 && "ml-4 pl-3 border-l border-border/50",
+        depth > 0 &&
+          cn(
+            "pl-3 border-l border-border/50",
+            depth <= 3 ? "ml-3 sm:ml-4" : "ml-0 sm:ml-4",
+          ),
       )}
     >
       <div className="group py-2">
@@ -309,12 +352,13 @@ function CommentCard({
 
         {/* Comment text */}
         <p className="text-sm text-foreground font-body leading-relaxed mb-2">
-          {comment.text}
+          {displayText}
         </p>
-        {/* Local attachments — images */}
-        {localAttachments && localAttachments.imageUrls.length > 0 && (
+
+        {/* Decoded attachments — images */}
+        {attachedImages.length > 0 && (
           <div className="flex flex-wrap gap-1.5 mb-2">
-            {localAttachments.imageUrls.map((url) => (
+            {attachedImages.map((url) => (
               <img
                 key={url}
                 src={url}
@@ -324,29 +368,29 @@ function CommentCard({
             ))}
           </div>
         )}
-        {/* Local attachments — links */}
-        {localAttachments &&
-          localAttachments.urls.filter(Boolean).length > 0 && (
-            <div className="flex flex-col gap-0.5 mb-2">
-              {localAttachments.urls.filter(Boolean).map((url) => (
-                <a
-                  key={url}
-                  href={url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-xs text-primary hover:underline font-body flex items-center gap-1 truncate"
-                >
-                  <Link2 className="h-2.5 w-2.5 flex-shrink-0" />
-                  {url}
-                </a>
-              ))}
-            </div>
-          )}
 
-        {/* Actions row: [Reply] [ThumbsUp + count] [spacer] [⋯] */}
+        {/* Decoded attachments — links */}
+        {attachedUrls.filter(Boolean).length > 0 && (
+          <div className="flex flex-col gap-0.5 mb-2">
+            {attachedUrls.filter(Boolean).map((url) => (
+              <a
+                key={url}
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-primary hover:underline font-body flex items-center gap-1 truncate"
+              >
+                <Link2 className="h-2.5 w-2.5 flex-shrink-0" />
+                {url}
+              </a>
+            ))}
+          </div>
+        )}
+
+        {/* Actions row: [Reply] [ChevronUp + count] [spacer] [⋯] */}
         <div className="flex items-center gap-1">
-          {/* Reply button — only for top-level (depth 0) to allow 2-level threading */}
-          {depth === 0 && (
+          {/* Reply button — depth < 4 allows up to 5-level nesting */}
+          {depth < 4 && (
             <button
               type="button"
               data-ocid={`source_discussion.button.${index}`}
@@ -379,7 +423,7 @@ function CommentCard({
                 : "text-muted-foreground hover:text-primary",
             )}
           >
-            <ThumbsUp className={cn("h-3 w-3", isLiked && "fill-primary")} />
+            <ChevronUp className={cn("h-3 w-3", isLiked && "fill-primary")} />
             {likeCount > 0 && <span>{likeCount}</span>}
           </button>
 
@@ -461,7 +505,7 @@ function CommentCard({
                 onSuccess={() => onToggleReply(null)}
                 autoFocus
                 ocidPrefix={`source_discussion.nested.${index}`}
-                placeholder="Write a reply…"
+                placeholder="Write a reply\u2026"
               />
             </motion.div>
           )}
@@ -512,46 +556,15 @@ export function SourceDiscussion({
     }
   }
 
-  // Build threaded tree: top-level (parentCommentId === 0n) + one level of nesting.
-  const topLevelComments = comments.filter((c) => c.parentCommentId === 0n);
-  const topLevelIds = new Set(topLevelComments.map((c) => c.id.toString()));
-
-  const commentById = new Map<string, SourceComment>(
-    comments.map((c) => [c.id.toString(), c]),
-  );
-
-  function getTopLevelAncestor(comment: SourceComment): bigint {
-    let current = comment;
-    while (current.parentCommentId !== 0n) {
-      const parent = commentById.get(current.parentCommentId.toString());
-      if (!parent) break;
-      if (topLevelIds.has(parent.id.toString())) {
-        return parent.id;
-      }
-      current = parent;
-    }
-    return comment.parentCommentId;
-  }
-
+  // Build simple parent→children map using actual parentCommentId
   const childrenByParent = new Map<string, SourceComment[]>();
-  for (const child of comments) {
-    if (child.parentCommentId === 0n) continue;
-    let effectiveParentId: bigint;
-    if (topLevelIds.has(child.parentCommentId.toString())) {
-      effectiveParentId = child.parentCommentId;
-    } else {
-      effectiveParentId = getTopLevelAncestor(child);
-    }
-    const key = effectiveParentId.toString();
+  for (const c of comments) {
+    if (c.parentCommentId === 0n) continue;
+    const key = c.parentCommentId.toString();
     if (!childrenByParent.has(key)) childrenByParent.set(key, []);
-    childrenByParent.get(key)!.push(child);
+    childrenByParent.get(key)!.push(c);
   }
-
-  // Sort by most likes
-  const sortedTopLevel = [...topLevelComments].sort(
-    (a, b) =>
-      (likeCounts[b.id.toString()] ?? 0) - (likeCounts[a.id.toString()] ?? 0),
-  );
+  // Sort children by most likes
   for (const [key, children] of childrenByParent.entries()) {
     childrenByParent.set(
       key,
@@ -562,6 +575,12 @@ export function SourceDiscussion({
       ),
     );
   }
+
+  const topLevelComments = comments.filter((c) => c.parentCommentId === 0n);
+  const sortedTopLevel = [...topLevelComments].sort(
+    (a, b) =>
+      (likeCounts[b.id.toString()] ?? 0) - (likeCounts[a.id.toString()] ?? 0),
+  );
 
   let globalIndex = 0;
   function nextIndex() {
@@ -575,7 +594,6 @@ export function SourceDiscussion({
   ): React.ReactNode {
     const idx = nextIndex();
     const nested = childrenByParent.get(comment.id.toString()) ?? [];
-
     return (
       <CommentCard
         key={comment.id.toString()}
@@ -591,8 +609,8 @@ export function SourceDiscussion({
         onToggleReply={setReplyingToId}
         likeCounts={likeCounts}
       >
-        {nested.length > 0 && (
-          <div className="ml-2 space-y-0">
+        {nested.length > 0 && depth < 4 && (
+          <div className="space-y-0">
             {nested.map((child) => renderComment(child, depth + 1))}
           </div>
         )}
@@ -610,7 +628,7 @@ export function SourceDiscussion({
           sessionId={sessionId}
           authorUsername={username}
           ocidPrefix="source_discussion.toplevel"
-          placeholder="Share your analysis of this source…"
+          placeholder="Share your analysis of this source\u2026"
         />
       </div>
 
@@ -637,7 +655,7 @@ export function SourceDiscussion({
       ) : (
         <motion.div
           data-ocid="source_discussion.list"
-          className="space-y-0 divide-y divide-border/30"
+          className="space-y-0"
           initial="hidden"
           animate="visible"
           variants={{

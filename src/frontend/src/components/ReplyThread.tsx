@@ -22,10 +22,10 @@ import { cn } from "@/lib/utils";
 import { formatRelativeTime } from "@/utils/time";
 import {
   ChevronDown,
+  ChevronUp,
   Clock,
   CornerDownRight,
   Flag,
-  Heart,
   Loader2,
   MessageSquare,
   MoreHorizontal,
@@ -224,7 +224,7 @@ function ReplyCard({
       if (!checkReplyAction()) return;
       await likeReply.mutateAsync({ replyId: reply.id, sessionId, evidenceId });
     } catch {
-      toast.error("Failed to like reply");
+      toast.error("Failed to upvote reply");
     }
   }
 
@@ -239,7 +239,11 @@ function ReplyCard({
       data-ocid={`reply.item.${evidenceIndex}`}
       className={cn(
         "relative",
-        depth === 1 && "ml-4 pl-3 border-l border-border/50",
+        depth > 0 &&
+          cn(
+            "pl-3 border-l border-border/50",
+            depth <= 3 ? "ml-3 sm:ml-4" : "ml-0 sm:ml-4",
+          ),
       )}
     >
       <div className="group py-2">
@@ -258,26 +262,28 @@ function ReplyCard({
           {reply.text}
         </p>
 
-        {/* Actions row: [Reply] [Heart] ... [⋯] */}
+        {/* Actions row: [Reply] [ChevronUp] ... [⋯] */}
         <div className="flex items-center gap-1">
-          {/* Reply button */}
-          <button
-            type="button"
-            data-ocid={`reply.button.${index}`}
-            onClick={() => onToggleReply(isReplying ? null : reply.id)}
-            className={cn(
-              "flex items-center gap-1 text-xs font-body rounded px-1.5 py-0.5 transition-colors",
-              "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/60",
-              isReplying
-                ? "text-primary bg-primary/10"
-                : "text-muted-foreground hover:text-foreground hover:bg-secondary",
-            )}
-          >
-            <CornerDownRight className="h-3 w-3" />
-            Reply
-          </button>
+          {/* Reply button — depth < 4 allows up to 5-level nesting */}
+          {depth < 4 && (
+            <button
+              type="button"
+              data-ocid={`reply.button.${index}`}
+              onClick={() => onToggleReply(isReplying ? null : reply.id)}
+              className={cn(
+                "flex items-center gap-1 text-xs font-body rounded px-1.5 py-0.5 transition-colors",
+                "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/60",
+                isReplying
+                  ? "text-primary bg-primary/10"
+                  : "text-muted-foreground hover:text-foreground hover:bg-secondary",
+              )}
+            >
+              <CornerDownRight className="h-3 w-3" />
+              Reply
+            </button>
+          )}
 
-          {/* Like button */}
+          {/* Upvote button */}
           <button
             type="button"
             data-ocid={`reply.toggle.${index}`}
@@ -285,14 +291,14 @@ function ReplyCard({
             disabled={likeReply.isPending}
             className={cn(
               "flex items-center gap-1 text-xs font-body rounded px-1.5 py-0.5 transition-colors",
-              "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-rose-400/60",
+              "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/60",
               "disabled:opacity-50 disabled:cursor-not-allowed",
               isLiked
-                ? "text-rose-500"
-                : "text-muted-foreground hover:text-rose-400",
+                ? "text-primary"
+                : "text-muted-foreground hover:text-primary",
             )}
           >
-            <Heart className={cn("h-3 w-3", isLiked && "fill-rose-500")} />
+            <ChevronUp className={cn("h-3 w-3", isLiked && "fill-primary")} />
             {likeCount > 0 && <span>{likeCount}</span>}
           </button>
 
@@ -450,59 +456,15 @@ export function ReplyThread({
     setReplyingToId(id);
   }
 
-  // Build threaded tree: top-level (parentReplyId === 0n) + one level of nesting.
-  // Any deeper replies are flattened under the closest top-level ancestor.
-  const topLevelReplies = replies.filter((r) => r.parentReplyId === 0n);
-  const topLevelIds = new Set(topLevelReplies.map((r) => r.id.toString()));
-
-  // Build a map from reply id -> reply for quick lookup
-  const replyById = new Map<string, Reply>(
-    replies.map((r) => [r.id.toString(), r]),
-  );
-
-  // Walk up the parent chain to find the nearest top-level ancestor
-  function getTopLevelAncestor(reply: Reply): bigint {
-    let current = reply;
-    while (current.parentReplyId !== 0n) {
-      const parent = replyById.get(current.parentReplyId.toString());
-      if (!parent) break;
-      // If the parent is a top-level reply, current reply goes under it
-      if (topLevelIds.has(parent.id.toString())) {
-        return parent.id;
-      }
-      current = parent;
-    }
-    // Fallback: use direct parentReplyId
-    return reply.parentReplyId;
-  }
-
-  // For depth-1 display: direct children of top-level replies keep their parent.
-  // Deeper replies are flattened to their top-level ancestor.
+  // Build proper recursive parent→children map supporting up to 5 levels deep
   const childrenByParent = new Map<string, Reply[]>();
-  for (const child of replies) {
-    if (child.parentReplyId === 0n) continue; // top-level, skip
-    let effectiveParentId: bigint;
-    if (topLevelIds.has(child.parentReplyId.toString())) {
-      // Direct child of a top-level reply — keep as depth-1
-      effectiveParentId = child.parentReplyId;
-    } else {
-      // Deeper reply — flatten to nearest top-level ancestor
-      effectiveParentId = getTopLevelAncestor(child);
-    }
-    const key = effectiveParentId.toString();
-    if (!childrenByParent.has(key)) {
-      childrenByParent.set(key, []);
-    }
-    childrenByParent.get(key)!.push(child);
+  for (const r of replies) {
+    if (r.parentReplyId === 0n) continue;
+    const key = r.parentReplyId.toString();
+    if (!childrenByParent.has(key)) childrenByParent.set(key, []);
+    childrenByParent.get(key)!.push(r);
   }
-
-  // Sort top-level replies by most likes descending
-  const sortedTopLevel = [...topLevelReplies].sort(
-    (a, b) =>
-      (likeCounts[b.id.toString()] ?? 0) - (likeCounts[a.id.toString()] ?? 0),
-  );
-
-  // Sort each children group by most likes descending
+  // Sort each group by most upvotes
   for (const [key, children] of childrenByParent.entries()) {
     childrenByParent.set(
       key,
@@ -514,6 +476,12 @@ export function ReplyThread({
     );
   }
 
+  const topLevelReplies = replies.filter((r) => r.parentReplyId === 0n);
+  const sortedTopLevel = [...topLevelReplies].sort(
+    (a, b) =>
+      (likeCounts[b.id.toString()] ?? 0) - (likeCounts[a.id.toString()] ?? 0),
+  );
+
   // Global index counter for deterministic ocid markers
   let globalIndex = 0;
   function nextIndex() {
@@ -523,7 +491,7 @@ export function ReplyThread({
 
   function renderReply(reply: Reply, depth: number): React.ReactNode {
     const idx = nextIndex();
-    const nestedReplies = childrenByParent.get(reply.id.toString()) ?? [];
+    const nested = childrenByParent.get(reply.id.toString()) ?? [];
 
     return (
       <ReplyCard
@@ -541,9 +509,9 @@ export function ReplyThread({
         evidenceIndex={evidenceIndex}
         likeCounts={likeCounts}
       >
-        {nestedReplies.length > 0 && (
-          <div className="ml-2 space-y-0">
-            {nestedReplies.map((child) => renderReply(child, depth + 1))}
+        {nested.length > 0 && depth < 4 && (
+          <div className="space-y-0">
+            {nested.map((child) => renderReply(child, depth + 1))}
           </div>
         )}
       </ReplyCard>
@@ -556,10 +524,7 @@ export function ReplyThread({
       : `${replyCount} ${replyCount === 1 ? "reply" : "replies"}`;
 
   return (
-    <div
-      data-ocid={`evidence.reply_thread.${evidenceIndex}`}
-      className="mt-3 pt-3 border-t border-border/40"
-    >
+    <div data-ocid={`evidence.reply_thread.${evidenceIndex}`} className="mt-3">
       {/* Toggle button */}
       <button
         type="button"
