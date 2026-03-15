@@ -938,11 +938,6 @@ export function SourceDetailPage({
                       </>
                     )}
                   </span>
-                  {totalVotes > 0 && (
-                    <span className="text-muted-foreground/70">
-                      · {totalVotes} {totalVotes === 1 ? "vote" : "votes"}
-                    </span>
-                  )}
                 </div>
 
                 {/* Admin override note */}

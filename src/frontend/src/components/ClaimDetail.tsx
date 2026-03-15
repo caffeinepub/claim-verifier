@@ -78,9 +78,15 @@ function sortEvidence(
       return arr.sort((a, b) => Number(a.timestamp) - Number(b.timestamp));
   }
 }
+import { VerifiedBadge } from "@/components/VerifiedBadge";
 import { Input } from "@/components/ui/input";
 import { useReportContent } from "@/hooks/useQueries";
 import { useSessionGate } from "@/hooks/useSessionGate";
+import {
+  getVerifiedVoteForClaim,
+  isVerifiedSessionId,
+  useVerifiedAccount,
+} from "@/hooks/useVerifiedAccount";
 import { getClaimSlug } from "@/utils/slug";
 import { computeOverallVerdict } from "@/utils/verdict";
 import { CategoryBadge } from "./CategoryBadge";
@@ -226,6 +232,11 @@ export function ClaimDetail({
       Math.max(0, Number(tally.unverifiedCount))
     : 0;
   const username = useUsername();
+  const {
+    isVerified,
+    recordVerifiedVote,
+    displayName: verifiedDisplayName,
+  } = useVerifiedAccount();
 
   const evidenceIds = useMemo(
     () => (evidence ?? []).map((e) => e.id),
@@ -304,6 +315,10 @@ export function ClaimDetail({
     try {
       await submitVote.mutateAsync({ claimId, sessionId, verdict });
       toast.success(`Your verdict: ${verdict}`);
+      // Record verified vote for 1.5x multiplier tracking
+      if (isVerified && claim) {
+        recordVerifiedVote(claimId.toString(), sessionId, verdict, claim.title);
+      }
     } catch {
       toast.error("Failed to record vote");
     }
@@ -429,7 +444,7 @@ export function ClaimDetail({
               <span className="text-xs text-muted-foreground font-body">
                 ·{" "}
                 {claim.sessionId === sessionId && claim.sessionId !== "seed"
-                  ? username
+                  ? (verifiedDisplayName ?? username)
                   : "Anonymous"}
               </span>
             </div>
@@ -512,10 +527,23 @@ export function ClaimDetail({
               </div>
             ) : tally ? (
               (() => {
+                // Apply 1.5x bonus for verified user's vote (+0.5 extra)
+                const verifiedVoteRecord = getVerifiedVoteForClaim(
+                  claimId.toString(),
+                );
+                const verifiedBonus = verifiedVoteRecord ? 0.5 : 0;
+                const verifiedTrueBonus =
+                  verifiedVoteRecord?.voteType === "True" ? verifiedBonus : 0;
+                const verifiedFalseBonus =
+                  verifiedVoteRecord?.voteType === "False" ? verifiedBonus : 0;
+                const verifiedUnverifiedBonus =
+                  verifiedVoteRecord?.voteType === "Unverified"
+                    ? verifiedBonus
+                    : 0;
                 const detailVerdict = computeOverallVerdict(
-                  Number(tally.trueCount),
-                  Number(tally.falseCount),
-                  Number(tally.unverifiedCount),
+                  Number(tally.trueCount) + verifiedTrueBonus,
+                  Number(tally.falseCount) + verifiedFalseBonus,
+                  Number(tally.unverifiedCount) + verifiedUnverifiedBonus,
                   true,
                   Number(tally.trueDirect),
                   Number(tally.falseDirect),
@@ -896,10 +924,13 @@ export function ClaimDetail({
                     >
                       {/* Line 1: username · timestamp [evidence type badge] */}
                       <div className="flex items-center gap-2 mb-1 flex-wrap">
-                        <span className="text-xs font-semibold text-foreground font-mono">
+                        <span className="text-xs font-semibold text-foreground font-mono flex items-center gap-1">
                           {item.sessionId === sessionId
-                            ? username
+                            ? (verifiedDisplayName ?? username)
                             : "Anonymous"}
+                          {isVerifiedSessionId(item.sessionId) && (
+                            <VerifiedBadge />
+                          )}
                         </span>
                         <span className="text-xs text-muted-foreground font-body">
                           · {formatRelativeTime(item.timestamp)}

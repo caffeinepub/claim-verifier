@@ -1,5 +1,6 @@
 import { ImageUploader } from "@/components/ImageUploader";
 import { UrlInputList } from "@/components/UrlInputList";
+import { UserAvatar } from "@/components/UserAvatar";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -164,7 +165,6 @@ function CommentForm({
         onChange={(e) => setText(e.target.value)}
         rows={2}
         maxLength={500}
-        // biome-ignore lint/a11y/noAutofocus: intentional for inline reply form
         autoFocus={autoFocus}
         className="bg-card border-border font-body resize-none text-sm min-h-[4rem]"
       />
@@ -342,6 +342,7 @@ function CommentCard({
       <div className="group py-2">
         {/* Author + timestamp */}
         <div className="flex items-center gap-2 mb-1">
+          <UserAvatar username={displayAuthor} size="sm" />
           <span className="text-xs font-semibold text-foreground font-mono">
             {displayAuthor}
           </span>

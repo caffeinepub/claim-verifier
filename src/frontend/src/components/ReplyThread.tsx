@@ -1,4 +1,6 @@
 import { ReportDialog } from "@/components/ReportDialog";
+import { UserAvatar } from "@/components/UserAvatar";
+import { VerifiedBadge } from "@/components/VerifiedBadge";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -18,6 +20,7 @@ import {
   useUsername,
 } from "@/hooks/useQueries";
 import { useSessionGate } from "@/hooks/useSessionGate";
+import { isVerifiedSessionId } from "@/hooks/useVerifiedAccount";
 import { cn } from "@/lib/utils";
 import { formatRelativeTime } from "@/utils/time";
 import {
@@ -122,7 +125,6 @@ function ReplyForm({
         onChange={(e) => setText(e.target.value)}
         rows={2}
         maxLength={500}
-        // biome-ignore lint/a11y/noAutofocus: intentional for inline reply form
         autoFocus={autoFocus}
         className="bg-card border-border font-body resize-none text-sm min-h-[4rem]"
       />
@@ -249,8 +251,10 @@ function ReplyCard({
       <div className="group py-2">
         {/* Author + timestamp */}
         <div className="flex items-center gap-2 mb-1">
-          <span className="text-xs font-semibold text-foreground font-mono">
+          <UserAvatar username={displayAuthor} size="sm" />
+          <span className="text-xs font-semibold text-foreground font-mono flex items-center gap-1">
             {displayAuthor}
+            {isVerifiedSessionId(reply.sessionId) && <VerifiedBadge />}
           </span>
           <span className="text-xs text-muted-foreground font-body">
             · {formatRelativeTime(reply.timestamp)}

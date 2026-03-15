@@ -2,12 +2,30 @@ import { AdminPanel } from "@/components/AdminPanel";
 import { ClaimCard } from "@/components/ClaimCard";
 import { ClaimDetail } from "@/components/ClaimDetail";
 import { SubmitClaimDialog } from "@/components/SubmitClaimDialog";
+import { UserAvatar } from "@/components/UserAvatar";
+import { VerifiedBadge } from "@/components/VerifiedBadge";
+import { VoteHistoryPanel } from "@/components/VoteHistoryPanel";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Toaster } from "@/components/ui/sonner";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
 import { useAllClaims, useSessionId, useUsername } from "@/hooks/useQueries";
+import { useVerifiedAccount } from "@/hooks/useVerifiedAccount";
+import { ProfilePage } from "@/pages/ProfilePage";
 import { SourceDetailPage } from "@/pages/SourceDetailPage";
 import { TrustedSourcesPage } from "@/pages/TrustedSourcesPage";
 import { findClaimBySlug, getClaimSlug } from "@/utils/slug";
@@ -30,6 +48,7 @@ import {
   Trophy,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { LogIn, LogOut, User } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useState } from "react";
 
@@ -120,8 +139,38 @@ export default function App() {
   const [isAdminOpen, setIsAdminOpen] = useState(false);
   const [showSources, setShowSources] = useState(false);
   const [showSourceDomain, setShowSourceDomain] = useState<string | null>(null);
+  const [showProfileUsername, setShowProfileUsername] = useState<string | null>(
+    null,
+  );
 
   const { data: sessionId, isLoading: sessionLoading } = useSessionId();
+  const {
+    isVerified,
+    displayName,
+    needsUsernameSetup,
+    isLoggingIn,
+    avatarUrl,
+    login,
+    logout,
+    setDisplayName,
+  } = useVerifiedAccount();
+  const [usernameInput, setUsernameInput] = useState("");
+  const [usernameDialogOpen, setUsernameDialogOpen] = useState(false);
+
+  // Open username setup dialog when needed
+  useEffect(() => {
+    if (needsUsernameSetup) {
+      setUsernameDialogOpen(true);
+    }
+  }, [needsUsernameSetup]);
+
+  function handleSaveUsername() {
+    const trimmed = usernameInput.trim();
+    if (!trimmed) return;
+    setDisplayName(trimmed);
+    setUsernameDialogOpen(false);
+    setUsernameInput("");
+  }
   const { data: claims, isLoading: claimsLoading } = useAllClaims();
   const username = useUsername();
 
@@ -142,6 +191,11 @@ export default function App() {
 
   // On mount: check if URL matches /source/:domain or /claim/<slug> and navigate
   useEffect(() => {
+    const profileMatch = window.location.pathname.match(/^\/profile\/(.+)$/);
+    if (profileMatch) {
+      setShowProfileUsername(decodeURIComponent(profileMatch[1]));
+      return;
+    }
     const sourceDomainMatch =
       window.location.pathname.match(/^\/source\/(.+)$/);
     if (sourceDomainMatch) {
@@ -164,6 +218,14 @@ export default function App() {
   // Listen to browser back/forward
   useEffect(() => {
     function handlePopState() {
+      const profileMatch = window.location.pathname.match(/^\/profile\/(.+)$/);
+      if (profileMatch) {
+        setShowProfileUsername(decodeURIComponent(profileMatch[1]));
+        setSelectedClaimId(null);
+        setShowSources(false);
+        setShowSourceDomain(null);
+        return;
+      }
       const sourceDomainMatch =
         window.location.pathname.match(/^\/source\/(.+)$/);
       if (sourceDomainMatch) {
@@ -215,7 +277,16 @@ export default function App() {
     setSelectedClaimId(null);
     setShowSources(false);
     setShowSourceDomain(null);
+    setShowProfileUsername(null);
     window.history.pushState({}, "", "/");
+  }
+
+  function openProfilePage(uname: string) {
+    setShowProfileUsername(uname);
+    setSelectedClaimId(null);
+    setShowSources(false);
+    setShowSourceDomain(null);
+    window.history.pushState({}, "", `/profile/${encodeURIComponent(uname)}`);
   }
 
   function goBackToSources() {
@@ -243,9 +314,15 @@ export default function App() {
 
   const showDetail = selectedClaimId !== null;
   const isOnSourceDetail =
-    showSourceDomain !== null && selectedClaimId === null;
+    showSourceDomain !== null &&
+    selectedClaimId === null &&
+    showProfileUsername === null;
   const isOnSources =
-    showSources && selectedClaimId === null && showSourceDomain === null;
+    showSources &&
+    selectedClaimId === null &&
+    showSourceDomain === null &&
+    showProfileUsername === null;
+  const isOnProfile = showProfileUsername !== null && selectedClaimId === null;
 
   return (
     <div className="min-h-screen bg-background noise-bg flex flex-col">
@@ -278,7 +355,7 @@ export default function App() {
               </div>
             </button>
 
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
               {sessionLoading ? (
                 <div
                   data-ocid="session.loading_state"
@@ -290,6 +367,72 @@ export default function App() {
                   </span>
                 </div>
               ) : null}
+
+              {/* Verified account controls */}
+              {isVerified ? (
+                <>
+                  <VoteHistoryPanel />
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        data-ocid="auth.toggle"
+                        className="gap-1.5 h-8 px-2.5 font-body text-xs border-emerald-500/40 text-emerald-700 hover:bg-emerald-50 hover:border-emerald-500/60"
+                      >
+                        <UserAvatar
+                          username={displayName ?? undefined}
+                          avatarUrl={avatarUrl ?? undefined}
+                          size="sm"
+                        />
+                        <span className="hidden sm:inline max-w-[80px] truncate">
+                          {displayName ?? "Account"}
+                        </span>
+                        <VerifiedBadge size={12} />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-44">
+                      <DropdownMenuItem
+                        data-ocid="auth.edit_button"
+                        className="text-muted-foreground gap-2 cursor-pointer"
+                        onClick={() =>
+                          displayName && openProfilePage(displayName)
+                        }
+                      >
+                        <User className="h-3.5 w-3.5" />
+                        View Profile
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        data-ocid="auth.secondary_button"
+                        className="text-muted-foreground gap-2 cursor-pointer"
+                        onClick={logout}
+                      >
+                        <LogOut className="h-3.5 w-3.5" />
+                        Sign Out
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </>
+              ) : (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  data-ocid="auth.primary_button"
+                  onClick={login}
+                  disabled={isLoggingIn}
+                  className="gap-1.5 h-8 px-2.5 font-body text-xs border-border hover:border-primary/40 hover:text-primary"
+                >
+                  {isLoggingIn ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <LogIn className="h-3.5 w-3.5" />
+                  )}
+                  <span className="hidden sm:inline">
+                    {isLoggingIn ? "Signing in…" : "Sign In"}
+                  </span>
+                </Button>
+              )}
+
               <Button
                 data-ocid="submit_claim.open_modal_button"
                 onClick={() => setIsSubmitOpen(true)}
@@ -310,7 +453,13 @@ export default function App() {
       {/* Main content */}
       <main className="flex-1 max-w-5xl mx-auto px-4 py-8 w-full">
         <AnimatePresence mode="wait">
-          {showDetail && selectedClaimId !== null && sessionId ? (
+          {isOnProfile && showProfileUsername ? (
+            <ProfilePage
+              key={`profile-${showProfileUsername}`}
+              username={showProfileUsername}
+              onBack={goBack}
+            />
+          ) : showDetail && selectedClaimId !== null && sessionId ? (
             <ClaimDetail
               key="detail"
               claimId={selectedClaimId}
@@ -532,6 +681,62 @@ export default function App() {
 
       {/* Admin Panel */}
       {isAdminOpen && <AdminPanel onClose={() => setIsAdminOpen(false)} />}
+
+      {/* Username Setup Dialog */}
+      <Dialog open={usernameDialogOpen} onOpenChange={setUsernameDialogOpen}>
+        <DialogContent
+          data-ocid="auth.dialog"
+          className="sm:max-w-sm"
+          onInteractOutside={(e) => e.preventDefault()}
+        >
+          <DialogHeader>
+            <DialogTitle className="font-display text-lg">
+              Set your display name
+            </DialogTitle>
+            <p className="text-sm text-muted-foreground font-body">
+              Choose a name that will appear on your verified contributions.
+            </p>
+          </DialogHeader>
+          <div className="py-2">
+            <input
+              data-ocid="auth.input"
+              type="text"
+              value={usernameInput}
+              onChange={(e) => setUsernameInput(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleSaveUsername()}
+              placeholder="e.g. FactChecker42"
+              maxLength={24}
+              className="w-full px-3 py-2 text-sm font-body border border-border rounded-sm bg-secondary text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/60"
+            />
+            <p className="text-xs text-muted-foreground font-body mt-1.5">
+              Max 24 characters. Visible on your comments & evidence.
+            </p>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              data-ocid="auth.cancel_button"
+              className="font-body"
+              onClick={() => {
+                setUsernameDialogOpen(false);
+                logout();
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              data-ocid="auth.submit_button"
+              className="font-body bg-primary text-primary-foreground hover:bg-primary/90"
+              onClick={handleSaveUsername}
+              disabled={!usernameInput.trim()}
+            >
+              Save Name
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
