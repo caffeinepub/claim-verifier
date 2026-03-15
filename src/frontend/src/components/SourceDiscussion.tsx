@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
+import { useAccountPermissions } from "@/hooks/useAccountPermissions";
 import {
   type SourceComment,
   useAddSourceComment,
@@ -30,6 +31,7 @@ import {
   Flag,
   Link2,
   Loader2,
+  LogIn,
   MessageSquare,
   MoreHorizontal,
   Send,
@@ -40,7 +42,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
-// ── Attachment helpers ────────────────────────────────────────────────────────
+// ── Attachment helpers ───────────────────────────────────────────────────────────────────
 
 const ATTACHMENT_SEP = "\u0000";
 
@@ -75,7 +77,7 @@ function decodeAttachments(raw: string): {
   }
 }
 
-// ── Comment Form ──────────────────────────────────────────────────────────────
+// ── Comment Form ──────────────────────────────────────────────────────────────────
 
 interface CommentFormProps {
   sourceId: bigint;
@@ -258,7 +260,7 @@ function CommentForm({
   );
 }
 
-// ── Single Comment Card ───────────────────────────────────────────────────────
+// ── Single Comment Card ─────────────────────────────────────────────────────────────────
 
 interface CommentCardProps {
   comment: SourceComment;
@@ -301,6 +303,7 @@ function CommentCard({
 
   const likeComment = useLikeSourceComment();
   const { checkAction } = useSessionGate();
+  const { canReport } = useAccountPermissions();
   const { data: isLiked = false } = useSessionLikeForSourceComment(
     comment.id,
     sessionId,
@@ -443,7 +446,7 @@ function CommentCard({
                 <MoreHorizontal className="h-3.5 w-3.5" />
               </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-36">
+            <DropdownMenuContent align="end" className="w-40">
               <DropdownMenuItem
                 data-ocid={`source_discussion.secondary_button.${index}`}
                 className="text-muted-foreground cursor-pointer gap-2"
@@ -452,21 +455,32 @@ function CommentCard({
                 <Share2 className="h-3.5 w-3.5 text-muted-foreground" />
                 <span>Share</span>
               </DropdownMenuItem>
-              <DropdownMenuItem
-                data-ocid={`source_discussion.delete_button.${index}`}
-                className="text-muted-foreground cursor-pointer gap-2"
-                disabled={reportedIds.has(comment.id.toString())}
-                onClick={() => {
-                  if (checkAction()) onReport(comment.id);
-                }}
-              >
-                <Flag className="h-3.5 w-3.5 text-muted-foreground" />
-                <span>
-                  {reportedIds.has(comment.id.toString())
-                    ? "Reported"
-                    : "Report"}
-                </span>
-              </DropdownMenuItem>
+              {canReport ? (
+                <DropdownMenuItem
+                  data-ocid={`source_discussion.delete_button.${index}`}
+                  className="text-muted-foreground cursor-pointer gap-2"
+                  disabled={reportedIds.has(comment.id.toString())}
+                  onClick={() => {
+                    if (checkAction()) onReport(comment.id);
+                  }}
+                >
+                  <Flag className="h-3.5 w-3.5 text-muted-foreground" />
+                  <span>
+                    {reportedIds.has(comment.id.toString())
+                      ? "Reported"
+                      : "Report"}
+                  </span>
+                </DropdownMenuItem>
+              ) : (
+                <DropdownMenuItem
+                  data-ocid={`source_discussion.delete_button.${index}`}
+                  className="text-muted-foreground cursor-default gap-2"
+                  disabled
+                >
+                  <LogIn className="h-3.5 w-3.5 text-muted-foreground" />
+                  <span className="text-xs">Sign in to report</span>
+                </DropdownMenuItem>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
@@ -519,7 +533,7 @@ function CommentCard({
   );
 }
 
-// ── Main SourceDiscussion Component ──────────────────────────────────────────
+// ── Main SourceDiscussion Component ────────────────────────────────────────────────
 
 interface SourceDiscussionProps {
   sourceId: bigint;

@@ -4,7 +4,6 @@ import { ClaimDetail } from "@/components/ClaimDetail";
 import { SubmitClaimDialog } from "@/components/SubmitClaimDialog";
 import { UserAvatar } from "@/components/UserAvatar";
 import { VerifiedBadge } from "@/components/VerifiedBadge";
-import { VoteHistoryPanel } from "@/components/VoteHistoryPanel";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -17,6 +16,8 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
@@ -153,6 +154,7 @@ export default function App() {
     login,
     logout,
     setDisplayName,
+    isTrustedContributor,
   } = useVerifiedAccount();
   const [usernameInput, setUsernameInput] = useState("");
   const [usernameDialogOpen, setUsernameDialogOpen] = useState(false);
@@ -370,49 +372,60 @@ export default function App() {
 
               {/* Verified account controls */}
               {isVerified ? (
-                <>
-                  <VoteHistoryPanel />
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        variant="outline"
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      data-ocid="auth.toggle"
+                      className="relative h-8 w-8 rounded-full p-0 overflow-hidden"
+                    >
+                      <UserAvatar
+                        username={displayName ?? undefined}
+                        avatarUrl={avatarUrl ?? undefined}
                         size="sm"
-                        data-ocid="auth.toggle"
-                        className="gap-1.5 h-8 px-2.5 font-body text-xs border-emerald-500/40 text-emerald-700 hover:bg-emerald-50 hover:border-emerald-500/60"
-                      >
-                        <UserAvatar
-                          username={displayName ?? undefined}
-                          avatarUrl={avatarUrl ?? undefined}
-                          size="sm"
-                        />
-                        <span className="hidden sm:inline max-w-[80px] truncate">
+                      />
+                      <span className="sr-only">
+                        {displayName ?? "Account menu"}
+                      </span>
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-52">
+                    <DropdownMenuLabel className="flex items-center gap-2 pb-1">
+                      <UserAvatar
+                        username={displayName ?? undefined}
+                        avatarUrl={avatarUrl ?? undefined}
+                        size="sm"
+                      />
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="text-sm font-medium font-body text-foreground truncate">
                           {displayName ?? "Account"}
                         </span>
-                        <VerifiedBadge size={12} />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-44">
-                      <DropdownMenuItem
-                        data-ocid="auth.edit_button"
-                        className="text-muted-foreground gap-2 cursor-pointer"
-                        onClick={() =>
-                          displayName && openProfilePage(displayName)
-                        }
-                      >
-                        <User className="h-3.5 w-3.5" />
-                        View Profile
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        data-ocid="auth.secondary_button"
-                        className="text-muted-foreground gap-2 cursor-pointer"
-                        onClick={logout}
-                      >
-                        <LogOut className="h-3.5 w-3.5" />
-                        Sign Out
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </>
+                        {isTrustedContributor && <VerifiedBadge size={13} />}
+                      </div>
+                    </DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      data-ocid="auth.edit_button"
+                      className="text-muted-foreground gap-2 cursor-pointer"
+                      onClick={() =>
+                        displayName && openProfilePage(displayName)
+                      }
+                    >
+                      <User className="h-3.5 w-3.5" />
+                      View Profile
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      data-ocid="auth.secondary_button"
+                      className="text-muted-foreground gap-2 cursor-pointer"
+                      onClick={logout}
+                    >
+                      <LogOut className="h-3.5 w-3.5" />
+                      Sign Out
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               ) : (
                 <Button
                   variant="outline"

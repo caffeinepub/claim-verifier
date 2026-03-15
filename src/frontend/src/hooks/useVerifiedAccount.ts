@@ -8,6 +8,11 @@ const VERIFIED_VOTES_KEY = "rebunked_verified_votes";
 const USERNAME_PREFIX = "rebunked_username_";
 const JOIN_DATE_PREFIX = "rebunked_joined_";
 const AVATAR_PREFIX = "rebunked_avatar_";
+const BIO_PREFIX = "rebunked_bio_";
+const LAST_ACTIVE_PREFIX = "rebunked_lastactive_";
+const ACTIVITY_POINTS_PREFIX = "rebunked_points_";
+const TRUST_SCORE_PREFIX = "rebunked_trust_";
+const TC_SESSIONS_KEY = "rebunked_tc_sessions";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -95,6 +100,87 @@ function setAvatarUrlForPrincipal(principalId: string, url: string): void {
   localStorage.setItem(`${AVATAR_PREFIX}${principalId}`, url);
 }
 
+export function getBioForPrincipal(principalId: string): string | null {
+  return localStorage.getItem(`${BIO_PREFIX}${principalId}`);
+}
+
+export function setBioForPrincipal(principalId: string, bio: string): void {
+  localStorage.setItem(`${BIO_PREFIX}${principalId}`, bio);
+}
+
+export function getLastActiveForPrincipal(principalId: string): string | null {
+  return localStorage.getItem(`${LAST_ACTIVE_PREFIX}${principalId}`);
+}
+
+export function updateLastActiveForPrincipal(principalId: string): void {
+  localStorage.setItem(
+    `${LAST_ACTIVE_PREFIX}${principalId}`,
+    new Date().toISOString(),
+  );
+}
+
+// ── Trusted Contributor Helpers ──────────────────────────────────────────────
+
+export function getActivityPoints(principalId: string): number {
+  try {
+    const raw = localStorage.getItem(`${ACTIVITY_POINTS_PREFIX}${principalId}`);
+    if (!raw) return 0;
+    return Number.parseInt(raw, 10) || 0;
+  } catch {
+    return 0;
+  }
+}
+
+export function incrementActivityPointsForPrincipal(
+  principalId: string,
+  amount = 1,
+): void {
+  const current = getActivityPoints(principalId);
+  localStorage.setItem(
+    `${ACTIVITY_POINTS_PREFIX}${principalId}`,
+    String(current + amount),
+  );
+}
+
+export function getTrustScore(principalId: string): number {
+  try {
+    const raw = localStorage.getItem(`${TRUST_SCORE_PREFIX}${principalId}`);
+    if (!raw) return 65; // default: just below 70% threshold
+    return Number.parseInt(raw, 10) || 65;
+  } catch {
+    return 65;
+  }
+}
+
+export function updateTrustScoreForPrincipal(
+  principalId: string,
+  delta: number,
+): void {
+  const current = getTrustScore(principalId);
+  const next = Math.max(0, Math.min(100, current + delta));
+  localStorage.setItem(`${TRUST_SCORE_PREFIX}${principalId}`, String(next));
+}
+
+export function getTCSessions(): Set<string> {
+  try {
+    const raw = localStorage.getItem(TC_SESSIONS_KEY);
+    if (!raw) return new Set();
+    return new Set(JSON.parse(raw) as string[]);
+  } catch {
+    return new Set();
+  }
+}
+
+export function isTrustedContributorSession(sessionId: string): boolean {
+  return getTCSessions().has(sessionId);
+}
+
+function addTCSession(sessionId: string): void {
+  const set = getTCSessions();
+  set.add(sessionId);
+  localStorage.setItem(TC_SESSIONS_KEY, JSON.stringify([...set]));
+}
+
 // ── Main Hook ────────────────────────────────────────────────────────────────
 
 export interface VerifiedAccountState {
@@ -105,16 +191,25 @@ export interface VerifiedAccountState {
   isLoggingIn: boolean;
   joinDate: string | null;
   avatarUrl: string | null;
+  bio: string | null;
+  lastActive: string | null;
+  activityPoints: number;
+  trustScore: number;
+  isTrustedContributor: boolean;
   login: () => void;
   logout: () => void;
   setDisplayName: (name: string) => void;
   setAvatarUrl: (url: string) => void;
+  setBio: (bio: string) => void;
   recordVerifiedVote: (
     claimId: string,
     sessionId: string,
     voteType: string,
     claimTitle: string,
   ) => void;
+  incrementActivity: (amount?: number) => void;
+  updateTrust: (delta: number) => void;
+  markCurrentSessionAsTrusted: (sessionId: string) => void;
 }
 
 export function useVerifiedAccount(): VerifiedAccountState {
@@ -124,28 +219,31 @@ export function useVerifiedAccount(): VerifiedAccountState {
   const isVerified = !!principalId;
   const isLoggingIn = loginStatus === "logging-in";
 
-  const [displayName, setDisplayNameState] = useState<string | null>(
-    principalId ? getUsernameForPrincipal(principalId) : null,
-  );
-  const [joinDate, setJoinDateState] = useState<string | null>(
-    principalId ? getJoinDateForPrincipal(principalId) : null,
-  );
-  const [avatarUrl, setAvatarUrlState] = useState<string | null>(
-    principalId ? getAvatarUrlForPrincipal(principalId) : null,
-  );
+  // Use version counters to force re-renders when localStorage values change.
+  const [displayNameVersion, setDisplayNameVersion] = useState(0);
+  const [avatarUrlVersion, setAvatarUrlVersion] = useState(0);
+  const [bioVersion, setBioVersion] = useState(0);
+  const [pointsVersion, setPointsVersion] = useState(0);
+  const [trustVersion, setTrustVersion] = useState(0);
 
-  // React to identity changes (login/logout)
-  useEffect(() => {
-    if (principalId) {
-      setDisplayNameState(getUsernameForPrincipal(principalId));
-      setJoinDateState(getJoinDateForPrincipal(principalId));
-      setAvatarUrlState(getAvatarUrlForPrincipal(principalId));
-    } else {
-      setDisplayNameState(null);
-      setJoinDateState(null);
-      setAvatarUrlState(null);
-    }
-  }, [principalId]);
+  // Derived synchronously from principalId — no async setState needed
+  const displayName = principalId ? getUsernameForPrincipal(principalId) : null;
+  const avatarUrl = principalId ? getAvatarUrlForPrincipal(principalId) : null;
+  const joinDate = principalId ? getJoinDateForPrincipal(principalId) : null;
+  const bio = principalId ? getBioForPrincipal(principalId) : null;
+  const lastActive = principalId
+    ? getLastActiveForPrincipal(principalId)
+    : null;
+  const activityPoints = principalId ? getActivityPoints(principalId) : 0;
+  const trustScore = principalId ? getTrustScore(principalId) : 65;
+  const isTrustedContributor = activityPoints >= 25 && trustScore >= 70;
+
+  // Suppress unused variable warnings for version counters used only to trigger re-renders
+  void displayNameVersion;
+  void avatarUrlVersion;
+  void bioVersion;
+  void pointsVersion;
+  void trustVersion;
 
   // Needs username setup: logged in but no username stored
   const needsUsernameSetup = isVerified && !displayName;
@@ -154,15 +252,28 @@ export function useVerifiedAccount(): VerifiedAccountState {
   useEffect(() => {
     if (needsUsernameSetup && principalId) {
       setJoinDateForPrincipalIfAbsent(principalId);
-      setJoinDateState(getJoinDateForPrincipal(principalId));
     }
   }, [needsUsernameSetup, principalId]);
+
+  // Update last active timestamp on login
+  useEffect(() => {
+    if (isVerified && principalId) {
+      updateLastActiveForPrincipal(principalId);
+    }
+  }, [isVerified, principalId]);
+
+  // When isTrustedContributor becomes true, register principalId as a TC session proxy
+  useEffect(() => {
+    if (isTrustedContributor && principalId) {
+      addTCSession(principalId);
+    }
+  }, [isTrustedContributor, principalId]);
 
   const setDisplayName = useCallback(
     (name: string) => {
       if (!principalId) return;
       setUsernameForPrincipal(principalId, name);
-      setDisplayNameState(name);
+      setDisplayNameVersion((v) => v + 1);
     },
     [principalId],
   );
@@ -171,7 +282,34 @@ export function useVerifiedAccount(): VerifiedAccountState {
     (url: string) => {
       if (!principalId) return;
       setAvatarUrlForPrincipal(principalId, url);
-      setAvatarUrlState(url);
+      setAvatarUrlVersion((v) => v + 1);
+    },
+    [principalId],
+  );
+
+  const setBio = useCallback(
+    (bioText: string) => {
+      if (!principalId) return;
+      setBioForPrincipal(principalId, bioText);
+      setBioVersion((v) => v + 1);
+    },
+    [principalId],
+  );
+
+  const incrementActivity = useCallback(
+    (amount = 1) => {
+      if (!principalId) return;
+      incrementActivityPointsForPrincipal(principalId, amount);
+      setPointsVersion((v) => v + 1);
+    },
+    [principalId],
+  );
+
+  const updateTrust = useCallback(
+    (delta: number) => {
+      if (!principalId) return;
+      updateTrustScoreForPrincipal(principalId, delta);
+      setTrustVersion((v) => v + 1);
     },
     [principalId],
   );
@@ -196,6 +334,10 @@ export function useVerifiedAccount(): VerifiedAccountState {
     [isVerified],
   );
 
+  const markCurrentSessionAsTrusted = useCallback((sessionId: string) => {
+    addTCSession(sessionId);
+  }, []);
+
   return {
     isVerified,
     principalId,
@@ -204,10 +346,19 @@ export function useVerifiedAccount(): VerifiedAccountState {
     isLoggingIn,
     joinDate,
     avatarUrl,
+    bio,
+    lastActive,
+    activityPoints,
+    trustScore,
+    isTrustedContributor,
     login,
     logout: clear,
     setDisplayName,
     setAvatarUrl,
+    setBio,
     recordVerifiedVote,
+    incrementActivity,
+    updateTrust,
+    markCurrentSessionAsTrusted,
   };
 }

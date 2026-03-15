@@ -2,12 +2,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import type { backendInterface } from "../backend";
 import { createActorWithConfig } from "../config";
-import { getSecretParameter } from "../utils/urlParams";
 import { useInternetIdentity } from "./useInternetIdentity";
-
-type ActorWithInit = backendInterface & {
-  _initializeAccessControlWithSecret?: (token: string) => Promise<void>;
-};
 
 const ACTOR_QUERY_KEY = "actor";
 export function useActor() {
@@ -19,7 +14,6 @@ export function useActor() {
       const isAuthenticated = !!identity;
 
       if (!isAuthenticated) {
-        // Return anonymous actor if not authenticated
         return await createActorWithConfig();
       }
 
@@ -29,23 +23,12 @@ export function useActor() {
         },
       };
 
-      const actor = (await createActorWithConfig(
-        actorOptions,
-      )) as ActorWithInit;
-      const adminToken = getSecretParameter("caffeineAdminToken") || "";
-      // Guard: only call if the method exists on the actor (backend version compatibility)
-      if (typeof actor._initializeAccessControlWithSecret === "function") {
-        await actor._initializeAccessControlWithSecret(adminToken);
-      }
-      return actor;
+      return await createActorWithConfig(actorOptions);
     },
-    // Only refetch when identity changes
     staleTime: Number.POSITIVE_INFINITY,
-    // This will cause the actor to be recreated when the identity changes
     enabled: true,
   });
 
-  // When the actor changes, invalidate dependent queries
   useEffect(() => {
     if (actorQuery.data) {
       queryClient.invalidateQueries({

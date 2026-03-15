@@ -18,9 +18,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { useAccountPermissions } from "@/hooks/useAccountPermissions";
 import { useCreateClaim } from "@/hooks/useQueries";
 import { useSessionGate } from "@/hooks/useSessionGate";
-import { Clock, Loader2, Plus } from "lucide-react";
+import { Clock, Loader2, LogIn, Plus } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ImageUploader } from "./ImageUploader";
@@ -66,6 +67,7 @@ export function SubmitClaimDialog({
 
   const createClaim = useCreateClaim();
   const { checkAction } = useSessionGate();
+  const { canUploadImages } = useAccountPermissions();
 
   // Countdown timer
   useEffect(() => {
@@ -217,7 +219,7 @@ export function SubmitClaimDialog({
               </Select>
             </div>
 
-            {/* Image uploader */}
+            {/* Image uploader — verified accounts only */}
             <div className="space-y-1.5">
               <Label className="font-body font-medium text-foreground">
                 Supporting Images{" "}
@@ -225,11 +227,18 @@ export function SubmitClaimDialog({
                   (optional)
                 </span>
               </Label>
-              <ImageUploader
-                onUploaded={setClaimImageUrls}
-                maxFiles={5}
-                ocidPrefix="submit_claim.image"
-              />
+              {canUploadImages ? (
+                <ImageUploader
+                  onUploaded={setClaimImageUrls}
+                  maxFiles={5}
+                  ocidPrefix="submit_claim.image"
+                />
+              ) : (
+                <p className="flex items-center gap-1.5 text-xs text-muted-foreground font-body">
+                  <LogIn className="h-3 w-3 flex-shrink-0" />
+                  Sign in to attach images
+                </p>
+              )}
             </div>
 
             {/* URL list */}

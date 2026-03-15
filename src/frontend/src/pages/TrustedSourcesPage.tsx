@@ -24,6 +24,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useAccountPermissions } from "@/hooks/useAccountPermissions";
 import {
   type TrustedSourceInfo,
   useSuggestTrustedSource,
@@ -35,6 +36,7 @@ import {
   ExternalLink,
   Globe,
   Loader2,
+  LogIn,
   Plus,
   Search,
   Shield,
@@ -426,6 +428,7 @@ export function TrustedSourcesPage({
 }) {
   const { data: sources, isLoading, error } = useTrustedSources();
   const [searchQuery, setSearchQuery] = useState("");
+  const { canSuggestSources } = useAccountPermissions();
 
   const allSources = sources ?? [];
   const filteredTrusted = allSources
@@ -466,7 +469,14 @@ export function TrustedSourcesPage({
               need 25 votes with 60% approval to become trusted.
             </p>
           </div>
-          <SuggestSourceDialog sessionId={sessionId} />
+          {canSuggestSources ? (
+            <SuggestSourceDialog sessionId={sessionId} />
+          ) : (
+            <p className="flex items-center gap-1.5 text-xs text-muted-foreground font-body">
+              <LogIn className="h-3 w-3 flex-shrink-0" />
+              Sign in to suggest sources
+            </p>
+          )}
         </div>
       </div>
 

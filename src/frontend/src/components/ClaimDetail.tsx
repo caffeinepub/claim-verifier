@@ -41,8 +41,10 @@ import {
   HelpCircle,
   Link2,
   Loader2,
+  LogIn,
   MessageSquare,
   MoreHorizontal,
+  Pencil,
   RefreshCw,
   Search,
   Send,
@@ -80,11 +82,17 @@ function sortEvidence(
 }
 import { VerifiedBadge } from "@/components/VerifiedBadge";
 import { Input } from "@/components/ui/input";
+import {
+  getEdit,
+  isWithinEditWindow,
+  saveEdit,
+  useAccountPermissions,
+} from "@/hooks/useAccountPermissions";
 import { useReportContent } from "@/hooks/useQueries";
 import { useSessionGate } from "@/hooks/useSessionGate";
 import {
   getVerifiedVoteForClaim,
-  isVerifiedSessionId,
+  isTrustedContributorSession,
   useVerifiedAccount,
 } from "@/hooks/useVerifiedAccount";
 import { getClaimSlug } from "@/utils/slug";
@@ -185,6 +193,97 @@ function ImageGrid({
   );
 }
 
+// ── Evidence editable text display ──────────────────────────────────────────
+function EvidenceTextDisplay({
+  item,
+  sessionId,
+  canEdit,
+}: {
+  item: { id: bigint; text: string; sessionId: string; timestamp: bigint };
+  sessionId: string;
+  canEdit: boolean;
+}) {
+  const editKey = `evidence_${item.id.toString()}`;
+  const stored = getEdit(editKey);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editText, setEditText] = useState(stored?.text ?? item.text);
+  const [displayText, setDisplayText] = useState(stored?.text ?? item.text);
+  const [isEdited, setIsEdited] = useState(!!stored);
+
+  const isOwn = item.sessionId === sessionId;
+  const withinWindow = isWithinEditWindow(item.timestamp);
+  const showEdit = canEdit && isOwn && withinWindow;
+
+  function handleSave() {
+    if (!editText.trim()) return;
+    saveEdit(editKey, editText.trim());
+    setDisplayText(editText.trim());
+    setIsEdited(true);
+    setIsEditing(false);
+  }
+
+  if (isEditing) {
+    return (
+      <div className="mb-1 space-y-1">
+        <Textarea
+          value={editText}
+          onChange={(e) => setEditText(e.target.value)}
+          rows={3}
+          maxLength={1000}
+          className="bg-card border-border font-body resize-none text-sm"
+          autoFocus
+        />
+        <div className="flex gap-2">
+          <Button
+            type="button"
+            size="sm"
+            onClick={handleSave}
+            className="h-6 px-2 text-xs font-body gap-1"
+          >
+            <Check className="h-3 w-3" />
+            Save
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              setEditText(displayText);
+              setIsEditing(false);
+            }}
+            className="h-6 px-2 text-xs font-body text-muted-foreground"
+          >
+            Cancel
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mb-1 group/text">
+      <p className="text-sm text-foreground font-body leading-relaxed inline">
+        {displayText}
+      </p>
+      {isEdited && (
+        <span className="ml-1 text-xs text-muted-foreground italic font-body">
+          (edited)
+        </span>
+      )}
+      {showEdit && (
+        <button
+          type="button"
+          onClick={() => setIsEditing(true)}
+          className="ml-1.5 inline-flex items-center gap-0.5 text-xs text-muted-foreground hover:text-foreground opacity-0 group-hover/text:opacity-100 transition-opacity"
+          aria-label="Edit evidence"
+        >
+          <Pencil className="h-2.5 w-2.5" />
+        </button>
+      )}
+    </div>
+  );
+}
+
 export function ClaimDetail({
   claimId,
   sessionId,
@@ -237,6 +336,7 @@ export function ClaimDetail({
     recordVerifiedVote,
     displayName: verifiedDisplayName,
   } = useVerifiedAccount();
+  const { canUploadImages, canReport } = useAccountPermissions();
 
   const evidenceIds = useMemo(
     () => (evidence ?? []).map((e) => e.id),
@@ -411,17 +511,24 @@ export function ClaimDetail({
               <Share2 className="h-3.5 w-3.5" />
               <span className="hidden sm:inline">Share</span>
             </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setReportDialogOpen(true)}
-              data-ocid="claim_detail.report_button"
-              className="font-body gap-2 border-border text-muted-foreground hover:text-destructive hover:border-destructive/40 transition-colors"
-              aria-label="Report this claim"
-            >
-              <Flag className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Report</span>
-            </Button>
+            {canReport ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setReportDialogOpen(true)}
+                data-ocid="claim_detail.report_button"
+                className="font-body gap-2 border-border text-muted-foreground hover:text-destructive hover:border-destructive/40 transition-colors"
+                aria-label="Report this claim"
+              >
+                <Flag className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Report</span>
+              </Button>
+            ) : (
+              <p className="flex items-center gap-1.5 text-xs text-muted-foreground font-body">
+                <LogIn className="h-3 w-3 flex-shrink-0" />
+                <span className="hidden sm:inline">Sign in to report</span>
+              </p>
+            )}
           </div>
         )}
       </div>
@@ -681,16 +788,23 @@ export function ClaimDetail({
                   className="bg-secondary border-border font-body resize-none"
                 />
 
-                {/* Image uploader */}
+                {/* Image uploader — verified accounts only */}
                 <div>
                   <p className="text-xs text-muted-foreground font-body mb-1.5">
                     Attach images (optional)
                   </p>
-                  <ImageUploader
-                    onUploaded={setEvidenceImageUrls}
-                    maxFiles={5}
-                    ocidPrefix="evidence.image"
-                  />
+                  {canUploadImages ? (
+                    <ImageUploader
+                      onUploaded={setEvidenceImageUrls}
+                      maxFiles={5}
+                      ocidPrefix="evidence.image"
+                    />
+                  ) : (
+                    <p className="flex items-center gap-1.5 text-xs text-muted-foreground font-body">
+                      <LogIn className="h-3 w-3 flex-shrink-0" />
+                      Sign in to attach images
+                    </p>
+                  )}
                 </div>
 
                 {/* URL list */}
@@ -928,7 +1042,7 @@ export function ClaimDetail({
                           {item.sessionId === sessionId
                             ? (verifiedDisplayName ?? username)
                             : "Anonymous"}
-                          {isVerifiedSessionId(item.sessionId) && (
+                          {isTrustedContributorSession(item.sessionId) && (
                             <VerifiedBadge />
                           )}
                         </span>
@@ -945,10 +1059,12 @@ export function ClaimDetail({
                         />
                       </div>
 
-                      {/* Line 2: evidence text */}
-                      <p className="text-sm text-foreground font-body leading-relaxed mb-1">
-                        {item.text}
-                      </p>
+                      {/* Line 2: evidence text (editable for own verified) */}
+                      <EvidenceTextDisplay
+                        item={item}
+                        sessionId={sessionId}
+                        canEdit={canReport}
+                      />
 
                       {/* Evidence images */}
                       <ImageGrid imageUrls={item.imageUrls ?? []} size="sm" />
@@ -990,21 +1106,36 @@ export function ClaimDetail({
                                 <Share2 className="h-3.5 w-3.5 text-gray-500" />
                                 <span>Share</span>
                               </DropdownMenuItem>
-                              <DropdownMenuItem
-                                data-ocid={`evidence.delete_button.${idx + 1}`}
-                                className="text-gray-500 cursor-pointer gap-2"
-                                disabled={reportedEvidence.has(
-                                  item.id.toString(),
-                                )}
-                                onClick={() => setReportingEvidenceId(item.id)}
-                              >
-                                <Flag className="h-3.5 w-3.5 text-gray-500" />
-                                <span>
-                                  {reportedEvidence.has(item.id.toString())
-                                    ? "Reported"
-                                    : "Report"}
-                                </span>
-                              </DropdownMenuItem>
+                              {canReport ? (
+                                <DropdownMenuItem
+                                  data-ocid={`evidence.delete_button.${idx + 1}`}
+                                  className="text-gray-500 cursor-pointer gap-2"
+                                  disabled={reportedEvidence.has(
+                                    item.id.toString(),
+                                  )}
+                                  onClick={() =>
+                                    setReportingEvidenceId(item.id)
+                                  }
+                                >
+                                  <Flag className="h-3.5 w-3.5 text-gray-500" />
+                                  <span>
+                                    {reportedEvidence.has(item.id.toString())
+                                      ? "Reported"
+                                      : "Report"}
+                                  </span>
+                                </DropdownMenuItem>
+                              ) : (
+                                <DropdownMenuItem
+                                  data-ocid={`evidence.delete_button.${idx + 1}`}
+                                  className="text-muted-foreground cursor-default gap-2"
+                                  disabled
+                                >
+                                  <LogIn className="h-3.5 w-3.5 text-muted-foreground" />
+                                  <span className="text-xs">
+                                    Sign in to report
+                                  </span>
+                                </DropdownMenuItem>
+                              )}
                             </DropdownMenuContent>
                           </DropdownMenu>
                         </div>

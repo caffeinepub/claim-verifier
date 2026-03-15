@@ -2,6 +2,13 @@ import type { Claim, Evidence } from "@/backend.d";
 import { SourceDiscussion } from "@/components/SourceDiscussion";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Tooltip,
@@ -9,6 +16,14 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  clearDispute,
+  getDispute,
+  getDisputeVote,
+  saveDispute,
+  saveDisputeVote,
+  useAccountPermissions,
+} from "@/hooks/useAccountPermissions";
 import { useActor } from "@/hooks/useActor";
 import type { TrustedSourceInfo } from "@/hooks/useQueries";
 import {
@@ -23,6 +38,10 @@ import {
   useWikipediaBlurb,
 } from "@/hooks/useQueries";
 import { useSessionGate } from "@/hooks/useSessionGate";
+import {
+  getVerifiedVotes,
+  useVerifiedAccount,
+} from "@/hooks/useVerifiedAccount";
 import { cn } from "@/lib/utils";
 import {
   getSourceTypeBadgeClasses,
@@ -44,10 +63,13 @@ import {
   Flag,
   Globe,
   Loader2,
+  LogIn,
   Pin,
   Shield,
   ShieldCheck,
+  ShieldX,
   Users,
+  Vote,
 } from "lucide-react";
 import { motion } from "motion/react";
 import { useState } from "react";
@@ -731,6 +753,259 @@ function AdminControls({ source }: { source: TrustedSourceInfo }) {
   );
 }
 
+// ── Source Category Dispute ───────────────────────────────────────────────────
+
+const SOURCE_TYPE_OPTIONS = [
+  { value: "peer-reviewed", label: "Peer-Reviewed Study" },
+  { value: "government", label: "Government Data" },
+  { value: "major-news", label: "Major News Organization" },
+  { value: "independent", label: "Independent Journalism" },
+  { value: "reference", label: "Reference / Encyclopedia" },
+  { value: "blog", label: "Blog / Opinion" },
+  { value: "archive", label: "Archive" },
+  { value: "social", label: "Social Media" },
+];
+
+function SourceDisputePanel({
+  source,
+  sessionId,
+}: {
+  source: TrustedSourceInfo;
+  sessionId: string;
+}) {
+  const sourceKey = source.id.toString();
+  const [dispute, setDispute] = useState(() => getDispute(sourceKey));
+  const [showForm, setShowForm] = useState(false);
+  const [proposedType, setProposedType] = useState("");
+
+  const myVote = dispute ? getDisputeVote(sourceKey, sessionId) : null;
+
+  const currentVotes = dispute
+    ? Object.values(dispute.votes).filter((v) => v === "current").length
+    : 0;
+  const proposedVotes = dispute
+    ? Object.values(dispute.votes).filter((v) => v === "proposed").length
+    : 0;
+  const totalPollVotes = currentVotes + proposedVotes;
+  const resolved = totalPollVotes >= 10;
+  const winner = resolved
+    ? currentVotes >= proposedVotes
+      ? "current"
+      : "proposed"
+    : null;
+
+  function handleStartDispute() {
+    if (!proposedType || proposedType === source.sourceType) return;
+    const record = {
+      proposedType,
+      creatorSessionId: sessionId,
+      timestamp: Date.now(),
+      votes: {},
+    };
+    saveDispute(sourceKey, record);
+    setDispute(record);
+    setShowForm(false);
+    setProposedType("");
+  }
+
+  function handleVote(side: "current" | "proposed") {
+    if (!dispute || myVote) return;
+    const updated = {
+      ...dispute,
+      votes: { ...dispute.votes, [sessionId]: side },
+    };
+    saveDispute(sourceKey, updated);
+    saveDisputeVote(sourceKey, sessionId, side);
+    setDispute(updated);
+  }
+
+  function handleClearDispute() {
+    clearDispute(sourceKey);
+    setDispute(null);
+    setShowForm(false);
+  }
+
+  if (!dispute && !showForm) {
+    return (
+      <button
+        type="button"
+        data-ocid="source_dispute.button"
+        onClick={() => setShowForm(true)}
+        className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground font-body transition-colors"
+      >
+        <Vote className="h-3.5 w-3.5" />
+        Dispute Category
+      </button>
+    );
+  }
+
+  if (showForm && !dispute) {
+    const otherTypes = SOURCE_TYPE_OPTIONS.filter(
+      (t) => t.value !== source.sourceType,
+    );
+    return (
+      <div className="space-y-2 p-3 bg-secondary border border-border rounded-sm text-sm">
+        <p className="text-xs font-body font-medium text-foreground">
+          Propose a new category for{" "}
+          <span className="font-mono">{source.domain}</span>
+        </p>
+        <p className="text-xs text-muted-foreground font-body">
+          Current:{" "}
+          <span className="font-medium">
+            {getSourceTypeLabel(source.sourceType)}
+          </span>
+        </p>
+        <Select value={proposedType} onValueChange={setProposedType}>
+          <SelectTrigger className="h-8 text-xs bg-card border-border font-body">
+            <SelectValue placeholder="Select proposed category" />
+          </SelectTrigger>
+          <SelectContent>
+            {otherTypes.map((t) => (
+              <SelectItem
+                key={t.value}
+                value={t.value}
+                className="text-xs font-body"
+              >
+                {t.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <div className="flex gap-2">
+          <Button
+            type="button"
+            size="sm"
+            onClick={handleStartDispute}
+            disabled={!proposedType}
+            className="h-7 text-xs font-body"
+          >
+            Start Poll
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => setShowForm(false)}
+            className="h-7 text-xs font-body text-muted-foreground"
+          >
+            Cancel
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!dispute) return null;
+
+  const currentLabel = getSourceTypeLabel(source.sourceType);
+  const proposedLabel = getSourceTypeLabel(dispute.proposedType);
+  const currentPct =
+    totalPollVotes > 0 ? Math.round((currentVotes / totalPollVotes) * 100) : 50;
+  const proposedPct =
+    totalPollVotes > 0
+      ? Math.round((proposedVotes / totalPollVotes) * 100)
+      : 50;
+
+  return (
+    <div
+      data-ocid="source_dispute.poll"
+      className="p-4 bg-secondary border border-border rounded-sm space-y-3"
+    >
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Vote className="h-4 w-4 text-primary" />
+          <span className="text-sm font-body font-semibold text-foreground">
+            Category Dispute
+          </span>
+        </div>
+        <button
+          type="button"
+          onClick={handleClearDispute}
+          className="text-xs text-muted-foreground hover:text-foreground font-body"
+        >
+          Clear
+        </button>
+      </div>
+      <p className="text-xs text-muted-foreground font-body">
+        Community is voting on the correct category for{" "}
+        <span className="font-mono">{source.domain}</span>
+        {resolved && winner && (
+          <span className="ml-1 text-primary font-medium">
+            · {winner === "current" ? currentLabel : proposedLabel} wins!
+          </span>
+        )}
+      </p>
+      <div className="space-y-2">
+        {/* Current category */}
+        <div className="space-y-1">
+          <div className="flex items-center justify-between text-xs font-body">
+            <span className="text-foreground font-medium">
+              Keep: {currentLabel}
+            </span>
+            <span className="text-muted-foreground font-mono">
+              {currentVotes} votes ({currentPct}%)
+            </span>
+          </div>
+          <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+            <div
+              className="h-full bg-emerald-500 rounded-full transition-all"
+              style={{ width: `${currentPct}%` }}
+            />
+          </div>
+        </div>
+        {/* Proposed category */}
+        <div className="space-y-1">
+          <div className="flex items-center justify-between text-xs font-body">
+            <span className="text-foreground font-medium">
+              Change to: {proposedLabel}
+            </span>
+            <span className="text-muted-foreground font-mono">
+              {proposedVotes} votes ({proposedPct}%)
+            </span>
+          </div>
+          <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+            <div
+              className="h-full bg-primary rounded-full transition-all"
+              style={{ width: `${proposedPct}%` }}
+            />
+          </div>
+        </div>
+      </div>
+      {!resolved && (
+        <div className="flex gap-2">
+          <Button
+            type="button"
+            data-ocid="source_dispute.vote_current_button"
+            size="sm"
+            variant={myVote === "current" ? "default" : "outline"}
+            onClick={() => handleVote("current")}
+            disabled={!!myVote}
+            className="h-7 text-xs font-body flex-1"
+          >
+            Keep {currentLabel}
+          </Button>
+          <Button
+            type="button"
+            data-ocid="source_dispute.vote_proposed_button"
+            size="sm"
+            variant={myVote === "proposed" ? "default" : "outline"}
+            onClick={() => handleVote("proposed")}
+            disabled={!!myVote}
+            className="h-7 text-xs font-body flex-1"
+          >
+            Change to {proposedLabel}
+          </Button>
+        </div>
+      )}
+      {myVote && !resolved && (
+        <p className="text-xs text-muted-foreground font-body text-center">
+          You voted · {totalPollVotes}/10 votes to resolve
+        </p>
+      )}
+    </div>
+  );
+}
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export function SourceDetailPage({
@@ -745,6 +1020,8 @@ export function SourceDetailPage({
   onClaimClick: (claim: Claim) => void;
 }) {
   const { data: sources, isLoading } = useTrustedSources();
+  const { canVoteOnSources, isExpert } = useAccountPermissions();
+  const sessionIdStr = sessionId ?? "";
   const source = (sources ?? []).find(
     (s) => s.domain.toLowerCase() === domain.toLowerCase(),
   );
@@ -1008,9 +1285,16 @@ export function SourceDetailPage({
                 </div>
               </div>
 
-              {/* Voting panel */}
+              {/* Voting panel — verified accounts only */}
               <div className="flex items-center justify-center pt-1">
-                <VotePanel source={source} sessionId={sessionId} />
+                {canVoteOnSources ? (
+                  <VotePanel source={source} sessionId={sessionId} />
+                ) : (
+                  <p className="flex items-center gap-1.5 text-xs text-muted-foreground font-body">
+                    <LogIn className="h-3 w-3 flex-shrink-0" />
+                    Sign in to vote on sources
+                  </p>
+                )}
               </div>
             </div>
 
@@ -1102,6 +1386,13 @@ export function SourceDetailPage({
 
             {/* ── Admin Controls ────────────────────────────────── */}
             <AdminControls source={source} />
+
+            {/* ── Category Dispute (Expert tier only) ──────────── */}
+            {isExpert && source.isTrusted && sessionIdStr && (
+              <section className="mt-4">
+                <SourceDisputePanel source={source} sessionId={sessionIdStr} />
+              </section>
+            )}
           </div>
         )}
       </motion.div>

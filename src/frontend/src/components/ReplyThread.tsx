@@ -9,6 +9,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Textarea } from "@/components/ui/textarea";
+import { useAccountPermissions } from "@/hooks/useAccountPermissions";
 import {
   type Reply,
   useAddReply,
@@ -20,7 +21,7 @@ import {
   useUsername,
 } from "@/hooks/useQueries";
 import { useSessionGate } from "@/hooks/useSessionGate";
-import { isVerifiedSessionId } from "@/hooks/useVerifiedAccount";
+import { isTrustedContributorSession } from "@/hooks/useVerifiedAccount";
 import { cn } from "@/lib/utils";
 import { formatRelativeTime } from "@/utils/time";
 import {
@@ -30,6 +31,7 @@ import {
   CornerDownRight,
   Flag,
   Loader2,
+  LogIn,
   MessageSquare,
   MoreHorizontal,
   Send,
@@ -40,7 +42,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
-// ── Reply Form ────────────────────────────────────────────────────────────────
+// ── Reply Form ────────────────────────────────────────────────────────────────────
 
 interface ReplyFormProps {
   evidenceId: bigint;
@@ -178,7 +180,7 @@ function ReplyForm({
   );
 }
 
-// ── Single Reply Card ─────────────────────────────────────────────────────────
+// ── Single Reply Card ───────────────────────────────────────────────────────────────
 
 interface ReplyCardProps {
   reply: Reply;
@@ -218,6 +220,7 @@ function ReplyCard({
 
   const likeReply = useLikeReply();
   const { checkAction: checkReplyAction } = useSessionGate();
+  const { canReport } = useAccountPermissions();
   const { data: isLiked = false } = useSessionLikeForReply(reply.id, sessionId);
   const likeCount = likeCounts[reply.id.toString()] ?? 0;
 
@@ -254,7 +257,7 @@ function ReplyCard({
           <UserAvatar username={displayAuthor} size="sm" />
           <span className="text-xs font-semibold text-foreground font-mono flex items-center gap-1">
             {displayAuthor}
-            {isVerifiedSessionId(reply.sessionId) && <VerifiedBadge />}
+            {isTrustedContributorSession(reply.sessionId) && <VerifiedBadge />}
           </span>
           <span className="text-xs text-muted-foreground font-body">
             · {formatRelativeTime(reply.timestamp)}
@@ -321,7 +324,7 @@ function ReplyCard({
                 <MoreHorizontal className="h-3.5 w-3.5" />
               </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-36">
+            <DropdownMenuContent align="end" className="w-40">
               <DropdownMenuItem
                 data-ocid={`reply.secondary_button.${index}`}
                 className="text-muted-foreground cursor-pointer gap-2"
@@ -330,19 +333,32 @@ function ReplyCard({
                 <Share2 className="h-3.5 w-3.5 text-muted-foreground" />
                 <span>Share</span>
               </DropdownMenuItem>
-              <DropdownMenuItem
-                data-ocid={`reply.delete_button.${index}`}
-                className="text-muted-foreground cursor-pointer gap-2"
-                disabled={reportedIds.has(reply.id.toString())}
-                onClick={() => {
-                  if (checkReplyAction()) setReportDialogOpen(true);
-                }}
-              >
-                <Flag className="h-3.5 w-3.5 text-muted-foreground" />
-                <span>
-                  {reportedIds.has(reply.id.toString()) ? "Reported" : "Report"}
-                </span>
-              </DropdownMenuItem>
+              {canReport ? (
+                <DropdownMenuItem
+                  data-ocid={`reply.delete_button.${index}`}
+                  className="text-muted-foreground cursor-pointer gap-2"
+                  disabled={reportedIds.has(reply.id.toString())}
+                  onClick={() => {
+                    if (checkReplyAction()) setReportDialogOpen(true);
+                  }}
+                >
+                  <Flag className="h-3.5 w-3.5 text-muted-foreground" />
+                  <span>
+                    {reportedIds.has(reply.id.toString())
+                      ? "Reported"
+                      : "Report"}
+                  </span>
+                </DropdownMenuItem>
+              ) : (
+                <DropdownMenuItem
+                  data-ocid={`reply.delete_button.${index}`}
+                  className="text-muted-foreground cursor-default gap-2"
+                  disabled
+                >
+                  <LogIn className="h-3.5 w-3.5 text-muted-foreground" />
+                  <span className="text-xs">Sign in to report</span>
+                </DropdownMenuItem>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
@@ -405,7 +421,7 @@ function ReplyCard({
   );
 }
 
-// ── Main ReplyThread Component ────────────────────────────────────────────────
+// ── Main ReplyThread Component ──────────────────────────────────────────────────────
 
 interface ReplyThreadProps {
   evidenceId: bigint;
