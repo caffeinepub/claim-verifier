@@ -15,7 +15,10 @@ import {
   FileText,
   Layers,
   Loader2,
+  MessageSquare,
   Pencil,
+  Shield,
+  Star,
   Vote,
   X,
 } from "lucide-react";
@@ -67,13 +70,62 @@ const TIER_CONFIG: Record<string, { label: string; className: string }> = {
   },
 };
 
-function getReputationTier(voteCount: number): string {
-  if (voteCount >= 500) return "Expert";
-  if (voteCount >= 100) return "Investigator";
-  if (voteCount >= 25) return "Analyst";
-  if (voteCount >= 5) return "Contributor";
+const TIER_THRESHOLDS: { tier: string; min: number; next: number | null }[] = [
+  { tier: "Newcomer", min: 0, next: 5 },
+  { tier: "Contributor", min: 5, next: 25 },
+  { tier: "Analyst", min: 25, next: 100 },
+  { tier: "Investigator", min: 100, next: 500 },
+  { tier: "Expert", min: 500, next: null },
+];
+
+function getReputationTier(points: number): string {
+  if (points >= 500) return "Expert";
+  if (points >= 100) return "Investigator";
+  if (points >= 25) return "Analyst";
+  if (points >= 5) return "Contributor";
   return "Newcomer";
 }
+
+function getTierProgress(points: number): {
+  currentTier: string;
+  nextTier: string | null;
+  current: number;
+  threshold: number | null;
+  progressPct: number;
+} {
+  const tierData = TIER_THRESHOLDS.find(
+    (t) => t.tier === getReputationTier(points),
+  )!;
+  if (tierData.next === null) {
+    return {
+      currentTier: tierData.tier,
+      nextTier: null,
+      current: points,
+      threshold: null,
+      progressPct: 100,
+    };
+  }
+  const nextTierData = TIER_THRESHOLDS.find((t) => t.min === tierData.next)!;
+  const progressInTier = points - tierData.min;
+  const tierRange = tierData.next - tierData.min;
+  return {
+    currentTier: tierData.tier,
+    nextTier: nextTierData.tier,
+    current: points,
+    threshold: tierData.next,
+    progressPct: Math.min(100, (progressInTier / tierRange) * 100),
+  };
+}
+
+const HOW_TO_EARN = [
+  { action: "Submit a claim", pts: "+1 pt" },
+  { action: "Post evidence", pts: "+1 pt" },
+  { action: "Post a comment", pts: "+1 pt" },
+  { action: "Cast a vote", pts: "+1 pt" },
+];
+
+const TAB_TRIGGER_CLASS =
+  "data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:hover:text-white data-[state=inactive]:bg-transparent data-[state=inactive]:text-muted-foreground hover:text-primary hover:bg-transparent px-3 py-2 text-xs font-medium font-body rounded-lg gap-1.5 h-auto transition-colors shadow-none shrink-0 whitespace-nowrap";
 
 export function ProfilePage({ username, onBack }: ProfilePageProps) {
   const {
@@ -108,8 +160,9 @@ export function ProfilePage({ username, onBack }: ProfilePageProps) {
 
   const verifiedVotes = isOwnProfile ? getVerifiedVotes() : {};
   const voteCount = Object.keys(verifiedVotes).length;
-  const tier = getReputationTier(voteCount);
+  const tier = getReputationTier(activityPoints);
   const tierConfig = TIER_CONFIG[tier];
+  const tierProgress = getTierProgress(activityPoints);
 
   async function handleAvatarUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -359,54 +412,116 @@ export function ProfilePage({ username, onBack }: ProfilePageProps) {
         </div>
       )}
 
-      {/* Trusted Contributor Progress — own profile only, when not yet earned */}
-      {isOwnProfile && !isTrustedContributor && (
+      {/* Reputation & Trusted Contributor Progress — own profile only */}
+      {isOwnProfile && (
         <div className="mt-4 bg-muted/40 border border-border rounded-xl p-4">
           <div className="flex items-center gap-2 mb-3">
             <span className="text-xs font-semibold font-display text-foreground">
-              Trusted Contributor Badge Progress
+              Reputation Progress
             </span>
           </div>
-          <p className="text-[11px] text-muted-foreground font-body mb-3">
-            Earn by contributing quality evidence, comments, and votes
-          </p>
+
           <div className="flex flex-col gap-2.5">
-            <div>
-              <div className="flex justify-between mb-1">
-                <span className="text-[11px] text-muted-foreground font-body">
-                  Activity Points
+            {/* Tier progress */}
+            {tierProgress.nextTier === null ? (
+              /* Expert — max tier reached */
+              <div className="flex items-center gap-2 py-1">
+                <Star className="h-3.5 w-3.5 text-primary flex-shrink-0" />
+                <span className="text-[11px] font-semibold font-display text-primary">
+                  Max tier reached
                 </span>
-                <span className="text-[11px] font-semibold font-display text-foreground">
-                  {activityPoints}/25
+                <span className="text-[11px] text-muted-foreground font-body ml-auto">
+                  {activityPoints} pts
                 </span>
               </div>
-              <div className="w-full bg-border rounded-full h-1.5">
-                <div
-                  className="bg-primary rounded-full h-1.5 transition-all"
-                  style={{
-                    width: `${Math.min(100, (activityPoints / 25) * 100)}%`,
-                  }}
-                />
+            ) : (
+              <div>
+                <div className="flex justify-between mb-1">
+                  <span className="text-[11px] text-muted-foreground font-body">
+                    Tier — {tierProgress.currentTier} → {tierProgress.nextTier}
+                  </span>
+                  <span className="text-[11px] font-semibold font-display text-foreground">
+                    {activityPoints}/{tierProgress.threshold}
+                  </span>
+                </div>
+                <div className="w-full bg-border rounded-full h-1.5">
+                  <div
+                    className="bg-primary rounded-full h-1.5 transition-all"
+                    style={{ width: `${tierProgress.progressPct}%` }}
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* How to earn points breakdown */}
+            <div className="border-t border-border/60 pt-2.5">
+              <p className="text-[11px] font-semibold text-muted-foreground font-body mb-1.5">
+                How to earn points:
+              </p>
+              <div className="grid grid-cols-2 gap-x-3 gap-y-1">
+                {HOW_TO_EARN.map(({ action, pts }) => (
+                  <div
+                    key={action}
+                    className="flex items-center justify-between gap-1"
+                  >
+                    <span className="text-[11px] text-muted-foreground font-body">
+                      {action}
+                    </span>
+                    <span className="text-[11px] font-semibold text-primary font-mono flex-shrink-0">
+                      {pts}
+                    </span>
+                  </div>
+                ))}
               </div>
             </div>
-            <div>
-              <div className="flex justify-between mb-1">
-                <span className="text-[11px] text-muted-foreground font-body">
-                  Trust Score
-                </span>
-                <span className="text-[11px] font-semibold font-display text-foreground">
-                  {trustScore}% / 70% required
-                </span>
-              </div>
-              <div className="w-full bg-border rounded-full h-1.5">
-                <div
-                  className="bg-primary rounded-full h-1.5 transition-all"
-                  style={{
-                    width: `${Math.min(100, (trustScore / 70) * 100)}%`,
-                  }}
-                />
-              </div>
-            </div>
+
+            {/* Trusted Contributor progress — only when not yet earned */}
+            {!isTrustedContributor && (
+              <>
+                <div className="border-t border-border/60 pt-2.5 -mx-0">
+                  <p className="text-[11px] text-muted-foreground font-body mb-2.5">
+                    Earn the Trusted Contributor badge by reaching Analyst tier
+                    (25 pts) with a 70%+ trust score
+                  </p>
+                </div>
+                <div>
+                  <div className="flex justify-between mb-1">
+                    <span className="text-[11px] text-muted-foreground font-body">
+                      Activity Points
+                    </span>
+                    <span className="text-[11px] font-semibold font-display text-foreground">
+                      {activityPoints}/25
+                    </span>
+                  </div>
+                  <div className="w-full bg-border rounded-full h-1.5">
+                    <div
+                      className="bg-primary rounded-full h-1.5 transition-all"
+                      style={{
+                        width: `${Math.min(100, (activityPoints / 25) * 100)}%`,
+                      }}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <div className="flex justify-between mb-1">
+                    <span className="text-[11px] text-muted-foreground font-body">
+                      Trust Score
+                    </span>
+                    <span className="text-[11px] font-semibold font-display text-foreground">
+                      {trustScore}% / 70% required
+                    </span>
+                  </div>
+                  <div className="w-full bg-border rounded-full h-1.5">
+                    <div
+                      className="bg-primary rounded-full h-1.5 transition-all"
+                      style={{
+                        width: `${Math.min(100, (trustScore / 70) * 100)}%`,
+                      }}
+                    />
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -415,32 +530,56 @@ export function ProfilePage({ username, onBack }: ProfilePageProps) {
       {isOwnProfile && (
         <div className="mt-5">
           <Tabs defaultValue="votes">
-            <TabsList className="w-full bg-muted p-1 rounded-lg h-auto gap-1">
-              <TabsTrigger
-                value="votes"
-                className="flex-1 gap-1.5 font-body text-xs py-1.5 rounded-md data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-sm text-muted-foreground transition-all"
-                data-ocid="profile.tab"
-              >
-                <Vote className="h-3.5 w-3.5" />
-                Votes
-              </TabsTrigger>
-              <TabsTrigger
-                value="claims"
-                className="flex-1 gap-1.5 font-body text-xs py-1.5 rounded-md data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-sm text-muted-foreground transition-all"
-                data-ocid="profile.tab"
-              >
-                <FileText className="h-3.5 w-3.5" />
-                Claims
-              </TabsTrigger>
-              <TabsTrigger
-                value="evidence"
-                className="flex-1 gap-1.5 font-body text-xs py-1.5 rounded-md data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-sm text-muted-foreground transition-all"
-                data-ocid="profile.tab"
-              >
-                <Layers className="h-3.5 w-3.5" />
-                Evidence
-              </TabsTrigger>
-            </TabsList>
+            {/*
+             * Scrollable tab strip on mobile.
+             * TabsList from Radix has overflow:hidden baked in, so we wrap it
+             * in an outer div that handles the scroll, and set w-max on the
+             * TabsList so it expands to its natural content width.
+             */}
+            <div className="overflow-x-auto -mx-1 px-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              <TabsList className="flex gap-x-1 flex-nowrap bg-transparent p-0 h-auto w-max">
+                <TabsTrigger
+                  value="votes"
+                  data-ocid="profile.tab"
+                  className={TAB_TRIGGER_CLASS}
+                >
+                  <Vote className="h-3.5 w-3.5" />
+                  Votes
+                </TabsTrigger>
+                <TabsTrigger
+                  value="claims"
+                  data-ocid="profile.tab"
+                  className={TAB_TRIGGER_CLASS}
+                >
+                  <FileText className="h-3.5 w-3.5" />
+                  Claims
+                </TabsTrigger>
+                <TabsTrigger
+                  value="evidence"
+                  data-ocid="profile.tab"
+                  className={TAB_TRIGGER_CLASS}
+                >
+                  <Layers className="h-3.5 w-3.5" />
+                  Evidence
+                </TabsTrigger>
+                <TabsTrigger
+                  value="comments"
+                  data-ocid="profile.tab"
+                  className={TAB_TRIGGER_CLASS}
+                >
+                  <MessageSquare className="h-3.5 w-3.5" />
+                  Comments
+                </TabsTrigger>
+                <TabsTrigger
+                  value="sources"
+                  data-ocid="profile.tab"
+                  className={TAB_TRIGGER_CLASS}
+                >
+                  <Shield className="h-3.5 w-3.5" />
+                  Sources
+                </TabsTrigger>
+              </TabsList>
+            </div>
 
             <TabsContent value="votes" className="mt-4">
               {voteCount === 0 ? (
@@ -515,6 +654,36 @@ export function ProfilePage({ username, onBack }: ProfilePageProps) {
                 </p>
                 <p className="text-xs font-body text-muted-foreground/60 mt-1">
                   Evidence you submit on claims will appear here.
+                </p>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="comments" className="mt-4">
+              <div
+                className="flex flex-col items-center justify-center py-12 text-center"
+                data-ocid="profile.empty_state"
+              >
+                <MessageSquare className="h-8 w-8 text-muted-foreground/30 mb-3" />
+                <p className="text-sm font-body text-muted-foreground">
+                  No comments yet
+                </p>
+                <p className="text-xs font-body text-muted-foreground/60 mt-1">
+                  Comments you post will appear here.
+                </p>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="sources" className="mt-4">
+              <div
+                className="flex flex-col items-center justify-center py-12 text-center"
+                data-ocid="profile.empty_state"
+              >
+                <Shield className="h-8 w-8 text-muted-foreground/30 mb-3" />
+                <p className="text-sm font-body text-muted-foreground">
+                  No sources suggested yet
+                </p>
+                <p className="text-xs font-body text-muted-foreground/60 mt-1">
+                  Trusted sources you suggest will appear here.
                 </p>
               </div>
             </TabsContent>
