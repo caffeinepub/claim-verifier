@@ -36,6 +36,7 @@ import {
   Globe,
   Loader2,
   Plus,
+  Search,
   Shield,
   ShieldCheck,
   Users,
@@ -424,9 +425,23 @@ export function TrustedSourcesPage({
   onSourceClick?: (domain: string) => void;
 }) {
   const { data: sources, isLoading, error } = useTrustedSources();
+  const [searchQuery, setSearchQuery] = useState("");
 
-  const trustedSources = (sources ?? []).filter((s) => s.isTrusted);
-  const pendingSources = (sources ?? []).filter((s) => !s.isTrusted);
+  const allSources = sources ?? [];
+  const filteredTrusted = allSources
+    .filter((s) => s.isTrusted)
+    .filter((s) => s.domain.toLowerCase().includes(searchQuery.toLowerCase()));
+  const filteredPending = allSources
+    .filter((s) => !s.isTrusted)
+    .filter((s) => s.domain.toLowerCase().includes(searchQuery.toLowerCase()));
+
+  const trustedSources = allSources.filter((s) => s.isTrusted);
+  const pendingSources = allSources.filter((s) => !s.isTrusted);
+
+  const hasNoSearchResults =
+    searchQuery.trim() !== "" &&
+    filteredTrusted.length === 0 &&
+    filteredPending.length === 0;
 
   return (
     <motion.div
@@ -455,9 +470,9 @@ export function TrustedSourcesPage({
         </div>
       </div>
 
-      {/* Stats summary — Option C: inline prose sentence */}
+      {/* Stats summary */}
       {!isLoading && sources && sources.length > 0 && (
-        <p className="mb-6 text-sm font-body text-muted-foreground leading-relaxed">
+        <p className="mb-4 text-sm font-body text-muted-foreground leading-relaxed">
           There are{" "}
           <span className="font-semibold text-primary tabular-nums">
             {trustedSources.length} trusted
@@ -466,11 +481,23 @@ export function TrustedSourcesPage({
           <span className="font-semibold text-foreground tabular-nums">
             {pendingSources.length} pending
           </span>{" "}
-          sources.{" "}
-          <span className="text-muted-foreground/70">
-            Upvote good sources to help them reach trusted status.
-          </span>
+          sources.
         </p>
+      )}
+
+      {/* Search bar */}
+      {!isLoading && sources && sources.length > 0 && (
+        <div className="relative mb-6">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+          <Input
+            data-ocid="sources.search_input"
+            type="search"
+            placeholder="Search sources..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-9 font-body bg-secondary border-border"
+          />
+        </div>
       )}
 
       {isLoading ? (
@@ -498,9 +525,17 @@ export function TrustedSourcesPage({
           <Shield className="h-10 w-10 mx-auto mb-3 opacity-30" />
           <p className="font-body text-sm">Failed to load sources.</p>
         </div>
+      ) : hasNoSearchResults ? (
+        <div
+          data-ocid="sources.empty_state"
+          className="text-center py-12 text-muted-foreground"
+        >
+          <Search className="h-8 w-8 mx-auto mb-3 opacity-25" />
+          <p className="font-body text-sm">No sources match your search.</p>
+        </div>
       ) : sources && sources.length > 0 ? (
         <div className="space-y-8">
-          {trustedSources.length > 0 && (
+          {filteredTrusted.length > 0 && (
             <section>
               <h3 className="font-display text-base font-semibold text-foreground mb-3 flex items-center gap-2">
                 <ShieldCheck className="h-4 w-4 text-emerald-500" />
@@ -508,7 +543,7 @@ export function TrustedSourcesPage({
               </h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <AnimatePresence>
-                  {trustedSources.map((s, i) => (
+                  {filteredTrusted.map((s, i) => (
                     <SourceCard
                       key={s.id.toString()}
                       source={s}
@@ -522,7 +557,7 @@ export function TrustedSourcesPage({
             </section>
           )}
 
-          {pendingSources.length > 0 && (
+          {filteredPending.length > 0 && (
             <section>
               <h3 className="font-display text-base font-semibold text-foreground mb-3 flex items-center gap-2">
                 <Shield className="h-4 w-4 text-muted-foreground" />
@@ -530,7 +565,7 @@ export function TrustedSourcesPage({
               </h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <AnimatePresence>
-                  {pendingSources.map((s, i) => (
+                  {filteredPending.map((s, i) => (
                     <SourceCard
                       key={s.id.toString()}
                       source={s}

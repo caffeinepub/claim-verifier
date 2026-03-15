@@ -47,8 +47,6 @@ import {
   Pin,
   Shield,
   ShieldCheck,
-  ThumbsDown,
-  ThumbsUp,
   Users,
 } from "lucide-react";
 import { motion } from "motion/react";
@@ -915,7 +913,7 @@ export function SourceDetailPage({
                   </div>
                 </div>
 
-                <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-body">
+                <div className="flex items-center gap-1.5 flex-wrap text-xs text-muted-foreground font-body">
                   <Users className="h-3.5 w-3.5" />
                   <span>
                     Suggested by{" "}
@@ -940,6 +938,11 @@ export function SourceDetailPage({
                       </>
                     )}
                   </span>
+                  {totalVotes > 0 && (
+                    <span className="text-muted-foreground/70">
+                      · {totalVotes} {totalVotes === 1 ? "vote" : "votes"}
+                    </span>
+                  )}
                 </div>
 
                 {/* Admin override note */}
@@ -967,48 +970,6 @@ export function SourceDetailPage({
                   </p>
                 </div>
               )}
-
-              {/* Trust score breakdown */}
-              <div className="grid grid-cols-3 gap-3 mb-5">
-                <div className="p-3 bg-secondary rounded-sm text-center">
-                  <div className="flex items-center justify-center gap-1 mb-0.5">
-                    <ThumbsUp className="h-3 w-3 text-emerald-600" />
-                    <span className="text-xs font-body text-muted-foreground">
-                      Upvotes
-                    </span>
-                  </div>
-                  <span className="text-xl font-bold font-mono text-emerald-600">
-                    {upvotes}
-                  </span>
-                </div>
-                <div className="p-3 bg-secondary rounded-sm text-center">
-                  <div className="flex items-center justify-center gap-1 mb-0.5">
-                    <ThumbsDown className="h-3 w-3 text-destructive" />
-                    <span className="text-xs font-body text-muted-foreground">
-                      Downvotes
-                    </span>
-                  </div>
-                  <span className="text-xl font-bold font-mono text-destructive">
-                    {downvotes}
-                  </span>
-                </div>
-                <div className="p-3 bg-secondary rounded-sm text-center">
-                  <div className="flex items-center justify-center gap-1 mb-0.5">
-                    <ShieldCheck className="h-3 w-3 text-primary" />
-                    <span className="text-xs font-body text-muted-foreground">
-                      Approval
-                    </span>
-                  </div>
-                  <span
-                    className={cn(
-                      "text-xl font-bold font-mono",
-                      upvotePct >= 60 ? "text-emerald-600" : "text-amber-600",
-                    )}
-                  >
-                    {upvotePct}%
-                  </span>
-                </div>
-              </div>
 
               {/* Progress bars */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
