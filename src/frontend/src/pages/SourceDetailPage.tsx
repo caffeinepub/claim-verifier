@@ -510,9 +510,13 @@ function EvidenceQualitySection({ domain }: { domain: string }) {
 }
 
 function AdminControls({ source }: { source: TrustedSourceInfo }) {
-  const [isOpen, setIsOpen] = useState(false);
+  const [isOpen, setIsOpen] = useState(
+    () => sessionStorage.getItem(ADMIN_SESSION_KEY) === "1",
+  );
   const [password, setPassword] = useState("");
-  const [authenticated, setAuthenticated] = useState(false);
+  const [authenticated, setAuthenticated] = useState(
+    () => sessionStorage.getItem(ADMIN_SESSION_KEY) === "1",
+  );
   const [confirmRemove, setConfirmRemove] = useState(false);
   const [overrideNote, setOverrideNote] = useState("");
   const [pinnedComment, setPinnedComment] = useState(
@@ -1074,11 +1078,15 @@ export function SourceDetailPage({
 
   // Check if current user is admin (via sessionStorage) or the source suggester
   const isAdminSession = sessionStorage.getItem(ADMIN_SESSION_KEY) === "1";
+  const storedUsername = localStorage.getItem("claim_verifier_username") ?? "";
   const isSuggester =
-    !!currentDisplayName &&
     !!source?.suggestedByUsername &&
-    currentDisplayName.toLowerCase() ===
-      source.suggestedByUsername.toLowerCase();
+    ((!!currentDisplayName &&
+      currentDisplayName.toLowerCase() ===
+        source.suggestedByUsername.toLowerCase()) ||
+      (!!storedUsername &&
+        storedUsername.toLowerCase() ===
+          source.suggestedByUsername.toLowerCase()));
   const canEditBlurb = isAdminSession || isSuggester;
 
   // Determine which About blurb to show (priority: admin override > wiki > suggester)

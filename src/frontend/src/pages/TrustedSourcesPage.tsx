@@ -18,6 +18,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Tooltip,
   TooltipContent,
@@ -33,6 +34,7 @@ import {
 import { useSessionGate } from "@/hooks/useSessionGate";
 import { cn } from "@/lib/utils";
 import {
+  CheckCircle2,
   ExternalLink,
   Globe,
   Loader2,
@@ -44,7 +46,7 @@ import {
   Users,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 const SOURCE_TYPES = [
@@ -285,12 +287,60 @@ function SourceCard({
   );
 }
 
+type WikiFetchStatus = "idle" | "checking" | "found" | "not-found";
+
 function SuggestSourceDialog({ sessionId }: { sessionId: string | null }) {
   const [open, setOpen] = useState(false);
   const [domain, setDomain] = useState("");
   const [sourceType, setSourceType] = useState("");
+  const [aboutBlurb, setAboutBlurb] = useState("");
+  const [wikiStatus, setWikiStatus] = useState<WikiFetchStatus>("idle");
+  const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { checkAction } = useSessionGate();
   const suggestSource = useSuggestTrustedSource();
+
+  // Debounced Wikipedia fetch when domain changes
+  useEffect(() => {
+    if (debounceTimer.current) clearTimeout(debounceTimer.current);
+
+    const cleaned = stripDomain(domain);
+    if (cleaned.length < 4) {
+      setWikiStatus("idle");
+      return;
+    }
+
+    setWikiStatus("checking");
+
+    debounceTimer.current = setTimeout(async () => {
+      try {
+        const res = await fetch(
+          `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(cleaned)}`,
+        );
+        if (!res.ok) {
+          setWikiStatus("not-found");
+          return;
+        }
+        const data = await res.json();
+        const hasContent =
+          (data.extract && data.extract.trim().length > 0) ||
+          (data.description && data.description.trim().length > 0);
+        setWikiStatus(hasContent ? "found" : "not-found");
+      } catch {
+        setWikiStatus("not-found");
+      }
+    }, 500);
+
+    return () => {
+      if (debounceTimer.current) clearTimeout(debounceTimer.current);
+    };
+  }, [domain]);
+
+  function resetForm() {
+    setDomain("");
+    setSourceType("");
+    setAboutBlurb("");
+    setWikiStatus("idle");
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -310,10 +360,13 @@ function SuggestSourceDialog({ sessionId }: { sessionId: string | null }) {
         sessionId,
         username,
       });
+      // Save about blurb if the About field was shown (wiki not found) and filled in
+      if (wikiStatus === "not-found" && aboutBlurb.trim()) {
+        localStorage.setItem(`about_blurb_${cleanDomain}`, aboutBlurb.trim());
+      }
       toast.success(`"${cleanDomain}" submitted for community review`);
       setOpen(false);
-      setDomain("");
-      setSourceType("");
+      resetForm();
     } catch (err) {
       const msg =
         err instanceof Error ? err.message : "Failed to suggest source";
@@ -321,8 +374,16 @@ function SuggestSourceDialog({ sessionId }: { sessionId: string | null }) {
     }
   }
 
+  const showAboutField = wikiStatus === "not-found";
+
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog
+      open={open}
+      onOpenChange={(v) => {
+        setOpen(v);
+        if (!v) resetForm();
+      }}
+    >
       <DialogTrigger asChild>
         <Button
           data-ocid="sources.open_modal_button"
@@ -357,9 +418,47 @@ function SuggestSourceDialog({ sessionId }: { sessionId: string | null }) {
               className="font-body bg-secondary border-border"
               autoFocus
             />
-            <p className="text-[10px] text-muted-foreground font-body">
-              Protocol and www are stripped automatically.
-            </p>
+            {/* Wiki fetch status indicator */}
+            <AnimatePresence mode="wait">
+              {wikiStatus === "checking" && (
+                <motion.p
+                  key="checking"
+                  initial={{ opacity: 0, y: -4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -4 }}
+                  transition={{ duration: 0.15 }}
+                  className="flex items-center gap-1.5 text-[11px] text-muted-foreground font-body"
+                >
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  Checking for About info...
+                </motion.p>
+              )}
+              {wikiStatus === "found" && (
+                <motion.p
+                  key="found"
+                  initial={{ opacity: 0, y: -4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -4 }}
+                  transition={{ duration: 0.15 }}
+                  className="flex items-center gap-1.5 text-[11px] text-emerald-600 font-body"
+                >
+                  <CheckCircle2 className="h-3 w-3" />
+                  About info found automatically
+                </motion.p>
+              )}
+              {wikiStatus === "idle" && (
+                <motion.p
+                  key="hint"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.15 }}
+                  className="text-[10px] text-muted-foreground font-body"
+                >
+                  Protocol and www are stripped automatically.
+                </motion.p>
+              )}
+            </AnimatePresence>
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="source-type" className="font-body text-sm">
@@ -389,12 +488,51 @@ function SuggestSourceDialog({ sessionId }: { sessionId: string | null }) {
               </SelectContent>
             </Select>
           </div>
+
+          {/* About field — only shown when wiki auto-fetch fails */}
+          <AnimatePresence>
+            {showAboutField && (
+              <motion.div
+                key="about-field"
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{ duration: 0.2 }}
+                className="overflow-hidden"
+              >
+                <div className="space-y-1.5 pt-0.5">
+                  <Label htmlFor="source-about" className="text-sm font-body">
+                    About this source{" "}
+                    <span className="text-muted-foreground">(optional)</span>
+                  </Label>
+                  <Textarea
+                    id="source-about"
+                    data-ocid="sources.textarea"
+                    placeholder="Briefly describe this source (e.g. its focus, credibility, ownership)..."
+                    value={aboutBlurb}
+                    onChange={(e) =>
+                      setAboutBlurb(e.target.value.slice(0, 500))
+                    }
+                    className="font-body text-sm resize-none"
+                    rows={3}
+                  />
+                  <p className="text-xs text-muted-foreground text-right">
+                    {aboutBlurb.length}/500
+                  </p>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
           <DialogFooter>
             <Button
               type="button"
               variant="outline"
               data-ocid="sources.cancel_button"
-              onClick={() => setOpen(false)}
+              onClick={() => {
+                setOpen(false);
+                resetForm();
+              }}
               className="font-body"
             >
               Cancel
