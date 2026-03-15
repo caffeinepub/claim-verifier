@@ -10,6 +10,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Tooltip,
   TooltipContent,
@@ -64,6 +65,7 @@ import {
   Globe,
   Loader2,
   LogIn,
+  Pencil,
   Pin,
   Shield,
   ShieldCheck,
@@ -76,6 +78,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 const ADMIN_PASSWORD = "lunasimbaliamsammy123!";
+const ADMIN_SESSION_KEY = "rebunked_admin_authed";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -521,6 +524,7 @@ function AdminControls({ source }: { source: TrustedSourceInfo }) {
   function tryAuth() {
     if (password === ADMIN_PASSWORD) {
       setAuthenticated(true);
+      sessionStorage.setItem(ADMIN_SESSION_KEY, "1");
       toast.success("Admin access granted");
     } else {
       toast.error("Incorrect password");
@@ -1055,6 +1059,51 @@ export function SourceDetailPage({
     source?.domain ?? null,
   );
 
+  // Manual About blurb state (localStorage fallback when wiki fails)
+  const { displayName: currentDisplayName } = useVerifiedAccount();
+  const manualBlurbAdminKey = `about_blurb_admin_${domain}`;
+  const manualBlurbKey = `about_blurb_${domain}`;
+  const [manualBlurb, setManualBlurb] = useState<string>(
+    () =>
+      localStorage.getItem(manualBlurbAdminKey) ??
+      localStorage.getItem(manualBlurbKey) ??
+      "",
+  );
+  const [editingBlurb, setEditingBlurb] = useState(false);
+  const [blurbDraft, setBlurbDraft] = useState("");
+
+  // Check if current user is admin (via sessionStorage) or the source suggester
+  const isAdminSession = sessionStorage.getItem(ADMIN_SESSION_KEY) === "1";
+  const isSuggester =
+    !!currentDisplayName &&
+    !!source?.suggestedByUsername &&
+    currentDisplayName.toLowerCase() ===
+      source.suggestedByUsername.toLowerCase();
+  const canEditBlurb = isAdminSession || isSuggester;
+
+  // Determine which About blurb to show (priority: admin override > wiki > suggester)
+  const adminBlurb = localStorage.getItem(manualBlurbAdminKey) ?? "";
+  const suggestorBlurb = localStorage.getItem(manualBlurbKey) ?? "";
+  const displayedBlurb = adminBlurb || wikiBlurb || suggestorBlurb || "";
+
+  function startEditBlurb() {
+    setBlurbDraft(manualBlurb);
+    setEditingBlurb(true);
+  }
+
+  function saveBlurb() {
+    const trimmed = blurbDraft.trim();
+    const key = isAdminSession ? manualBlurbAdminKey : manualBlurbKey;
+    if (trimmed) {
+      localStorage.setItem(key, trimmed);
+    } else {
+      localStorage.removeItem(key);
+    }
+    setManualBlurb(trimmed);
+    setEditingBlurb(false);
+    toast.success("About description saved");
+  }
+
   return (
     <TooltipProvider>
       <motion.div
@@ -1309,7 +1358,74 @@ export function SourceDetailPage({
                 </div>
                 <Skeleton className="h-16 w-full rounded-sm" />
               </section>
-            ) : wikiBlurb ? (
+            ) : displayedBlurb ? (
+              <section>
+                <div className="flex items-center justify-between gap-2 mb-3">
+                  <div className="flex items-center gap-2">
+                    <div className="w-1 h-5 bg-primary rounded-full" />
+                    <h2 className="font-display text-lg font-bold text-foreground">
+                      About
+                    </h2>
+                  </div>
+                  {canEditBlurb && !wikiBlurb && !editingBlurb && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 text-xs text-muted-foreground gap-1"
+                      onClick={startEditBlurb}
+                      data-ocid="source_detail.edit_button"
+                    >
+                      <Pencil className="h-3 w-3" />
+                      Edit
+                    </Button>
+                  )}
+                </div>
+                {editingBlurb ? (
+                  <div className="space-y-2">
+                    <Textarea
+                      value={blurbDraft}
+                      onChange={(e) =>
+                        setBlurbDraft(e.target.value.slice(0, 500))
+                      }
+                      placeholder="Add a description for this source..."
+                      className="text-sm font-body resize-none min-h-[96px]"
+                      data-ocid="source_detail.textarea"
+                    />
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-muted-foreground font-body">
+                        {blurbDraft.length}/500
+                      </span>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 text-xs"
+                          onClick={() => setEditingBlurb(false)}
+                          data-ocid="source_detail.cancel_button"
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          size="sm"
+                          className="h-7 text-xs"
+                          onClick={saveBlurb}
+                          data-ocid="source_detail.save_button"
+                        >
+                          Save
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex gap-3 p-4 bg-secondary border border-border rounded-sm">
+                    <BookOpen className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+                    <p className="text-sm font-body text-foreground leading-relaxed">
+                      {displayedBlurb}
+                    </p>
+                  </div>
+                )}
+              </section>
+            ) : canEditBlurb ? (
               <section>
                 <div className="flex items-center gap-2 mb-3">
                   <div className="w-1 h-5 bg-primary rounded-full" />
@@ -1317,12 +1433,55 @@ export function SourceDetailPage({
                     About
                   </h2>
                 </div>
-                <div className="flex gap-3 p-4 bg-secondary border border-border rounded-sm">
-                  <BookOpen className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
-                  <p className="text-sm font-body text-foreground leading-relaxed">
-                    {wikiBlurb}
-                  </p>
-                </div>
+                {editingBlurb ? (
+                  <div className="space-y-2">
+                    <Textarea
+                      value={blurbDraft}
+                      onChange={(e) =>
+                        setBlurbDraft(e.target.value.slice(0, 500))
+                      }
+                      placeholder="Add a description for this source..."
+                      className="text-sm font-body resize-none min-h-[96px]"
+                      data-ocid="source_detail.textarea"
+                    />
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-muted-foreground font-body">
+                        {blurbDraft.length}/500
+                      </span>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 text-xs"
+                          onClick={() => setEditingBlurb(false)}
+                          data-ocid="source_detail.cancel_button"
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          size="sm"
+                          className="h-7 text-xs"
+                          onClick={saveBlurb}
+                          data-ocid="source_detail.save_button"
+                        >
+                          Save
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={startEditBlurb}
+                    className="w-full flex gap-3 p-4 bg-secondary border border-dashed border-border rounded-sm text-left hover:bg-muted/50 transition-colors"
+                    data-ocid="source_detail.edit_button"
+                  >
+                    <BookOpen className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+                    <p className="text-sm font-body text-muted-foreground leading-relaxed">
+                      Add a description for this source...
+                    </p>
+                  </button>
+                )}
               </section>
             ) : null}
 
