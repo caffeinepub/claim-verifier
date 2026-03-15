@@ -366,7 +366,7 @@ function changeColor(event: RepEvent): string {
 
 export function ProfilePage({ username, onBack }: ProfilePageProps) {
   const {
-    displayName,
+    username: currentUsername,
     joinDate,
     avatarUrl,
     setAvatarUrl,
@@ -378,7 +378,7 @@ export function ProfilePage({ username, onBack }: ProfilePageProps) {
     trustScore,
     isTrustedContributor,
   } = useVerifiedAccount();
-  const isOwnProfile = isVerified && displayName === username;
+  const isOwnProfile = isVerified && currentUsername === username;
 
   const { data: storageClient } = useStorageClient();
   const [isUploading, setIsUploading] = useState(false);

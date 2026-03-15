@@ -25,7 +25,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Toaster } from "@/components/ui/sonner";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
 import { useAllClaims, useSessionId, useUsername } from "@/hooks/useQueries";
-import { useVerifiedAccount } from "@/hooks/useVerifiedAccount";
+import {
+  isUsernameTaken,
+  useVerifiedAccount,
+} from "@/hooks/useVerifiedAccount";
 import { ProfilePage } from "@/pages/ProfilePage";
 import { SourceDetailPage } from "@/pages/SourceDetailPage";
 import { TrustedSourcesPage } from "@/pages/TrustedSourcesPage";
@@ -49,9 +52,16 @@ import {
   Trophy,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { LogIn, LogOut, User } from "lucide-react";
+import {
+  AtSign,
+  CheckCircle,
+  LogIn,
+  LogOut,
+  User,
+  XCircle,
+} from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const CATEGORIES: { label: string; icon: LucideIcon }[] = [
   { label: "All", icon: Layers },
@@ -147,17 +157,25 @@ export default function App() {
   const { data: sessionId, isLoading: sessionLoading } = useSessionId();
   const {
     isVerified,
-    displayName,
+    username,
     needsUsernameSetup,
     isLoggingIn,
     avatarUrl,
     login,
     logout,
-    setDisplayName,
+    setUsername,
     isTrustedContributor,
+    canChangeUsername,
+    timeUntilUsernameChange,
+    principalId,
   } = useVerifiedAccount();
   const [usernameInput, setUsernameInput] = useState("");
   const [usernameDialogOpen, setUsernameDialogOpen] = useState(false);
+  const [usernameError, setUsernameError] = useState<string | null>(null);
+  const [usernameAvailable, setUsernameAvailable] = useState<boolean | null>(
+    null,
+  );
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Open username setup dialog when needed
   useEffect(() => {
@@ -166,15 +184,39 @@ export default function App() {
     }
   }, [needsUsernameSetup]);
 
+  // Debounced availability check
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    const trimmed = usernameInput.trim();
+    if (!trimmed) {
+      setUsernameAvailable(null);
+      return;
+    }
+    debounceRef.current = setTimeout(() => {
+      const taken = isUsernameTaken(trimmed, principalId ?? undefined);
+      setUsernameAvailable(!taken);
+    }, 400);
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [usernameInput, principalId]);
+
   function handleSaveUsername() {
     const trimmed = usernameInput.trim();
     if (!trimmed) return;
-    setDisplayName(trimmed);
+    setUsernameError(null);
+    const result = setUsername(trimmed);
+    if (!result.success) {
+      setUsernameError(result.error ?? "Failed to set username");
+      return;
+    }
     setUsernameDialogOpen(false);
     setUsernameInput("");
+    setUsernameAvailable(null);
   }
+
   const { data: claims, isLoading: claimsLoading } = useAllClaims();
-  const username = useUsername();
+  const anonUsername = useUsername();
 
   // Open Graph / document title meta
   const selectedClaim =
@@ -326,6 +368,8 @@ export default function App() {
     showProfileUsername === null;
   const isOnProfile = showProfileUsername !== null && selectedClaimId === null;
 
+  const isFirstTimeSetup = !username;
+
   return (
     <div className="min-h-screen bg-background noise-bg flex flex-col">
       <Toaster theme="dark" />
@@ -381,25 +425,25 @@ export default function App() {
                       className="relative h-8 w-8 rounded-full p-0 overflow-hidden"
                     >
                       <UserAvatar
-                        username={displayName ?? undefined}
+                        username={username ?? undefined}
                         avatarUrl={avatarUrl ?? undefined}
                         size="sm"
                       />
                       <span className="sr-only">
-                        {displayName ?? "Account menu"}
+                        {username ?? "Account menu"}
                       </span>
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-52">
                     <DropdownMenuLabel className="flex items-center gap-2 pb-1">
                       <UserAvatar
-                        username={displayName ?? undefined}
+                        username={username ?? undefined}
                         avatarUrl={avatarUrl ?? undefined}
                         size="sm"
                       />
                       <div className="flex items-center gap-1.5 min-w-0">
                         <span className="text-sm font-medium font-body text-foreground truncate">
-                          {displayName ?? "Account"}
+                          {username ?? "Account"}
                         </span>
                         {isTrustedContributor && <VerifiedBadge size={13} />}
                       </div>
@@ -408,16 +452,27 @@ export default function App() {
                     <DropdownMenuItem
                       data-ocid="auth.edit_button"
                       className="text-muted-foreground gap-2 cursor-pointer"
-                      onClick={() =>
-                        displayName && openProfilePage(displayName)
-                      }
+                      onClick={() => username && openProfilePage(username)}
                     >
                       <User className="h-3.5 w-3.5" />
                       View Profile
                     </DropdownMenuItem>
-                    <DropdownMenuSeparator />
                     <DropdownMenuItem
                       data-ocid="auth.secondary_button"
+                      className="text-muted-foreground gap-2 cursor-pointer"
+                      onClick={() => {
+                        setUsernameInput(username ?? "");
+                        setUsernameError(null);
+                        setUsernameAvailable(null);
+                        setUsernameDialogOpen(true);
+                      }}
+                    >
+                      <AtSign className="h-3.5 w-3.5" />
+                      Change Username
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      data-ocid="auth.delete_button"
                       className="text-muted-foreground gap-2 cursor-pointer"
                       onClick={logout}
                     >
@@ -636,12 +691,12 @@ export default function App() {
                 Anonymous \u00b7 Decentralized \u00b7 Community-Verified
               </span>
             </div>
-            {username && (
+            {anonUsername && (
               <span
                 data-ocid="session.username"
                 className="text-xs text-muted-foreground font-body"
               >
-                Connected as: {username}
+                Connected as: {anonUsername}
               </span>
             )}
             <div className="flex items-center gap-3">
@@ -695,57 +750,143 @@ export default function App() {
       {/* Admin Panel */}
       {isAdminOpen && <AdminPanel onClose={() => setIsAdminOpen(false)} />}
 
-      {/* Username Setup Dialog */}
-      <Dialog open={usernameDialogOpen} onOpenChange={setUsernameDialogOpen}>
+      {/* Username Setup / Change Dialog */}
+      <Dialog
+        open={usernameDialogOpen}
+        onOpenChange={(open) => {
+          // Prevent closing if it's first-time setup
+          if (!open && needsUsernameSetup) return;
+          setUsernameDialogOpen(open);
+          if (!open) {
+            setUsernameInput("");
+            setUsernameError(null);
+            setUsernameAvailable(null);
+          }
+        }}
+      >
         <DialogContent
           data-ocid="auth.dialog"
           className="sm:max-w-sm"
-          onInteractOutside={(e) => e.preventDefault()}
+          onInteractOutside={(e) => {
+            if (needsUsernameSetup) e.preventDefault();
+          }}
         >
           <DialogHeader>
             <DialogTitle className="font-display text-lg">
-              Set your display name
+              {isFirstTimeSetup
+                ? "Choose your username"
+                : "Change your username"}
             </DialogTitle>
             <p className="text-sm text-muted-foreground font-body">
-              Choose a name that will appear on your verified contributions.
+              {isFirstTimeSetup
+                ? "Your username will appear on your verified contributions."
+                : "You can change your username once every 24 hours."}
             </p>
           </DialogHeader>
+
+          {/* Cooldown notice */}
+          {!canChangeUsername && timeUntilUsernameChange && (
+            <div className="px-1 py-2 rounded-sm bg-secondary text-sm text-muted-foreground font-body">
+              You can change your username again in{" "}
+              <span className="font-medium text-foreground">
+                {timeUntilUsernameChange}
+              </span>
+            </div>
+          )}
+
           <div className="py-2">
             <input
               data-ocid="auth.input"
               type="text"
               value={usernameInput}
-              onChange={(e) => setUsernameInput(e.target.value)}
+              onChange={(e) => {
+                setUsernameInput(e.target.value);
+                setUsernameError(null);
+              }}
               onKeyDown={(e) => e.key === "Enter" && handleSaveUsername()}
               placeholder="e.g. FactChecker42"
               maxLength={24}
-              className="w-full px-3 py-2 text-sm font-body border border-border rounded-sm bg-secondary text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/60"
+              disabled={!canChangeUsername}
+              className="w-full px-3 py-2 text-sm font-body border border-border rounded-sm bg-secondary text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/60 disabled:opacity-50 disabled:cursor-not-allowed"
             />
-            <p className="text-xs text-muted-foreground font-body mt-1.5">
-              Max 24 characters. Visible on your comments & evidence.
-            </p>
+            {/* Availability indicator */}
+            {usernameInput.trim() &&
+              usernameAvailable !== null &&
+              canChangeUsername && (
+                <div
+                  className={`flex items-center gap-1 mt-1.5 text-xs font-body ${
+                    usernameAvailable ? "text-emerald-600" : "text-destructive"
+                  }`}
+                >
+                  {usernameAvailable ? (
+                    <CheckCircle className="h-3.5 w-3.5" />
+                  ) : (
+                    <XCircle className="h-3.5 w-3.5" />
+                  )}
+                  {usernameAvailable
+                    ? "Username available"
+                    : "Username already taken"}
+                </div>
+              )}
+            {/* Server-side error */}
+            {usernameError && (
+              <div
+                className="flex items-center gap-1 mt-1.5 text-xs font-body text-destructive"
+                data-ocid="auth.error_state"
+              >
+                <XCircle className="h-3.5 w-3.5" />
+                {usernameError}
+              </div>
+            )}
+            {!usernameError && !usernameInput.trim() && (
+              <p className="text-xs text-muted-foreground font-body mt-1.5">
+                Max 24 characters. Visible on your comments &amp; evidence.
+              </p>
+            )}
           </div>
           <DialogFooter className="gap-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              data-ocid="auth.cancel_button"
-              className="font-body"
-              onClick={() => {
-                setUsernameDialogOpen(false);
-                logout();
-              }}
-            >
-              Cancel
-            </Button>
+            {!isFirstTimeSetup && (
+              <Button
+                variant="ghost"
+                size="sm"
+                data-ocid="auth.cancel_button"
+                className="font-body"
+                onClick={() => {
+                  setUsernameDialogOpen(false);
+                  setUsernameInput("");
+                  setUsernameError(null);
+                  setUsernameAvailable(null);
+                }}
+              >
+                Cancel
+              </Button>
+            )}
+            {isFirstTimeSetup && (
+              <Button
+                variant="ghost"
+                size="sm"
+                data-ocid="auth.cancel_button"
+                className="font-body"
+                onClick={() => {
+                  setUsernameDialogOpen(false);
+                  logout();
+                }}
+              >
+                Cancel
+              </Button>
+            )}
             <Button
               size="sm"
               data-ocid="auth.submit_button"
               className="font-body bg-primary text-primary-foreground hover:bg-primary/90"
               onClick={handleSaveUsername}
-              disabled={!usernameInput.trim()}
+              disabled={
+                !usernameInput.trim() ||
+                !canChangeUsername ||
+                usernameAvailable === false
+              }
             >
-              Save Name
+              {isFirstTimeSetup ? "Set Username" : "Save Username"}
             </Button>
           </DialogFooter>
         </DialogContent>

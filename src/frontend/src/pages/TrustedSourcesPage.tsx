@@ -32,6 +32,7 @@ import {
   useTrustedSources,
 } from "@/hooks/useQueries";
 import { useSessionGate } from "@/hooks/useSessionGate";
+import { useVerifiedAccount } from "@/hooks/useVerifiedAccount";
 import { cn } from "@/lib/utils";
 import {
   CheckCircle2,
@@ -298,6 +299,7 @@ function SuggestSourceDialog({ sessionId }: { sessionId: string | null }) {
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { checkAction } = useSessionGate();
   const suggestSource = useSuggestTrustedSource();
+  const { principalId } = useVerifiedAccount();
 
   // Debounced Wikipedia fetch when domain changes
   useEffect(() => {
@@ -363,6 +365,10 @@ function SuggestSourceDialog({ sessionId }: { sessionId: string | null }) {
       // Save about blurb if the About field was shown (wiki not found) and filled in
       if (wikiStatus === "not-found" && aboutBlurb.trim()) {
         localStorage.setItem(`about_blurb_${cleanDomain}`, aboutBlurb.trim());
+      }
+      // Store principalId as canonical suggester identity for blurb editing
+      if (principalId) {
+        localStorage.setItem(`source_principal_${cleanDomain}`, principalId);
       }
       toast.success(`"${cleanDomain}" submitted for community review`);
       setOpen(false);

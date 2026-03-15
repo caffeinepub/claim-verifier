@@ -334,7 +334,7 @@ export function ClaimDetail({
   const {
     isVerified,
     recordVerifiedVote,
-    displayName: verifiedDisplayName,
+    username: verifiedUsername,
   } = useVerifiedAccount();
   const { canUploadImages, canReport } = useAccountPermissions();
 
@@ -551,7 +551,7 @@ export function ClaimDetail({
               <span className="text-xs text-muted-foreground font-body">
                 ·{" "}
                 {claim.sessionId === sessionId && claim.sessionId !== "seed"
-                  ? (verifiedDisplayName ?? username)
+                  ? (verifiedUsername ?? username)
                   : "Anonymous"}
               </span>
             </div>
@@ -1040,7 +1040,7 @@ export function ClaimDetail({
                       <div className="flex items-center gap-2 mb-1 flex-wrap">
                         <span className="text-xs font-semibold text-foreground font-mono flex items-center gap-1">
                           {item.sessionId === sessionId
-                            ? (verifiedDisplayName ?? username)
+                            ? (verifiedUsername ?? username)
                             : "Anonymous"}
                           {isTrustedContributorSession(item.sessionId) && (
                             <VerifiedBadge />

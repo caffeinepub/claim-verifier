@@ -1064,7 +1064,7 @@ export function SourceDetailPage({
   );
 
   // Manual About blurb state (localStorage fallback when wiki fails)
-  const { displayName: currentDisplayName } = useVerifiedAccount();
+  const { principalId: currentPrincipalId } = useVerifiedAccount();
   const manualBlurbAdminKey = `about_blurb_admin_${domain}`;
   const manualBlurbKey = `about_blurb_${domain}`;
   const [manualBlurb, setManualBlurb] = useState<string>(
@@ -1078,15 +1078,13 @@ export function SourceDetailPage({
 
   // Check if current user is admin (via sessionStorage) or the source suggester
   const isAdminSession = sessionStorage.getItem(ADMIN_SESSION_KEY) === "1";
-  const storedUsername = localStorage.getItem("claim_verifier_username") ?? "";
+  // Use principalId as the canonical identity anchor for isSuggester check
+  const suggestedByPrincipalKey = `source_principal_${domain}`;
+  const suggestedByPrincipal = localStorage.getItem(suggestedByPrincipalKey);
   const isSuggester =
-    !!source?.suggestedByUsername &&
-    ((!!currentDisplayName &&
-      currentDisplayName.toLowerCase() ===
-        source.suggestedByUsername.toLowerCase()) ||
-      (!!storedUsername &&
-        storedUsername.toLowerCase() ===
-          source.suggestedByUsername.toLowerCase()));
+    !!currentPrincipalId &&
+    !!suggestedByPrincipal &&
+    currentPrincipalId === suggestedByPrincipal;
   const canEditBlurb = isAdminSession || isSuggester;
 
   // Determine which About blurb to show (priority: admin override > wiki > suggester)
