@@ -30,6 +30,7 @@ import {
   useVerifiedAccount,
 } from "@/hooks/useVerifiedAccount";
 import { ProfilePage } from "@/pages/ProfilePage";
+import { SettingsPage } from "@/pages/SettingsPage";
 import { SourceDetailPage } from "@/pages/SourceDetailPage";
 import { TrustedSourcesPage } from "@/pages/TrustedSourcesPage";
 import { findClaimBySlug, getClaimSlug } from "@/utils/slug";
@@ -57,6 +58,7 @@ import {
   CheckCircle,
   LogIn,
   LogOut,
+  Settings,
   User,
   XCircle,
 } from "lucide-react";
@@ -150,6 +152,7 @@ export default function App() {
   const [isAdminOpen, setIsAdminOpen] = useState(false);
   const [showSources, setShowSources] = useState(false);
   const [showSourceDomain, setShowSourceDomain] = useState<string | null>(null);
+  const [showSettings, setShowSettings] = useState(false);
   const [showProfileUsername, setShowProfileUsername] = useState<string | null>(
     null,
   );
@@ -168,6 +171,7 @@ export default function App() {
     canChangeUsername,
     timeUntilUsernameChange,
     principalId,
+    joinDate,
   } = useVerifiedAccount();
   const [usernameInput, setUsernameInput] = useState("");
   const [usernameDialogOpen, setUsernameDialogOpen] = useState(false);
@@ -322,6 +326,7 @@ export default function App() {
     setShowSources(false);
     setShowSourceDomain(null);
     setShowProfileUsername(null);
+    setShowSettings(false);
     window.history.pushState({}, "", "/");
   }
 
@@ -367,6 +372,8 @@ export default function App() {
     showSourceDomain === null &&
     showProfileUsername === null;
   const isOnProfile = showProfileUsername !== null && selectedClaimId === null;
+  const isOnSettings =
+    showSettings && selectedClaimId === null && showProfileUsername === null;
 
   const isFirstTimeSetup = !username;
 
@@ -428,6 +435,7 @@ export default function App() {
                         username={username ?? undefined}
                         avatarUrl={avatarUrl ?? undefined}
                         size="sm"
+                        isVerified={true}
                       />
                       <span className="sr-only">
                         {username ?? "Account menu"}
@@ -440,6 +448,7 @@ export default function App() {
                         username={username ?? undefined}
                         avatarUrl={avatarUrl ?? undefined}
                         size="sm"
+                        isVerified={true}
                       />
                       <div className="flex items-center gap-1.5 min-w-0">
                         <span className="text-sm font-medium font-body text-foreground truncate">
@@ -458,17 +467,18 @@ export default function App() {
                       View Profile
                     </DropdownMenuItem>
                     <DropdownMenuItem
-                      data-ocid="auth.secondary_button"
+                      data-ocid="settings.button"
                       className="text-muted-foreground gap-2 cursor-pointer"
                       onClick={() => {
-                        setUsernameInput(username ?? "");
-                        setUsernameError(null);
-                        setUsernameAvailable(null);
-                        setUsernameDialogOpen(true);
+                        setShowSettings(true);
+                        setSelectedClaimId(null);
+                        setShowSources(false);
+                        setShowSourceDomain(null);
+                        setShowProfileUsername(null);
                       }}
                     >
-                      <AtSign className="h-3.5 w-3.5" />
-                      Change Username
+                      <Settings className="h-3.5 w-3.5" />
+                      Settings
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
@@ -521,7 +531,23 @@ export default function App() {
       {/* Main content */}
       <main className="flex-1 max-w-5xl mx-auto px-4 py-8 w-full">
         <AnimatePresence mode="wait">
-          {isOnProfile && showProfileUsername ? (
+          {isOnSettings && principalId ? (
+            <SettingsPage
+              key="settings"
+              principalId={principalId}
+              username={username}
+              joinDate={joinDate}
+              onBack={goBack}
+              onChangeUsername={() => {
+                setShowSettings(false);
+                setUsernameInput(username ?? "");
+                setUsernameError(null);
+                setUsernameAvailable(null);
+                setUsernameDialogOpen(true);
+              }}
+              logout={logout}
+            />
+          ) : isOnProfile && showProfileUsername ? (
             <ProfilePage
               key={`profile-${showProfileUsername}`}
               username={showProfileUsername}
@@ -691,12 +717,12 @@ export default function App() {
                 Anonymous \u00b7 Decentralized \u00b7 Community-Verified
               </span>
             </div>
-            {anonUsername && (
+            {(isVerified ? username : anonUsername) && (
               <span
                 data-ocid="session.username"
                 className="text-xs text-muted-foreground font-body"
               >
-                Connected as: {anonUsername}
+                Connected as: {isVerified ? username : anonUsername}
               </span>
             )}
             <div className="flex items-center gap-3">
@@ -719,6 +745,8 @@ export default function App() {
                   setSelectedClaimId(null);
                   setShowSourceDomain(null);
                   window.history.pushState({}, "", "/");
+                  setShowProfileUsername(null);
+                  setShowSettings(false);
                 }}
                 className="text-xs text-muted-foreground hover:text-foreground font-body transition-colors select-none"
               >

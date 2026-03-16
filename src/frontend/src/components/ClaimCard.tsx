@@ -17,6 +17,7 @@ import {
   useUsername,
 } from "@/hooks/useQueries";
 import { useSessionGate } from "@/hooks/useSessionGate";
+import { useVerifiedAccount } from "@/hooks/useVerifiedAccount";
 import { cn } from "@/lib/utils";
 import { formatRelativeTime } from "@/utils/time";
 import { computeOverallVerdict } from "@/utils/verdict";
@@ -39,6 +40,7 @@ import { toast } from "sonner";
 import type { Claim } from "../backend.d";
 import { CategoryBadge } from "./CategoryBadge";
 import { ReportDialog } from "./ReportDialog";
+import { UserAvatar } from "./UserAvatar";
 import { VerdictBar } from "./VerdictBar";
 
 interface ClaimCardProps {
@@ -111,6 +113,8 @@ export function ClaimCard({
   const reportContent = useReportContent();
   const { checkAction } = useSessionGate();
   const username = useUsername();
+  const { username: verifiedUsername, avatarUrl: verifiedAvatarUrl } =
+    useVerifiedAccount();
   const [reported, setReported] = useState(false);
   const [reportDialogOpen, setReportDialogOpen] = useState(false);
 
@@ -213,11 +217,25 @@ export function ClaimCard({
           <span className="text-xs text-muted-foreground font-body">
             {formatRelativeTime(claim.timestamp)}
           </span>
-          <span className="text-xs text-muted-foreground font-body">
+          <span className="text-xs text-muted-foreground font-body flex items-center gap-1">
             ·{" "}
-            {claim.sessionId === sessionId && claim.sessionId !== "seed"
-              ? username
-              : "Anonymous"}
+            {claim.sessionId === sessionId && claim.sessionId !== "seed" ? (
+              <>
+                <UserAvatar
+                  username={verifiedUsername ?? username}
+                  avatarUrl={
+                    verifiedUsername
+                      ? (verifiedAvatarUrl ?? undefined)
+                      : undefined
+                  }
+                  size="sm"
+                  isVerified={!!verifiedUsername}
+                />
+                {verifiedUsername ?? username}
+              </>
+            ) : (
+              "Anonymous"
+            )}
           </span>
         </div>
 

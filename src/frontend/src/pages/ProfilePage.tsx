@@ -11,6 +11,11 @@ import {
 } from "@/components/ui/tooltip";
 import { useStorageClient } from "@/hooks/useStorageClient";
 import {
+  getUserClaims,
+  getUserComments,
+  getUserEvidence,
+  getUserRepEvents,
+  getUserSources,
   getVerifiedVotes,
   useVerifiedAccount,
 } from "@/hooks/useVerifiedAccount";
@@ -36,7 +41,7 @@ import {
   X,
 } from "lucide-react";
 import { motion } from "motion/react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 interface ProfilePageProps {
@@ -188,121 +193,11 @@ function ScrollChevron({
 // Reputation event types
 // ---------------------------------------------------------------------------
 
-type RepEventKind =
-  | "evidence_upvoted"
-  | "evidence_downvoted"
-  | "claim_submitted"
-  | "vote_cast"
-  | "comment_posted"
-  | "evidence_quality_gate"
-  | "evidence_below_gate";
-
-interface RepEvent {
-  id: string;
-  kind: RepEventKind;
+function eventAccent(event: {
+  pointChange: number;
+  trustChange: number;
   label: string;
-  pointChange: number; // 0 means trust-only
-  trustChange: number; // 0 means points-only
-  timestamp: Date;
-  relatedLink?: string;
-  relatedLabel?: string;
-}
-
-const REP_EVENT_TEMPLATES: {
-  kind: RepEventKind;
-  label: string;
-  pts: number;
-  trust: number;
-}[] = [
-  { kind: "evidence_upvoted", label: "Evidence upvoted", pts: 1, trust: 1 },
-  {
-    kind: "evidence_downvoted",
-    label: "Evidence downvoted",
-    pts: 0,
-    trust: -1,
-  },
-  { kind: "claim_submitted", label: "Claim submitted", pts: 1, trust: 0 },
-  { kind: "vote_cast", label: "Vote cast", pts: 1, trust: 0 },
-  { kind: "comment_posted", label: "Comment posted", pts: 1, trust: 0 },
-  {
-    kind: "evidence_quality_gate",
-    label: "Evidence passed quality gate",
-    pts: 2,
-    trust: 2,
-  },
-  {
-    kind: "evidence_below_gate",
-    label: "Evidence downvoted below quality gate",
-    pts: 0,
-    trust: -2,
-  },
-];
-
-const MOCK_CLAIM_TITLES = [
-  "Is the Earth flat?",
-  "Did NASA fake the moon landing?",
-  "Do vaccines cause autism?",
-  "Is 5G causing health problems?",
-  "Was climate data manipulated?",
-  "Did ancient Egypt use electricity?",
-  "Are crop circles man-made?",
-];
-
-/** Seeded pseudo-random number generator (mulberry32) */
-function mulberry32(initSeed: number) {
-  let s = initSeed;
-  return () => {
-    s |= 0;
-    s = (s + 0x6d2b79f5) | 0;
-    let t = Math.imul(s ^ (s >>> 15), 1 | s);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-function hashString(s: string): number {
-  let h = 0x811c9dc5;
-  for (let i = 0; i < s.length; i++) {
-    h ^= s.charCodeAt(i);
-    h = (Math.imul(h, 0x01000193) | 0) >>> 0;
-  }
-  return h;
-}
-
-function generateMockRepEvents(seed: string): RepEvent[] {
-  const rng = mulberry32(hashString(seed));
-  const now = Date.now();
-  const events: RepEvent[] = [];
-
-  for (let i = 0; i < 15; i++) {
-    const templateIdx = Math.floor(rng() * REP_EVENT_TEMPLATES.length);
-    const tpl = REP_EVENT_TEMPLATES[templateIdx];
-    // Spread events over the last 30 days, most recent first after sorting
-    const offsetMs = rng() * 30 * 24 * 60 * 60 * 1000;
-    const timestamp = new Date(now - offsetMs);
-
-    const hasLink = rng() > 0.4;
-    const claimTitle =
-      MOCK_CLAIM_TITLES[Math.floor(rng() * MOCK_CLAIM_TITLES.length)];
-
-    events.push({
-      id: `rep-${i}`,
-      kind: tpl.kind,
-      label: tpl.label,
-      pointChange: tpl.pts,
-      trustChange: tpl.trust,
-      timestamp,
-      relatedLink: hasLink ? "/" : undefined,
-      relatedLabel: hasLink ? claimTitle : undefined,
-    });
-  }
-
-  // Sort most-recent first
-  events.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
-  return events;
-}
-
-function eventAccent(event: RepEvent): {
+}): {
   iconBg: string;
   iconColor: string;
   Icon: React.FC<{ className?: string }>;
@@ -314,17 +209,6 @@ function eventAccent(event: RepEvent): {
       iconBg: "bg-red-50",
       iconColor: "text-destructive",
       Icon: TrendingDown,
-    };
-  }
-  if (
-    event.kind === "claim_submitted" ||
-    event.kind === "vote_cast" ||
-    event.kind === "comment_posted"
-  ) {
-    return {
-      iconBg: "bg-primary/10",
-      iconColor: "text-primary",
-      Icon: TrendingUp,
     };
   }
   if (isGain) {
@@ -341,7 +225,10 @@ function eventAccent(event: RepEvent): {
   };
 }
 
-function formatChange(event: RepEvent): string {
+function formatChange(event: {
+  pointChange: number;
+  trustChange: number;
+}): string {
   const parts: string[] = [];
   if (event.pointChange !== 0) {
     parts.push(
@@ -356,7 +243,10 @@ function formatChange(event: RepEvent): string {
   return parts.join(" / ") || "—";
 }
 
-function changeColor(event: RepEvent): string {
+function changeColor(event: {
+  pointChange: number;
+  trustChange: number;
+}): string {
   if (event.pointChange < 0 || event.trustChange < 0) return "text-destructive";
   if (event.pointChange > 0 || event.trustChange > 0) return "text-emerald-600";
   return "text-muted-foreground";
@@ -443,11 +333,45 @@ export function ProfilePage({ username, onBack }: ProfilePageProps) {
   const tierConfig = TIER_CONFIG[tier];
   const tierProgress = getTierProgress(activityPoints);
 
-  // Seeded mock reputation events — stable across renders
-  const repEvents = useMemo(
-    () => generateMockRepEvents(username || "anon"),
-    [username],
-  );
+  // Privacy settings for the profile being viewed (when it's not own profile)
+  const profileOwnerPrincipalId = (() => {
+    if (isOwnProfile) return null;
+    const registry: Record<string, string> = JSON.parse(
+      localStorage.getItem("rebunked_username_registry") ?? "{}",
+    );
+    return registry[username] ?? null;
+  })();
+  const profileOwnerShowsVoteHistory = isOwnProfile
+    ? true
+    : profileOwnerPrincipalId
+      ? localStorage.getItem(
+          `rebunked_privacy_showVoteHistory_${profileOwnerPrincipalId}`,
+        ) !== "false"
+      : false;
+  const profileOwnerShowsActivityTabs = isOwnProfile
+    ? true
+    : profileOwnerPrincipalId
+      ? localStorage.getItem(
+          `rebunked_privacy_showActivityTabs_${profileOwnerPrincipalId}`,
+        ) !== "false"
+      : false;
+
+  // Real reputation events from localStorage
+  const activePrincipalId = isVerified
+    ? localStorage.getItem("rebunked_active_verified")
+    : null;
+  const userClaims =
+    isOwnProfile && activePrincipalId ? getUserClaims(activePrincipalId) : [];
+  const userEvidence =
+    isOwnProfile && activePrincipalId ? getUserEvidence(activePrincipalId) : [];
+  const userComments =
+    isOwnProfile && activePrincipalId ? getUserComments(activePrincipalId) : [];
+  const userSources =
+    isOwnProfile && activePrincipalId ? getUserSources(activePrincipalId) : [];
+  const repEvents =
+    isOwnProfile && activePrincipalId
+      ? getUserRepEvents(activePrincipalId)
+      : [];
 
   async function handleAvatarUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -516,6 +440,7 @@ export function ProfilePage({ username, onBack }: ProfilePageProps) {
             avatarUrl={isOwnProfile ? (avatarUrl ?? undefined) : undefined}
             size="lg"
             className="ring-4 ring-border"
+            isVerified={true}
           />
 
           {isOwnProfile && (
@@ -664,7 +589,7 @@ export function ProfilePage({ username, onBack }: ProfilePageProps) {
             </div>
             <div className="flex flex-col items-center gap-1">
               <span className="text-xl font-bold font-display text-foreground leading-none">
-                0
+                {userClaims.length}
               </span>
               <span className="text-[11px] text-muted-foreground font-body">
                 Claims
@@ -672,7 +597,7 @@ export function ProfilePage({ username, onBack }: ProfilePageProps) {
             </div>
             <div className="flex flex-col items-center gap-1">
               <span className="text-xl font-bold font-display text-foreground leading-none">
-                0
+                {userEvidence.length}
               </span>
               <span className="text-[11px] text-muted-foreground font-body">
                 Evidence
@@ -680,7 +605,7 @@ export function ProfilePage({ username, onBack }: ProfilePageProps) {
             </div>
             <div className="flex flex-col items-center gap-1">
               <span className="text-xl font-bold font-display text-foreground leading-none">
-                0
+                {userComments.length}
               </span>
               <span className="text-[11px] text-muted-foreground font-body">
                 Comments
@@ -854,8 +779,10 @@ export function ProfilePage({ username, onBack }: ProfilePageProps) {
         </div>
       )}
 
-      {/* Activity tabs — own profile only */}
-      {isOwnProfile && (
+      {/* Activity tabs — own profile always, others if they've enabled sharing */}
+      {(isOwnProfile ||
+        profileOwnerShowsVoteHistory ||
+        profileOwnerShowsActivityTabs) && (
         <div className="mt-5">
           <Tabs defaultValue="votes">
             {/*
@@ -879,38 +806,46 @@ export function ProfilePage({ username, onBack }: ProfilePageProps) {
                 className="overflow-x-auto -mx-1 px-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
               >
                 <TabsList className="flex gap-x-1 flex-nowrap bg-transparent p-0 h-auto w-max">
-                  <TabsTrigger
-                    value="votes"
-                    data-ocid="profile.tab"
-                    className={TAB_TRIGGER_CLASS}
-                  >
-                    <Vote className="h-3.5 w-3.5" />
-                    Votes
-                  </TabsTrigger>
-                  <TabsTrigger
-                    value="claims"
-                    data-ocid="profile.tab"
-                    className={TAB_TRIGGER_CLASS}
-                  >
-                    <FileText className="h-3.5 w-3.5" />
-                    Claims
-                  </TabsTrigger>
-                  <TabsTrigger
-                    value="evidence"
-                    data-ocid="profile.tab"
-                    className={TAB_TRIGGER_CLASS}
-                  >
-                    <Layers className="h-3.5 w-3.5" />
-                    Evidence
-                  </TabsTrigger>
-                  <TabsTrigger
-                    value="comments"
-                    data-ocid="profile.tab"
-                    className={TAB_TRIGGER_CLASS}
-                  >
-                    <MessageSquare className="h-3.5 w-3.5" />
-                    Comments
-                  </TabsTrigger>
+                  {(isOwnProfile || profileOwnerShowsVoteHistory) && (
+                    <TabsTrigger
+                      value="votes"
+                      data-ocid="profile.tab"
+                      className={TAB_TRIGGER_CLASS}
+                    >
+                      <Vote className="h-3.5 w-3.5" />
+                      Votes
+                    </TabsTrigger>
+                  )}
+                  {(isOwnProfile || profileOwnerShowsActivityTabs) && (
+                    <TabsTrigger
+                      value="claims"
+                      data-ocid="profile.tab"
+                      className={TAB_TRIGGER_CLASS}
+                    >
+                      <FileText className="h-3.5 w-3.5" />
+                      Claims
+                    </TabsTrigger>
+                  )}
+                  {(isOwnProfile || profileOwnerShowsActivityTabs) && (
+                    <TabsTrigger
+                      value="evidence"
+                      data-ocid="profile.tab"
+                      className={TAB_TRIGGER_CLASS}
+                    >
+                      <Layers className="h-3.5 w-3.5" />
+                      Evidence
+                    </TabsTrigger>
+                  )}
+                  {(isOwnProfile || profileOwnerShowsActivityTabs) && (
+                    <TabsTrigger
+                      value="comments"
+                      data-ocid="profile.tab"
+                      className={TAB_TRIGGER_CLASS}
+                    >
+                      <MessageSquare className="h-3.5 w-3.5" />
+                      Comments
+                    </TabsTrigger>
+                  )}
                   <TabsTrigger
                     value="sources"
                     data-ocid="profile.tab"
@@ -987,63 +922,167 @@ export function ProfilePage({ username, onBack }: ProfilePageProps) {
             </TabsContent>
 
             <TabsContent value="claims" className="mt-4">
-              <div
-                className="flex flex-col items-center justify-center py-12 text-center"
-                data-ocid="profile.empty_state"
-              >
-                <FileText className="h-8 w-8 text-muted-foreground/30 mb-3" />
-                <p className="text-sm font-body text-muted-foreground">
-                  No claims submitted yet
-                </p>
-                <p className="text-xs font-body text-muted-foreground/60 mt-1">
-                  Claims you submit will appear here.
-                </p>
-              </div>
+              {userClaims.length === 0 ? (
+                <div
+                  className="flex flex-col items-center justify-center py-12 text-center"
+                  data-ocid="profile.empty_state"
+                >
+                  <FileText className="h-8 w-8 text-muted-foreground/30 mb-3" />
+                  <p className="text-sm font-body text-muted-foreground">
+                    No claims submitted yet
+                  </p>
+                  <p className="text-xs font-body text-muted-foreground/60 mt-1">
+                    Claims you submit will appear here.
+                  </p>
+                </div>
+              ) : (
+                <div className="bg-card border border-border rounded-xl overflow-hidden">
+                  {userClaims.map((record, i) => (
+                    <div
+                      key={record.claimId}
+                      data-ocid={`profile.item.${i + 1}`}
+                      className={`flex items-center justify-between px-4 py-3 gap-3 ${i < userClaims.length - 1 ? "border-b border-border/50" : ""}`}
+                    >
+                      <span className="text-sm font-body text-foreground truncate flex-1">
+                        {record.title}
+                      </span>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <span className="text-xs font-body font-medium px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
+                          {record.category}
+                        </span>
+                        <span className="text-xs text-muted-foreground font-body">
+                          {new Date(record.timestamp).toLocaleDateString()}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </TabsContent>
 
             <TabsContent value="evidence" className="mt-4">
-              <div
-                className="flex flex-col items-center justify-center py-12 text-center"
-                data-ocid="profile.empty_state"
-              >
-                <Layers className="h-8 w-8 text-muted-foreground/30 mb-3" />
-                <p className="text-sm font-body text-muted-foreground">
-                  No evidence posted yet
-                </p>
-                <p className="text-xs font-body text-muted-foreground/60 mt-1">
-                  Evidence you submit on claims will appear here.
-                </p>
-              </div>
+              {userEvidence.length === 0 ? (
+                <div
+                  className="flex flex-col items-center justify-center py-12 text-center"
+                  data-ocid="profile.empty_state"
+                >
+                  <Layers className="h-8 w-8 text-muted-foreground/30 mb-3" />
+                  <p className="text-sm font-body text-muted-foreground">
+                    No evidence posted yet
+                  </p>
+                  <p className="text-xs font-body text-muted-foreground/60 mt-1">
+                    Evidence you submit on claims will appear here.
+                  </p>
+                </div>
+              ) : (
+                <div className="bg-card border border-border rounded-xl overflow-hidden">
+                  {userEvidence.map((record, i) => (
+                    <div
+                      key={record.evidenceId}
+                      data-ocid={`profile.item.${i + 1}`}
+                      className={`flex items-start justify-between px-4 py-3 gap-3 ${i < userEvidence.length - 1 ? "border-b border-border/50" : ""}`}
+                    >
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-body text-foreground truncate">
+                          {record.text.length > 80
+                            ? `${record.text.slice(0, 80)}…`
+                            : record.text}
+                        </p>
+                        {record.claimTitle && (
+                          <p className="text-[11px] text-muted-foreground font-body mt-0.5 truncate">
+                            on: {record.claimTitle}
+                          </p>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <span
+                          className={`text-xs font-body font-medium px-1.5 py-0.5 rounded ${record.evidenceType === "True" ? "bg-emerald-100 text-emerald-700" : record.evidenceType === "False" ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-700"}`}
+                        >
+                          {record.evidenceType}
+                        </span>
+                        <span className="text-xs text-muted-foreground font-body">
+                          {new Date(record.timestamp).toLocaleDateString()}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </TabsContent>
 
             <TabsContent value="comments" className="mt-4">
-              <div
-                className="flex flex-col items-center justify-center py-12 text-center"
-                data-ocid="profile.empty_state"
-              >
-                <MessageSquare className="h-8 w-8 text-muted-foreground/30 mb-3" />
-                <p className="text-sm font-body text-muted-foreground">
-                  No comments yet
-                </p>
-                <p className="text-xs font-body text-muted-foreground/60 mt-1">
-                  Comments you post will appear here.
-                </p>
-              </div>
+              {userComments.length === 0 ? (
+                <div
+                  className="flex flex-col items-center justify-center py-12 text-center"
+                  data-ocid="profile.empty_state"
+                >
+                  <MessageSquare className="h-8 w-8 text-muted-foreground/30 mb-3" />
+                  <p className="text-sm font-body text-muted-foreground">
+                    No comments yet
+                  </p>
+                  <p className="text-xs font-body text-muted-foreground/60 mt-1">
+                    Comments you post will appear here.
+                  </p>
+                </div>
+              ) : (
+                <div className="bg-card border border-border rounded-xl overflow-hidden">
+                  {userComments.map((record, i) => (
+                    <div
+                      key={record.replyId}
+                      data-ocid={`profile.item.${i + 1}`}
+                      className={`flex items-center justify-between px-4 py-3 gap-3 ${i < userComments.length - 1 ? "border-b border-border/50" : ""}`}
+                    >
+                      <span className="text-sm font-body text-foreground truncate flex-1">
+                        {record.text.length > 100
+                          ? `${record.text.slice(0, 100)}…`
+                          : record.text}
+                      </span>
+                      <span className="text-xs text-muted-foreground font-body flex-shrink-0">
+                        {new Date(record.timestamp).toLocaleDateString()}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </TabsContent>
 
             <TabsContent value="sources" className="mt-4">
-              <div
-                className="flex flex-col items-center justify-center py-12 text-center"
-                data-ocid="profile.empty_state"
-              >
-                <Shield className="h-8 w-8 text-muted-foreground/30 mb-3" />
-                <p className="text-sm font-body text-muted-foreground">
-                  No sources suggested yet
-                </p>
-                <p className="text-xs font-body text-muted-foreground/60 mt-1">
-                  Trusted sources you suggest will appear here.
-                </p>
-              </div>
+              {userSources.length === 0 ? (
+                <div
+                  className="flex flex-col items-center justify-center py-12 text-center"
+                  data-ocid="profile.empty_state"
+                >
+                  <Shield className="h-8 w-8 text-muted-foreground/30 mb-3" />
+                  <p className="text-sm font-body text-muted-foreground">
+                    No sources suggested yet
+                  </p>
+                  <p className="text-xs font-body text-muted-foreground/60 mt-1">
+                    Trusted sources you suggest will appear here.
+                  </p>
+                </div>
+              ) : (
+                <div className="bg-card border border-border rounded-xl overflow-hidden">
+                  {userSources.map((record, i) => (
+                    <div
+                      key={record.domain + record.timestamp}
+                      data-ocid={`profile.item.${i + 1}`}
+                      className={`flex items-center justify-between px-4 py-3 gap-3 ${i < userSources.length - 1 ? "border-b border-border/50" : ""}`}
+                    >
+                      <span className="text-sm font-body text-foreground font-medium truncate flex-1">
+                        {record.domain}
+                      </span>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <span className="text-xs font-body font-medium px-1.5 py-0.5 rounded bg-muted text-muted-foreground capitalize">
+                          {record.sourceType.replace(/_/g, " ")}
+                        </span>
+                        <span className="text-xs text-muted-foreground font-body">
+                          {new Date(record.timestamp).toLocaleDateString()}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </TabsContent>
 
             {/* ----------------------------------------------------------------
@@ -1129,7 +1168,7 @@ export function ProfilePage({ username, onBack }: ProfilePageProps) {
 
                             <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                               <span className="text-[11px] text-muted-foreground font-body">
-                                {timeAgo(event.timestamp)}
+                                {timeAgo(new Date(event.timestamp))}
                               </span>
                               {event.relatedLink && event.relatedLabel && (
                                 <>

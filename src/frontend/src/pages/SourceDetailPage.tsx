@@ -1,5 +1,6 @@
 import type { Claim, Evidence } from "@/backend.d";
 import { SourceDiscussion } from "@/components/SourceDiscussion";
+import { UserAvatar } from "@/components/UserAvatar";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import {
@@ -49,6 +50,10 @@ import {
   getSourceTypeBonus,
   getSourceTypeLabel,
 } from "@/pages/TrustedSourcesPage";
+import {
+  computeDynamicSourceBoost,
+  getEvidenceCardsForDomain,
+} from "@/utils/sourceCredibility";
 import { computeOverallVerdict } from "@/utils/verdict";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import {
@@ -157,6 +162,158 @@ function useSourceReportCount(sourceId: bigint) {
 // ── Sub-components ────────────────────────────────────────────────────────────
 
 /** Tries Clearbit logo → Google favicon → Globe icon */
+function CredibilityBoostInline({
+  sourceType,
+  domain,
+  upvotes,
+  downvotes,
+}: {
+  sourceType: string;
+  domain: string;
+  upvotes: number;
+  downvotes: number;
+}) {
+  const total = upvotes + downvotes;
+  const ratio = total > 0 ? upvotes / total : 0;
+  const cards = getEvidenceCardsForDomain(domain);
+  const { dynamicBonus, ceilingLabel, hasTrackRecord } =
+    computeDynamicSourceBoost(sourceType, ratio, cards);
+  return (
+    <span className="text-xs font-body text-primary font-semibold">
+      {hasTrackRecord ? dynamicBonus : ceilingLabel} credibility boost
+    </span>
+  );
+}
+
+function CredibilityBoostSection({
+  sourceType,
+  domain,
+  upvotes,
+  downvotes,
+}: {
+  sourceType: string;
+  domain: string;
+  upvotes: number;
+  downvotes: number;
+}) {
+  const total = upvotes + downvotes;
+  const ratio = total > 0 ? upvotes / total : 0;
+  const cards = getEvidenceCardsForDomain(domain);
+  const {
+    dynamicBonus,
+    ceilingLabel,
+    ratioScore,
+    trackRecordScore,
+    hasTrackRecord,
+    ceiling,
+  } = computeDynamicSourceBoost(sourceType, ratio, cards);
+
+  const bonusDisplay = hasTrackRecord ? dynamicBonus : ceilingLabel;
+  const bonusDesc = hasTrackRecord
+    ? "Based on community approval + evidence track record"
+    : "Based on community approval (track record pending)";
+  const ceilingStr =
+    ceiling % 1 === 0 ? ceiling.toFixed(0) : ceiling.toFixed(1);
+  const ratioDisplay = Math.round(ratio * 100);
+  const ratioScoreDisplay = Math.round(ratioScore * 100);
+  const trackDisplay =
+    trackRecordScore !== null ? Math.round(trackRecordScore * 100) : null;
+  const cardCount = cards.length;
+
+  return (
+    <section>
+      <div className="flex items-center gap-2 mb-3">
+        <div className="w-1 h-5 bg-primary rounded-full" />
+        <h2 className="font-display text-lg font-bold text-foreground">
+          Credibility Boost
+        </h2>
+      </div>
+      <div className="p-4 bg-card border border-border rounded-sm space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm font-body text-foreground font-semibold">
+              <span className="text-xl font-display text-primary">
+                {bonusDisplay}
+              </span>{" "}
+              <span className="text-xs text-muted-foreground font-normal">
+                {hasTrackRecord ? `of +${ceilingStr}% ceiling` : "max ceiling"}
+              </span>
+            </p>
+            <p className="text-xs text-muted-foreground font-body mt-0.5">
+              {bonusDesc}
+            </p>
+          </div>
+          <div className="text-right">
+            <p className="text-[10px] font-body text-muted-foreground">
+              Max ceiling
+            </p>
+            <p className="text-sm font-mono font-semibold text-foreground">
+              +{ceilingStr}%
+            </p>
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          <div className="space-y-1">
+            <div className="flex items-center justify-between text-xs font-body">
+              <span className="text-muted-foreground">Community approval</span>
+              <span className="font-semibold text-foreground">
+                {ratioScoreDisplay}%
+              </span>
+            </div>
+            <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+              <div
+                className="h-full bg-primary rounded-full transition-all duration-500"
+                style={{ width: `${ratioScoreDisplay}%` }}
+              />
+            </div>
+            <p className="text-[10px] text-muted-foreground font-body">
+              {ratioDisplay}% upvote ratio · scales from 60% to 100% approval
+            </p>
+          </div>
+
+          <div className="space-y-1">
+            <div className="flex items-center justify-between text-xs font-body">
+              <span className="text-muted-foreground">
+                Evidence track record
+              </span>
+              {hasTrackRecord && trackDisplay !== null ? (
+                <span className="font-semibold text-foreground">
+                  {trackDisplay}%
+                </span>
+              ) : (
+                <span className="text-muted-foreground/60 italic text-[10px]">
+                  Not enough data yet
+                </span>
+              )}
+            </div>
+            {hasTrackRecord && trackDisplay !== null ? (
+              <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                <div
+                  className="h-full bg-emerald-500 rounded-full transition-all duration-500"
+                  style={{ width: `${trackDisplay}%` }}
+                />
+              </div>
+            ) : (
+              <div className="h-1.5 rounded-full bg-muted/60" />
+            )}
+            <p className="text-[10px] text-muted-foreground font-body">
+              {hasTrackRecord
+                ? `${cardCount} evidence cards citing this source`
+                : `${cardCount}/5 evidence cards needed for track record`}
+            </p>
+          </div>
+        </div>
+
+        <p className="text-[10px] text-muted-foreground font-body border-t border-border pt-3">
+          Score updates as evidence citing this source accumulates.
+          {!hasTrackRecord && " Track record activates after 5 evidence cards."}
+        </p>
+      </div>
+    </section>
+  );
+}
+
 function SourceLogo({ domain }: { domain: string }) {
   const [step, setStep] = useState<0 | 1 | 2>(0);
 
@@ -1028,7 +1185,7 @@ export function SourceDetailPage({
   onClaimClick: (claim: Claim) => void;
 }) {
   const { data: sources, isLoading } = useTrustedSources();
-  const { canVoteOnSources, isExpert } = useAccountPermissions();
+  const { isExpert } = useAccountPermissions();
   const sessionIdStr = sessionId ?? "";
   const source = (sources ?? []).find(
     (s) => s.domain.toLowerCase() === domain.toLowerCase(),
@@ -1239,20 +1396,50 @@ export function SourceDetailPage({
                     >
                       {getSourceTypeLabel(source.sourceType)}
                     </span>
-                    <span className="text-xs font-body text-primary font-semibold">
-                      {getSourceTypeBonus(source.sourceType)} credibility bonus
-                    </span>
+                    <CredibilityBoostInline
+                      sourceType={source.sourceType}
+                      domain={source.domain}
+                      upvotes={upvotes}
+                      downvotes={downvotes}
+                    />
                   </div>
                 </div>
 
                 <div className="flex items-center gap-1.5 flex-wrap text-xs text-muted-foreground font-body">
-                  <Users className="h-3.5 w-3.5" />
+                  <UserAvatar
+                    username={
+                      (isSuggester && currentPrincipalId
+                        ? localStorage.getItem(
+                            `rebunked_username_${currentPrincipalId}`,
+                          ) ||
+                          source.suggestedByUsername ||
+                          "unknown"
+                        : source.suggestedByUsername) || "unknown"
+                    }
+                    avatarUrl={
+                      isSuggester && currentPrincipalId
+                        ? (localStorage.getItem(
+                            `rebunked_avatar_${currentPrincipalId}`,
+                          ) ?? undefined)
+                        : undefined
+                    }
+                    size="sm"
+                    isVerified={!!(isSuggester && currentPrincipalId)}
+                  />
                   <span>
                     Suggested by{" "}
                     <span className="font-mono">
-                      {source.suggestedByUsername ||
-                        source.suggestedByUsername ||
-                        "unknown"}
+                      {(isSuggester && currentPrincipalId
+                        ? (() => {
+                            const pid = currentPrincipalId;
+                            const stored = localStorage.getItem(
+                              `rebunked_username_${pid}`,
+                            );
+                            return (
+                              stored || source.suggestedByUsername || "unknown"
+                            );
+                          })()
+                        : source.suggestedByUsername) || "unknown"}
                     </span>
                     {suggestedRelative && suggestedFull && (
                       <>
@@ -1340,18 +1527,21 @@ export function SourceDetailPage({
                 </div>
               </div>
 
-              {/* Voting panel — verified accounts only */}
+              {/* Voting panel — open to all users */}
               <div className="flex items-center justify-center pt-1">
-                {canVoteOnSources ? (
-                  <VotePanel source={source} sessionId={sessionId} />
-                ) : (
-                  <p className="flex items-center gap-1.5 text-xs text-muted-foreground font-body">
-                    <LogIn className="h-3 w-3 flex-shrink-0" />
-                    Sign in to vote on sources
-                  </p>
-                )}
+                <VotePanel source={source} sessionId={sessionId} />
               </div>
             </div>
+
+            {/* ── Credibility Boost ────────────────────────────── */}
+            {source.isTrusted && (
+              <CredibilityBoostSection
+                sourceType={source.sourceType}
+                domain={source.domain}
+                upvotes={upvotes}
+                downvotes={downvotes}
+              />
+            )}
 
             {/* ── About Blurb ──────────────────────────────────── */}
             {wikiLoading ? (

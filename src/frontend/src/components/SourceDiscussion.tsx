@@ -22,6 +22,7 @@ import {
   useUsername,
 } from "@/hooks/useQueries";
 import { useSessionGate } from "@/hooks/useSessionGate";
+import { useVerifiedAccount } from "@/hooks/useVerifiedAccount";
 import { cn } from "@/lib/utils";
 import { formatRelativeTime } from "@/utils/time";
 import {
@@ -267,6 +268,8 @@ interface CommentCardProps {
   sourceId: bigint;
   sessionId: string;
   username: string;
+  verifiedUsername?: string;
+  avatarUrl?: string;
   index: number;
   depth: number;
   reportedIds: Set<string>;
@@ -282,6 +285,8 @@ function CommentCard({
   sourceId,
   sessionId,
   username,
+  verifiedUsername,
+  avatarUrl,
   index,
   depth,
   reportedIds,
@@ -298,7 +303,10 @@ function CommentCard({
   } = decodeAttachments(comment.text);
 
   const isOwnComment = comment.sessionId === sessionId;
-  const displayAuthor = isOwnComment ? username : comment.authorUsername;
+  const displayAuthor = isOwnComment
+    ? (verifiedUsername ?? username)
+    : comment.authorUsername;
+  const displayAvatarUrl = isOwnComment ? avatarUrl : undefined;
   const isReplying = replyingToId === comment.id;
 
   const likeComment = useLikeSourceComment();
@@ -345,7 +353,12 @@ function CommentCard({
       <div className="group py-2">
         {/* Author + timestamp */}
         <div className="flex items-center gap-2 mb-1">
-          <UserAvatar username={displayAuthor} size="sm" />
+          <UserAvatar
+            username={displayAuthor}
+            size="sm"
+            avatarUrl={displayAvatarUrl}
+            isVerified={isOwnComment ? !!verifiedUsername : false}
+          />
           <span className="text-xs font-semibold text-foreground font-mono">
             {displayAuthor}
           </span>
@@ -515,7 +528,7 @@ function CommentCard({
                 sourceId={sourceId}
                 parentCommentId={comment.id}
                 sessionId={sessionId}
-                authorUsername={username}
+                authorUsername={verifiedUsername ?? username}
                 onCancel={() => onToggleReply(null)}
                 onSuccess={() => onToggleReply(null)}
                 autoFocus
@@ -547,6 +560,7 @@ export function SourceDiscussion({
   const [replyingToId, setReplyingToId] = useState<bigint | null>(null);
   const [reportedIds, setReportedIds] = useState<Set<string>>(new Set());
   const username = useUsername();
+  const { username: verifiedUsername, avatarUrl } = useVerifiedAccount();
   const reportComment = useReportSourceComment();
   const { checkAction } = useSessionGate();
 
@@ -616,6 +630,8 @@ export function SourceDiscussion({
         sourceId={sourceId}
         sessionId={sessionId}
         username={username}
+        verifiedUsername={verifiedUsername ?? undefined}
+        avatarUrl={avatarUrl ?? undefined}
         index={idx}
         depth={depth}
         reportedIds={reportedIds}
@@ -641,7 +657,7 @@ export function SourceDiscussion({
           sourceId={sourceId}
           parentCommentId={0n}
           sessionId={sessionId}
-          authorUsername={username}
+          authorUsername={verifiedUsername ?? username}
           ocidPrefix="source_discussion.toplevel"
           placeholder="Share your analysis of this source\u2026"
         />

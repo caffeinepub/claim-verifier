@@ -1,6 +1,5 @@
 import { cn } from "@/lib/utils";
 import { generateIdenticonDataUrl } from "@/utils/identicon";
-import { User } from "lucide-react";
 import { useState } from "react";
 
 interface UserAvatarProps {
@@ -8,6 +7,8 @@ interface UserAvatarProps {
   avatarUrl?: string;
   size?: "sm" | "md" | "lg";
   className?: string;
+  /** Only render the avatar for verified (logged-in) users. If false/undefined, returns null. */
+  isVerified?: boolean;
 }
 
 const sizeMap = {
@@ -16,36 +17,19 @@ const sizeMap = {
   lg: "h-20 w-20 min-w-[80px] min-h-[80px]",
 };
 
-const iconSizeMap = {
-  sm: "h-3 w-3",
-  md: "h-4 w-4",
-  lg: "h-8 w-8",
-};
-
 export function UserAvatar({
   username,
   avatarUrl,
   size = "md",
   className,
+  isVerified,
 }: UserAvatarProps) {
   const [imgError, setImgError] = useState(false);
 
-  const sizeClass = sizeMap[size];
+  // Anonymous users (not verified) get no avatar at all
+  if (!isVerified) return null;
 
-  // No username at all — anonymous placeholder
-  if (!username) {
-    return (
-      <div
-        className={cn(
-          sizeClass,
-          "rounded-full bg-muted flex items-center justify-center flex-shrink-0",
-          className,
-        )}
-      >
-        <User className={cn(iconSizeMap[size], "text-muted-foreground")} />
-      </div>
-    );
-  }
+  const sizeClass = sizeMap[size];
 
   // Prefer custom avatarUrl if provided and no error
   const showCustom = avatarUrl && !imgError;
@@ -65,7 +49,8 @@ export function UserAvatar({
     );
   }
 
-  // Identicon fallback
+  // Identicon fallback (only for verified users with a username)
+  if (!username) return null;
   const identiconUrl = generateIdenticonDataUrl(username);
   return (
     <img

@@ -15,6 +15,8 @@ const TRUST_SCORE_PREFIX = "rebunked_trust_";
 const TC_SESSIONS_KEY = "rebunked_tc_sessions";
 const USERNAME_REGISTRY_KEY = "rebunked_username_registry";
 const USERNAME_CHANGE_TS_PREFIX = "rebunked_username_changed_";
+// Flag used by useSessionGate to bypass the 15-minute delay for verified accounts
+export const ACTIVE_VERIFIED_KEY = "rebunked_active_verified";
 
 const USERNAME_COOLDOWN_MS = 24 * 60 * 60 * 1000; // 24 hours
 
@@ -351,6 +353,16 @@ export function useVerifiedAccount(): VerifiedAccountState {
     }
   }, [isVerified, principalId]);
 
+  // Sync verified status to localStorage so useSessionGate can read it
+  // without needing the hook to be re-called with the isVerified param.
+  useEffect(() => {
+    if (isVerified && principalId) {
+      localStorage.setItem(ACTIVE_VERIFIED_KEY, principalId);
+    } else {
+      localStorage.removeItem(ACTIVE_VERIFIED_KEY);
+    }
+  }, [isVerified, principalId]);
+
   // When isTrustedContributor becomes true, register principalId as a TC session proxy
   useEffect(() => {
     if (isTrustedContributor && principalId) {
@@ -458,6 +470,11 @@ export function useVerifiedAccount(): VerifiedAccountState {
     addTCSession(sessionId);
   }, []);
 
+  const logout = useCallback(() => {
+    localStorage.removeItem(ACTIVE_VERIFIED_KEY);
+    clear();
+  }, [clear]);
+
   return {
     isVerified,
     principalId,
@@ -474,7 +491,7 @@ export function useVerifiedAccount(): VerifiedAccountState {
     canChangeUsername,
     timeUntilUsernameChange,
     login,
-    logout: clear,
+    logout,
     setUsername,
     setAvatarUrl,
     setBio,
@@ -483,4 +500,163 @@ export function useVerifiedAccount(): VerifiedAccountState {
     updateTrust,
     markCurrentSessionAsTrusted,
   };
+}
+
+// ── Activity Tracking Helpers ────────────────────────────────────────────────
+
+function userClaimsKey(principalId: string) {
+  return `rebunked_user_claims_${principalId}`;
+}
+function userEvidenceKey(principalId: string) {
+  return `rebunked_user_evidence_${principalId}`;
+}
+function userCommentsKey(principalId: string) {
+  return `rebunked_user_comments_${principalId}`;
+}
+function userSourcesKey(principalId: string) {
+  return `rebunked_user_sources_${principalId}`;
+}
+function repEventsKey(principalId: string) {
+  return `rebunked_rep_events_${principalId}`;
+}
+
+export interface UserClaimRecord {
+  claimId: string;
+  title: string;
+  category: string;
+  timestamp: string;
+}
+export interface UserEvidenceRecord {
+  evidenceId: string;
+  claimId: string;
+  claimTitle: string;
+  text: string;
+  evidenceType: string;
+  timestamp: string;
+}
+export interface UserCommentRecord {
+  replyId: string;
+  claimId: string;
+  claimTitle: string;
+  text: string;
+  timestamp: string;
+}
+export interface UserSourceRecord {
+  domain: string;
+  sourceType: string;
+  timestamp: string;
+}
+export interface RealRepEvent {
+  id: string;
+  label: string;
+  pointChange: number;
+  trustChange: number;
+  timestamp: string;
+  relatedLabel?: string;
+  relatedLink?: string;
+}
+
+export function getActivePrincipalId(): string | null {
+  return localStorage.getItem("rebunked_active_verified");
+}
+
+export function getUserClaims(principalId: string): UserClaimRecord[] {
+  try {
+    return JSON.parse(localStorage.getItem(userClaimsKey(principalId)) ?? "[]");
+  } catch {
+    return [];
+  }
+}
+export function getUserEvidence(principalId: string): UserEvidenceRecord[] {
+  try {
+    return JSON.parse(
+      localStorage.getItem(userEvidenceKey(principalId)) ?? "[]",
+    );
+  } catch {
+    return [];
+  }
+}
+export function getUserComments(principalId: string): UserCommentRecord[] {
+  try {
+    return JSON.parse(
+      localStorage.getItem(userCommentsKey(principalId)) ?? "[]",
+    );
+  } catch {
+    return [];
+  }
+}
+export function getUserSources(principalId: string): UserSourceRecord[] {
+  try {
+    return JSON.parse(
+      localStorage.getItem(userSourcesKey(principalId)) ?? "[]",
+    );
+  } catch {
+    return [];
+  }
+}
+export function getUserRepEvents(principalId: string): RealRepEvent[] {
+  try {
+    return JSON.parse(localStorage.getItem(repEventsKey(principalId)) ?? "[]");
+  } catch {
+    return [];
+  }
+}
+
+export function appendUserClaim(principalId: string, record: UserClaimRecord) {
+  const arr = getUserClaims(principalId);
+  arr.unshift(record);
+  localStorage.setItem(
+    userClaimsKey(principalId),
+    JSON.stringify(arr.slice(0, 200)),
+  );
+  incrementActivityPoints(principalId);
+}
+export function appendUserEvidence(
+  principalId: string,
+  record: UserEvidenceRecord,
+) {
+  const arr = getUserEvidence(principalId);
+  arr.unshift(record);
+  localStorage.setItem(
+    userEvidenceKey(principalId),
+    JSON.stringify(arr.slice(0, 200)),
+  );
+  incrementActivityPoints(principalId);
+}
+export function appendUserComment(
+  principalId: string,
+  record: UserCommentRecord,
+) {
+  const arr = getUserComments(principalId);
+  arr.unshift(record);
+  localStorage.setItem(
+    userCommentsKey(principalId),
+    JSON.stringify(arr.slice(0, 200)),
+  );
+  incrementActivityPoints(principalId);
+}
+export function appendUserSource(
+  principalId: string,
+  record: UserSourceRecord,
+) {
+  const arr = getUserSources(principalId);
+  arr.unshift(record);
+  localStorage.setItem(
+    userSourcesKey(principalId),
+    JSON.stringify(arr.slice(0, 200)),
+  );
+  incrementActivityPoints(principalId);
+}
+export function appendRepEvent(principalId: string, event: RealRepEvent) {
+  const arr = getUserRepEvents(principalId);
+  arr.unshift(event);
+  localStorage.setItem(
+    repEventsKey(principalId),
+    JSON.stringify(arr.slice(0, 500)),
+  );
+}
+export function incrementActivityPoints(principalId: string, by = 1) {
+  const key = `rebunked_points_${principalId}`;
+  const current = Number.parseInt(localStorage.getItem(key) ?? "0", 10);
+  localStorage.setItem(key, String(current + by));
 }

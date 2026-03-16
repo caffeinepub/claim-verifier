@@ -21,6 +21,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { useAccountPermissions } from "@/hooks/useAccountPermissions";
 import { useCreateClaim } from "@/hooks/useQueries";
 import { useSessionGate } from "@/hooks/useSessionGate";
+import {
+  appendRepEvent,
+  appendUserClaim,
+  getActivePrincipalId,
+} from "@/hooks/useVerifiedAccount";
 import { Clock, Loader2, LogIn, Plus } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -109,6 +114,23 @@ export function SubmitClaimDialog({
         imageUrls: claimImageUrls,
         urls: claimUrls.filter((u) => u.trim()),
       });
+      const pid = getActivePrincipalId();
+      if (pid) {
+        const ts = new Date().toISOString();
+        appendUserClaim(pid, {
+          claimId: String(Date.now()),
+          title: title.trim(),
+          category,
+          timestamp: ts,
+        });
+        appendRepEvent(pid, {
+          id: `claim-${Date.now()}`,
+          label: "Claim submitted",
+          pointChange: 1,
+          trustChange: 0,
+          timestamp: ts,
+        });
+      }
       toast.success("Claim submitted for community review");
       handleClose();
     } catch (err) {

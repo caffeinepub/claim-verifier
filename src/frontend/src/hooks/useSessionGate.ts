@@ -1,3 +1,4 @@
+import { ACTIVE_VERIFIED_KEY } from "@/hooks/useVerifiedAccount";
 import { toast } from "sonner";
 
 const SESSION_CREATED_AT_KEY = "rebunked_session_created_at";
@@ -8,14 +9,27 @@ const VOTE_WINDOW_MS = 10 * 60 * 1000; // 10 minutes
 const VOTE_LIMIT = 3;
 
 /**
+ * Returns true if the current session belongs to a verified (Internet Identity) account.
+ * Verified accounts bypass the 15-minute session delay.
+ */
+function isActiveVerifiedAccount(): boolean {
+  return !!localStorage.getItem(ACTIVE_VERIFIED_KEY);
+}
+
+/**
  * Reads/initializes the session creation timestamp from localStorage.
  * Returns whether the session is still read-only and how many minutes remain.
- * This is a plain function (not a React hook) since it only reads localStorage.
+ * Verified accounts are never read-only.
  */
 export function getSessionAge(): {
   isReadOnly: boolean;
   minutesRemaining: number;
 } {
+  // Verified accounts (Internet Identity) bypass the 15-minute delay entirely
+  if (isActiveVerifiedAccount()) {
+    return { isReadOnly: false, minutesRemaining: 0 };
+  }
+
   let createdAt = localStorage.getItem(SESSION_CREATED_AT_KEY);
   if (!createdAt) {
     const now = new Date().toISOString();
@@ -40,6 +54,7 @@ export function getSessionAge(): {
  * Call checkAction() before any write action.
  * Call checkVoteAction() before any vote action (direct claim or evidence).
  * Both return false and show a toast if the action should be blocked.
+ * Verified accounts (Internet Identity) bypass the 15-minute session delay automatically.
  */
 export function useSessionGate(): {
   checkAction: () => boolean;
@@ -49,9 +64,9 @@ export function useSessionGate(): {
     const { isReadOnly, minutesRemaining } = getSessionAge();
     if (isReadOnly) {
       toast.warning(
-        `New accounts are read-only for 15 minutes. Please wait ${minutesRemaining} more minute${
+        `New sessions are read-only for 15 minutes. Please wait ${minutesRemaining} more minute${
           minutesRemaining === 1 ? "" : "s"
-        } before participating.`,
+        } before participating, or sign in to start immediately.`,
         { duration: 5000, id: "session-gate" },
       );
       return false;

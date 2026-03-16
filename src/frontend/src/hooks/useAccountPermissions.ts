@@ -21,7 +21,7 @@ export function useAccountPermissions(): AccountPermissions {
   return {
     isVerified,
     canUploadImages: isVerified,
-    canVoteOnSources: isVerified,
+    canVoteOnSources: true,
     canSuggestSources: isVerified,
     canEdit: isVerified,
     canReport: isVerified,

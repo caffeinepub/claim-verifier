@@ -11,6 +11,10 @@ import {
   getSourceTypeBonus,
   getSourceTypeLabel,
 } from "@/pages/TrustedSourcesPage";
+import {
+  computeDynamicSourceBoost,
+  getEvidenceCardsForDomain,
+} from "@/utils/sourceCredibility";
 import { ShieldCheck } from "lucide-react";
 import { useState } from "react";
 

@@ -21,7 +21,13 @@ import {
   useUsername,
 } from "@/hooks/useQueries";
 import { useSessionGate } from "@/hooks/useSessionGate";
-import { isTrustedContributorSession } from "@/hooks/useVerifiedAccount";
+import {
+  appendRepEvent,
+  appendUserComment,
+  getActivePrincipalId,
+  isTrustedContributorSession,
+  useVerifiedAccount,
+} from "@/hooks/useVerifiedAccount";
 import { cn } from "@/lib/utils";
 import { formatRelativeTime } from "@/utils/time";
 import {
@@ -103,6 +109,24 @@ function ReplyForm({
         sessionId,
       });
       setText("");
+      const pid = getActivePrincipalId();
+      if (pid) {
+        const ts = new Date().toISOString();
+        appendUserComment(pid, {
+          replyId: String(Date.now()),
+          claimId: String(evidenceId),
+          claimTitle: "",
+          text: text.trim(),
+          timestamp: ts,
+        });
+        appendRepEvent(pid, {
+          id: `comment-${Date.now()}`,
+          label: "Comment posted",
+          pointChange: 1,
+          trustChange: 0,
+          timestamp: ts,
+        });
+      }
       onSuccess?.();
     } catch (err) {
       const msg = err instanceof Error ? err.message : "";
@@ -186,6 +210,8 @@ interface ReplyCardProps {
   reply: Reply;
   sessionId: string;
   username: string;
+  verifiedUsername?: string;
+  avatarUrl?: string;
   index: number;
   depth: number;
   reportedIds: Set<string>;
@@ -202,6 +228,8 @@ function ReplyCard({
   reply,
   sessionId,
   username,
+  verifiedUsername,
+  avatarUrl,
   index,
   depth,
   reportedIds,
@@ -214,7 +242,10 @@ function ReplyCard({
   likeCounts,
 }: ReplyCardProps) {
   const isOwnReply = reply.sessionId === sessionId;
-  const displayAuthor = isOwnReply ? username : reply.authorUsername;
+  const displayAuthor = isOwnReply
+    ? (verifiedUsername ?? username)
+    : reply.authorUsername;
+  const displayAvatarUrl = isOwnReply ? avatarUrl : undefined;
   const isReplying = replyingToId === reply.id;
   const [reportDialogOpen, setReportDialogOpen] = useState(false);
 
@@ -254,7 +285,12 @@ function ReplyCard({
       <div className="group py-2">
         {/* Author + timestamp */}
         <div className="flex items-center gap-2 mb-1">
-          <UserAvatar username={displayAuthor} size="sm" />
+          <UserAvatar
+            username={displayAuthor}
+            size="sm"
+            avatarUrl={displayAvatarUrl}
+            isVerified={isOwnReply ? !!verifiedUsername : false}
+          />
           <span className="text-xs font-semibold text-foreground font-mono flex items-center gap-1">
             {displayAuthor}
             {isTrustedContributorSession(reply.sessionId) && <VerifiedBadge />}
@@ -404,7 +440,7 @@ function ReplyCard({
                 evidenceId={evidenceId}
                 parentReplyId={reply.id}
                 sessionId={sessionId}
-                authorUsername={username}
+                authorUsername={verifiedUsername ?? username}
                 onCancel={() => onToggleReply(null)}
                 onSuccess={() => onToggleReply(null)}
                 autoFocus
@@ -438,6 +474,7 @@ export function ReplyThread({
   const [replyingToId, setReplyingToId] = useState<bigint | null>(null);
   const [reportedIds, setReportedIds] = useState<Set<string>>(new Set());
   const username = useUsername();
+  const { username: verifiedUsername, avatarUrl } = useVerifiedAccount();
   const reportReply = useReportReply();
   const { checkAction: checkThreadAction } = useSessionGate();
 
@@ -519,6 +556,8 @@ export function ReplyThread({
         reply={reply}
         sessionId={sessionId}
         username={username}
+        verifiedUsername={verifiedUsername ?? undefined}
+        avatarUrl={avatarUrl ?? undefined}
         index={idx}
         depth={depth}
         reportedIds={reportedIds}
@@ -611,7 +650,7 @@ export function ReplyThread({
                       evidenceId={evidenceId}
                       parentReplyId={0n}
                       sessionId={sessionId}
-                      authorUsername={username}
+                      authorUsername={verifiedUsername ?? username}
                       ocidPrefix={`reply.toplevel.${evidenceIndex}`}
                     />
                   </motion.div>

@@ -1,3 +1,4 @@
+import { UserAvatar } from "@/components/UserAvatar";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -25,21 +26,28 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useAccountPermissions } from "@/hooks/useAccountPermissions";
 import {
   type TrustedSourceInfo,
   useSuggestTrustedSource,
   useTrustedSources,
 } from "@/hooks/useQueries";
 import { useSessionGate } from "@/hooks/useSessionGate";
-import { useVerifiedAccount } from "@/hooks/useVerifiedAccount";
+import {
+  appendRepEvent,
+  appendUserSource,
+  getActivePrincipalId,
+  useVerifiedAccount,
+} from "@/hooks/useVerifiedAccount";
 import { cn } from "@/lib/utils";
+import {
+  computeDynamicSourceBoost,
+  getEvidenceCardsForDomain,
+} from "@/utils/sourceCredibility";
 import {
   CheckCircle2,
   ExternalLink,
   Globe,
   Loader2,
-  LogIn,
   Plus,
   Search,
   Shield,
@@ -67,6 +75,11 @@ export function getSourceTypeLabel(type: string): string {
 
 export function getSourceTypeBonus(type: string): string {
   return SOURCE_TYPES.find((t) => t.value === type)?.bonus ?? "";
+}
+
+export function getSourceTypeCeiling(type: string): number {
+  const bonusStr = SOURCE_TYPES.find((t) => t.value === type)?.bonus ?? "+0%";
+  return Number.parseFloat(bonusStr.replace("+", "").replace("%", "")) || 0;
 }
 
 export function getSourceTypeBadgeClasses(type: string): string {
@@ -110,8 +123,8 @@ function SourceLogo({
   size?: "sm" | "lg";
 }) {
   const [step, setStep] = useState<0 | 1 | 2>(0);
-  const sizeClass = size === "lg" ? "w-10 h-10" : "w-6 h-6";
-  const iconSize = size === "lg" ? "h-5 w-5" : "h-3.5 w-3.5";
+  const sizeClass = size === "lg" ? "w-10 h-10" : "w-8 h-8";
+  const iconSize = size === "lg" ? "h-5 w-5" : "h-4 w-4";
 
   if (step === 2) {
     return (
@@ -134,6 +147,29 @@ function SourceLogo({
   );
 }
 
+function DynamicBonusLabel({
+  sourceType,
+  domain,
+  upvotes,
+  downvotes,
+}: {
+  sourceType: string;
+  domain: string;
+  upvotes: number;
+  downvotes: number;
+}) {
+  const total = upvotes + downvotes;
+  const ratio = total > 0 ? upvotes / total : 0;
+  const cards = getEvidenceCardsForDomain(domain);
+  const { dynamicBonus, ceilingLabel, hasTrackRecord } =
+    computeDynamicSourceBoost(sourceType, ratio, cards);
+  return (
+    <span className="text-[10px] font-body text-muted-foreground">
+      {hasTrackRecord ? dynamicBonus : ceilingLabel} credibility bonus
+    </span>
+  );
+}
+
 function SourceCard({
   source,
   index,
@@ -144,6 +180,7 @@ function SourceCard({
   sessionId: string | null;
   onSourceClick?: (domain: string) => void;
 }) {
+  const currentPrincipalId = getActivePrincipalId();
   const upvotes = Number(source.upvotes);
   const downvotes = Number(source.downvotes);
   const totalVotes = upvotes + downvotes;
@@ -218,9 +255,12 @@ function SourceCard({
             >
               {getSourceTypeLabel(source.sourceType)}
             </span>
-            <span className="text-[10px] font-body text-muted-foreground">
-              {getSourceTypeBonus(source.sourceType)} credibility bonus
-            </span>
+            <DynamicBonusLabel
+              sourceType={source.sourceType}
+              domain={source.domain}
+              upvotes={Number(source.upvotes)}
+              downvotes={Number(source.downvotes)}
+            />
           </div>
         </div>
       </div>
@@ -277,10 +317,65 @@ function SourceCard({
           <Users className="h-2.5 w-2.5" />
           {totalVotes} {totalVotes === 1 ? "vote" : "votes"}
         </span>
-        <span className="text-[10px] font-body text-muted-foreground">
+        <span className="text-[10px] font-body text-muted-foreground flex items-center gap-1">
+          <UserAvatar
+            username={(() => {
+              if (currentPrincipalId) {
+                const storedPrincipal = localStorage.getItem(
+                  `source_principal_${source.domain}`,
+                );
+                if (storedPrincipal === currentPrincipalId) {
+                  return (
+                    localStorage.getItem(
+                      `rebunked_username_${currentPrincipalId}`,
+                    ) ||
+                    source.suggestedByUsername ||
+                    "unknown"
+                  );
+                }
+              }
+              return source.suggestedByUsername || "unknown";
+            })()}
+            avatarUrl={(() => {
+              if (currentPrincipalId) {
+                const storedPrincipal = localStorage.getItem(
+                  `source_principal_${source.domain}`,
+                );
+                if (storedPrincipal === currentPrincipalId) {
+                  return (
+                    localStorage.getItem(
+                      `rebunked_avatar_${currentPrincipalId}`,
+                    ) ?? undefined
+                  );
+                }
+              }
+              return undefined;
+            })()}
+            size="sm"
+            isVerified={
+              !!(
+                currentPrincipalId &&
+                localStorage.getItem(`source_principal_${source.domain}`) ===
+                  currentPrincipalId
+              )
+            }
+          />
           Suggested by{" "}
           <span className="font-mono">
-            {source.suggestedByUsername || "unknown"}
+            {(() => {
+              if (currentPrincipalId) {
+                const storedPrincipal = localStorage.getItem(
+                  `source_principal_${source.domain}`,
+                );
+                if (storedPrincipal === currentPrincipalId) {
+                  const verifiedName = localStorage.getItem(
+                    `rebunked_username_${currentPrincipalId}`,
+                  );
+                  if (verifiedName) return verifiedName;
+                }
+              }
+              return source.suggestedByUsername || "unknown";
+            })()}
           </span>
         </span>
       </div>
@@ -299,7 +394,7 @@ function SuggestSourceDialog({ sessionId }: { sessionId: string | null }) {
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { checkAction } = useSessionGate();
   const suggestSource = useSuggestTrustedSource();
-  const { principalId } = useVerifiedAccount();
+  const { principalId, username: verifiedUsername } = useVerifiedAccount();
 
   // Debounced Wikipedia fetch when domain changes
   useEffect(() => {
@@ -355,7 +450,9 @@ function SuggestSourceDialog({ sessionId }: { sessionId: string | null }) {
     }
     try {
       const username =
-        localStorage.getItem("claim_verifier_username") ?? "anonymous";
+        verifiedUsername ??
+        localStorage.getItem("claim_verifier_username") ??
+        "anonymous";
       await suggestSource.mutateAsync({
         domain: cleanDomain,
         sourceType,
@@ -369,6 +466,22 @@ function SuggestSourceDialog({ sessionId }: { sessionId: string | null }) {
       // Store principalId as canonical suggester identity for blurb editing
       if (principalId) {
         localStorage.setItem(`source_principal_${cleanDomain}`, principalId);
+      }
+      const pid = getActivePrincipalId();
+      if (pid) {
+        const ts = new Date().toISOString();
+        appendUserSource(pid, {
+          domain: cleanDomain,
+          sourceType,
+          timestamp: ts,
+        });
+        appendRepEvent(pid, {
+          id: `source-${Date.now()}`,
+          label: "Trusted source suggested",
+          pointChange: 1,
+          trustChange: 0,
+          timestamp: ts,
+        });
       }
       toast.success(`"${cleanDomain}" submitted for community review`);
       setOpen(false);
@@ -572,7 +685,6 @@ export function TrustedSourcesPage({
 }) {
   const { data: sources, isLoading, error } = useTrustedSources();
   const [searchQuery, setSearchQuery] = useState("");
-  const { canSuggestSources } = useAccountPermissions();
 
   const allSources = sources ?? [];
   const filteredTrusted = allSources
@@ -613,14 +725,7 @@ export function TrustedSourcesPage({
               need 25 votes with 60% approval to become trusted.
             </p>
           </div>
-          {canSuggestSources ? (
-            <SuggestSourceDialog sessionId={sessionId} />
-          ) : (
-            <p className="flex items-center gap-1.5 text-xs text-muted-foreground font-body">
-              <LogIn className="h-3 w-3 flex-shrink-0" />
-              Sign in to suggest sources
-            </p>
-          )}
+          <SuggestSourceDialog sessionId={sessionId} />
         </div>
       </div>
 

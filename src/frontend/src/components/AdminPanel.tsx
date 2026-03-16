@@ -28,6 +28,7 @@ import {
   getSourceTypeBonus,
   getSourceTypeLabel,
 } from "@/pages/TrustedSourcesPage";
+import { getSourceTypeCeiling } from "@/pages/TrustedSourcesPage";
 import { formatRelativeTime } from "@/utils/time";
 import {
   AlertTriangle,
@@ -629,7 +630,7 @@ function TrustedSourcesAdminTab({ password }: { password: string }) {
                   {getSourceTypeLabel(source.sourceType)}
                 </span>
                 <span className="text-[10px] text-muted-foreground font-body">
-                  {getSourceTypeBonus(source.sourceType)} bonus
+                  up to +{getSourceTypeCeiling(source.sourceType)}% ceiling
                 </span>
                 <span className="text-[10px] font-mono text-muted-foreground">
                   {netScore > 0 ? "+" : ""}

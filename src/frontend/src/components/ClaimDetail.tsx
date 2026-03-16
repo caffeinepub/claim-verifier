@@ -80,6 +80,7 @@ function sortEvidence(
       return arr.sort((a, b) => Number(a.timestamp) - Number(b.timestamp));
   }
 }
+import { UserAvatar } from "@/components/UserAvatar";
 import { VerifiedBadge } from "@/components/VerifiedBadge";
 import { Input } from "@/components/ui/input";
 import {
@@ -91,6 +92,9 @@ import {
 import { useReportContent } from "@/hooks/useQueries";
 import { useSessionGate } from "@/hooks/useSessionGate";
 import {
+  appendRepEvent,
+  appendUserEvidence,
+  getActivePrincipalId,
   getVerifiedVoteForClaim,
   isTrustedContributorSession,
   useVerifiedAccount,
@@ -335,6 +339,7 @@ export function ClaimDetail({
     isVerified,
     recordVerifiedVote,
     username: verifiedUsername,
+    avatarUrl,
   } = useVerifiedAccount();
   const { canUploadImages, canReport } = useAccountPermissions();
 
@@ -419,6 +424,17 @@ export function ClaimDetail({
       if (isVerified && claim) {
         recordVerifiedVote(claimId.toString(), sessionId, verdict, claim.title);
       }
+      const votePid = getActivePrincipalId();
+      if (votePid) {
+        const ts = new Date().toISOString();
+        appendRepEvent(votePid, {
+          id: `vote-${Date.now()}`,
+          label: "Vote cast",
+          pointChange: 1,
+          trustChange: 0,
+          timestamp: ts,
+        });
+      }
     } catch {
       toast.error("Failed to record vote");
     }
@@ -437,6 +453,25 @@ export function ClaimDetail({
         urls: evidenceUrls.filter((u) => u.trim()),
         evidenceType,
       });
+      const evPid = getActivePrincipalId();
+      if (evPid && claim) {
+        const ts = new Date().toISOString();
+        appendUserEvidence(evPid, {
+          evidenceId: String(Date.now()),
+          claimId: String(claimId),
+          claimTitle: claim.title,
+          text: evidenceText.trim(),
+          evidenceType,
+          timestamp: ts,
+        });
+        appendRepEvent(evPid, {
+          id: `ev-${Date.now()}`,
+          label: "Evidence submitted",
+          pointChange: 1,
+          trustChange: 0,
+          timestamp: ts,
+        });
+      }
       toast.success("Evidence submitted");
       setEvidenceText("");
       setEvidenceImageUrls([]);
@@ -548,11 +583,23 @@ export function ClaimDetail({
               <span className="text-xs text-muted-foreground font-body">
                 {formatRelativeTime(claim.timestamp)}
               </span>
-              <span className="text-xs text-muted-foreground font-body">
+              <span className="text-xs text-muted-foreground font-body flex items-center gap-1">
                 ·{" "}
-                {claim.sessionId === sessionId && claim.sessionId !== "seed"
-                  ? (verifiedUsername ?? username)
-                  : "Anonymous"}
+                {claim.sessionId === sessionId && claim.sessionId !== "seed" ? (
+                  <>
+                    <UserAvatar
+                      username={verifiedUsername ?? username}
+                      avatarUrl={
+                        verifiedUsername ? (avatarUrl ?? undefined) : undefined
+                      }
+                      size="sm"
+                      isVerified={!!verifiedUsername}
+                    />
+                    {verifiedUsername ?? username}
+                  </>
+                ) : (
+                  "Anonymous"
+                )}
               </span>
             </div>
             <div className="mb-4">
@@ -1038,6 +1085,14 @@ export function ClaimDetail({
                     >
                       {/* Line 1: username · timestamp [evidence type badge] */}
                       <div className="flex items-center gap-2 mb-1 flex-wrap">
+                        {item.sessionId === sessionId && (
+                          <UserAvatar
+                            username={verifiedUsername ?? username}
+                            size="sm"
+                            avatarUrl={avatarUrl ?? undefined}
+                            isVerified={!!verifiedUsername}
+                          />
+                        )}
                         <span className="text-xs font-semibold text-foreground font-mono flex items-center gap-1">
                           {item.sessionId === sessionId
                             ? (verifiedUsername ?? username)
