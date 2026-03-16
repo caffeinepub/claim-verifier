@@ -20,11 +20,11 @@ export function useAccountPermissions(): AccountPermissions {
 
   return {
     isVerified,
-    canUploadImages: isVerified,
+    canUploadImages: true,
     canVoteOnSources: true,
     canSuggestSources: isVerified,
     canEdit: isVerified,
-    canReport: isVerified,
+    canReport: true,
     isExpert,
   };
 }
