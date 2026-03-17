@@ -30,14 +30,15 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useInternetIdentity } from "@/hooks/useInternetIdentity";
 import {
   type TrustedSourceInfo,
+  useAddReputationEvent,
   useSuggestTrustedSource,
   useTrustedSources,
 } from "@/hooks/useQueries";
 import { useSessionGate } from "@/hooks/useSessionGate";
 import {
-  appendRepEvent,
   appendUserSource,
   getActivePrincipalId,
   useVerifiedAccount,
@@ -46,16 +47,20 @@ import { cn } from "@/lib/utils";
 import {
   computeDynamicSourceBoost,
   getEvidenceCardsForDomain,
+  getSourceStatus,
 } from "@/utils/sourceCredibility";
 import {
   CheckCircle2,
+  Clock,
   ExternalLink,
   Globe,
   Loader2,
   Plus,
+  Scale,
   Search,
   Shield,
   ShieldCheck,
+  ShieldX,
   Users,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
@@ -165,10 +170,38 @@ function DynamicBonusLabel({
   const total = upvotes + downvotes;
   const ratio = total > 0 ? upvotes / total : 0;
   const cards = getEvidenceCardsForDomain(domain);
-  const { dynamicBonus, ceilingLabel, hasTrackRecord } =
+  const { dynamicBonus, ceilingLabel, hasTrackRecord, isPenalty } =
     computeDynamicSourceBoost(sourceType, ratio, cards);
+  const status = getSourceStatus(upvotes, downvotes);
+
+  if (status === "pending") {
+    return (
+      <span className="text-[10px] font-body text-muted-foreground">
+        {ceilingLabel} potential boost
+      </span>
+    );
+  }
+  if (status === "contested") {
+    return (
+      <span className="text-[10px] font-body text-muted-foreground">
+        No credibility adjustment
+      </span>
+    );
+  }
+  if (status === "not-trusted") {
+    return (
+      <span className="text-[10px] font-body text-red-500">
+        {hasTrackRecord
+          ? dynamicBonus
+          : `-${ceilingLabel.replace("up to +", "up to ")}`}{" "}
+        credibility penalty
+      </span>
+    );
+  }
   return (
-    <span className="text-[10px] font-body text-muted-foreground">
+    <span
+      className={`text-[10px] font-body ${isPenalty ? "text-red-500" : "text-muted-foreground"}`}
+    >
       {hasTrackRecord ? dynamicBonus : ceilingLabel} credibility bonus
     </span>
   );
@@ -184,7 +217,6 @@ function SourceCard({
   sessionId: string | null;
   onSourceClick?: (domain: string) => void;
 }) {
-  const currentPrincipalId = getActivePrincipalId();
   const upvotes = Number(source.upvotes);
   const downvotes = Number(source.downvotes);
   const totalVotes = upvotes + downvotes;
@@ -206,9 +238,19 @@ function SourceCard({
       onClick={() => onSourceClick?.(source.domain)}
       className={cn(
         "p-4 bg-card border rounded-sm transition-all cursor-pointer",
-        source.isTrusted
-          ? "border-emerald-500/30 shadow-sm shadow-emerald-500/10 hover:border-emerald-500/60 hover:shadow-emerald-500/20"
-          : "border-border hover:border-primary/40 hover:shadow-sm",
+        (() => {
+          const st = getSourceStatus(
+            Number(source.upvotes),
+            Number(source.downvotes),
+          );
+          if (st === "trusted")
+            return "border-emerald-500/30 shadow-sm shadow-emerald-500/10 hover:border-emerald-500/60 hover:shadow-emerald-500/20";
+          if (st === "not-trusted")
+            return "border-red-400/30 hover:border-red-400/60 hover:shadow-sm";
+          if (st === "contested")
+            return "border-slate-400/40 hover:border-slate-500/50 hover:shadow-sm";
+          return "border-border hover:border-primary/40 hover:shadow-sm";
+        })(),
         onSourceClick && "hover:bg-secondary/40",
       )}
     >
@@ -229,21 +271,88 @@ function SourceCard({
               {source.domain}
               <ExternalLink className="h-3 w-3 opacity-60" />
             </a>
-            {source.isTrusted && (
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span className="inline-flex items-center cursor-default text-emerald-600">
-                      <ShieldCheck className="h-3.5 w-3.5" />
-                    </span>
-                  </TooltipTrigger>
-                  <TooltipContent side="top" className="text-xs max-w-[220px]">
-                    Trusted source — verified by the community with 60%+
-                    approval
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            )}
+            {(() => {
+              const st = getSourceStatus(
+                Number(source.upvotes),
+                Number(source.downvotes),
+              );
+              if (st === "trusted")
+                return (
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="inline-flex items-center cursor-default text-emerald-600">
+                          <ShieldCheck className="h-3.5 w-3.5" />
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent
+                        side="top"
+                        className="text-xs max-w-[220px]"
+                      >
+                        Trusted source — verified by the community with 60%+
+                        approval
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                );
+              if (st === "contested")
+                return (
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="inline-flex items-center cursor-default text-slate-500">
+                          <Scale className="h-3.5 w-3.5" />
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent
+                        side="top"
+                        className="text-xs max-w-[240px]"
+                      >
+                        Contested — community is divided on this source&apos;s
+                        credibility. Needs clear 60%+ approval to become trusted
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                );
+              if (st === "not-trusted")
+                return (
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="inline-flex items-center cursor-default text-red-500">
+                          <ShieldX className="h-3.5 w-3.5" />
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent
+                        side="top"
+                        className="text-xs max-w-[220px]"
+                      >
+                        Not Trusted — community voted this source as unreliable
+                        (less than 40% approval)
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                );
+              // pending
+              return (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="inline-flex items-center cursor-default text-amber-500">
+                        <Clock className="h-3.5 w-3.5" />
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent
+                      side="top"
+                      className="text-xs max-w-[240px]"
+                    >
+                      Pending Review — not yet trusted. Needs 25 votes with at
+                      least 60% approval to become trusted
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              );
+            })()}
             {source.adminOverride && (
               <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-body bg-violet-500/15 text-violet-600 border border-violet-500/30">
                 Admin Approved
@@ -270,7 +379,8 @@ function SourceCard({
       </div>
 
       {/* Progress toward trust */}
-      {!source.isTrusted && (
+      {getSourceStatus(Number(source.upvotes), Number(source.downvotes)) !==
+        "trusted" && (
         <div className="space-y-2">
           <div className="space-y-1">
             <div className="flex items-center justify-between">
@@ -322,53 +432,7 @@ function SourceCard({
           {totalVotes} {totalVotes === 1 ? "vote" : "votes"}
         </span>
         <span className="text-[10px] font-body text-muted-foreground flex items-center gap-1">
-          {(() => {
-            const isSugg = !!(
-              currentPrincipalId &&
-              localStorage.getItem(`source_principal_${source.domain}`) ===
-                currentPrincipalId
-            );
-            const sugUsername = isSugg
-              ? localStorage.getItem(
-                  `rebunked_username_${currentPrincipalId}`,
-                ) ||
-                source.suggestedByUsername ||
-                "unknown"
-              : source.suggestedByUsername || "unknown";
-            const sugAvatarUrl = isSugg
-              ? (localStorage.getItem(
-                  `rebunked_avatar_${currentPrincipalId}`,
-                ) ?? undefined)
-              : undefined;
-            const sugVerified = isSugg || isVerifiedUsername(sugUsername);
-            return (
-              <UserProfileCard username={sugUsername} isVerified={sugVerified}>
-                <UserAvatar
-                  username={sugUsername}
-                  avatarUrl={sugAvatarUrl}
-                  size="xs"
-                  isVerified={isSugg}
-                />
-              </UserProfileCard>
-            );
-          })()}
-          Suggested by{" "}
-          <span>
-            {(() => {
-              if (currentPrincipalId) {
-                const storedPrincipal = localStorage.getItem(
-                  `source_principal_${source.domain}`,
-                );
-                if (storedPrincipal === currentPrincipalId) {
-                  const verifiedName = localStorage.getItem(
-                    `rebunked_username_${currentPrincipalId}`,
-                  );
-                  if (verifiedName) return verifiedName;
-                }
-              }
-              return source.suggestedByUsername || "unknown";
-            })()}
-          </span>
+          Suggested by <span>{source.suggestedByUsername || "unknown"}</span>
         </span>
       </div>
     </motion.div>
@@ -379,6 +443,8 @@ type WikiFetchStatus = "idle" | "checking" | "found" | "not-found";
 
 function SuggestSourceDialog({ sessionId }: { sessionId: string | null }) {
   const [open, setOpen] = useState(false);
+  const addRepEvent = useAddReputationEvent();
+  const { identity } = useInternetIdentity();
   const [domain, setDomain] = useState("");
   const [sourceType, setSourceType] = useState("");
   const [aboutBlurb, setAboutBlurb] = useState("");
@@ -386,7 +452,7 @@ function SuggestSourceDialog({ sessionId }: { sessionId: string | null }) {
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { checkAction } = useSessionGate();
   const suggestSource = useSuggestTrustedSource();
-  const { principalId, username: verifiedUsername } = useVerifiedAccount();
+  const { username: verifiedUsername } = useVerifiedAccount();
 
   // Debounced Wikipedia fetch when domain changes
   useEffect(() => {
@@ -451,14 +517,6 @@ function SuggestSourceDialog({ sessionId }: { sessionId: string | null }) {
         sessionId,
         username,
       });
-      // Save about blurb if the About field was shown (wiki not found) and filled in
-      if (wikiStatus === "not-found" && aboutBlurb.trim()) {
-        localStorage.setItem(`about_blurb_${cleanDomain}`, aboutBlurb.trim());
-      }
-      // Store principalId as canonical suggester identity for blurb editing
-      if (principalId) {
-        localStorage.setItem(`source_principal_${cleanDomain}`, principalId);
-      }
       const pid = getActivePrincipalId();
       if (pid) {
         const ts = new Date().toISOString();
@@ -467,12 +525,13 @@ function SuggestSourceDialog({ sessionId }: { sessionId: string | null }) {
           sourceType,
           timestamp: ts,
         });
-        appendRepEvent(pid, {
-          id: `source-${Date.now()}`,
-          label: "Trusted source suggested",
-          pointChange: 1,
-          trustChange: 0,
-          timestamp: ts,
+      }
+      const principal = identity?.getPrincipal();
+      if (principal) {
+        addRepEvent.mutate({
+          principal,
+          action: "source_suggested",
+          points: 1n,
         });
       }
       toast.success(`"${cleanDomain}" submitted for community review`);
@@ -680,14 +739,28 @@ export function TrustedSourcesPage({
 
   const allSources = sources ?? [];
   const filteredTrusted = allSources
-    .filter((s) => s.isTrusted)
+    .filter(
+      (s) =>
+        getSourceStatus(Number(s.upvotes), Number(s.downvotes)) === "trusted",
+    )
     .filter((s) => s.domain.toLowerCase().includes(searchQuery.toLowerCase()));
-  const filteredPending = allSources
-    .filter((s) => !s.isTrusted)
+  const filteredNonTrusted = allSources
+    .filter(
+      (s) =>
+        getSourceStatus(Number(s.upvotes), Number(s.downvotes)) !== "trusted",
+    )
     .filter((s) => s.domain.toLowerCase().includes(searchQuery.toLowerCase()));
+  // Keep backward compat names
+  const filteredPending = filteredNonTrusted;
 
-  const trustedSources = allSources.filter((s) => s.isTrusted);
-  const pendingSources = allSources.filter((s) => !s.isTrusted);
+  const trustedSources = allSources.filter(
+    (s) =>
+      getSourceStatus(Number(s.upvotes), Number(s.downvotes)) === "trusted",
+  );
+  const pendingSources = allSources.filter(
+    (s) =>
+      getSourceStatus(Number(s.upvotes), Number(s.downvotes)) !== "trusted",
+  );
 
   const hasNoSearchResults =
     searchQuery.trim() !== "" &&

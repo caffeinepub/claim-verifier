@@ -23,12 +23,10 @@ import {
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Toaster } from "@/components/ui/sonner";
+import { useActor } from "@/hooks/useActor";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
 import { useAllClaims, useSessionId, useUsername } from "@/hooks/useQueries";
-import {
-  isUsernameTaken,
-  useVerifiedAccount,
-} from "@/hooks/useVerifiedAccount";
+import { useVerifiedAccount } from "@/hooks/useVerifiedAccount";
 import { ProfilePage } from "@/pages/ProfilePage";
 import { SettingsPage } from "@/pages/SettingsPage";
 import { SourceDetailPage } from "@/pages/SourceDetailPage";
@@ -89,6 +87,7 @@ const SEED_CLAIMS_VISIBLE_EMPTY = [
     category: "Science",
     timestamp: BigInt(Date.now() - 3600000) * 1_000_000n,
     sessionId: "seed",
+    authorUsername: "",
     imageUrls: [],
     urls: [],
     ogThumbnailUrl: "",
@@ -101,6 +100,7 @@ const SEED_CLAIMS_VISIBLE_EMPTY = [
     category: "Science",
     timestamp: BigInt(Date.now() - 86400000) * 1_000_000n,
     sessionId: "seed",
+    authorUsername: "",
     imageUrls: [],
     urls: [],
     ogThumbnailUrl: "",
@@ -113,6 +113,7 @@ const SEED_CLAIMS_VISIBLE_EMPTY = [
     category: "Health",
     timestamp: BigInt(Date.now() - 172800000) * 1_000_000n,
     sessionId: "seed",
+    authorUsername: "",
     imageUrls: [],
     urls: [],
     ogThumbnailUrl: "",
@@ -125,6 +126,7 @@ const SEED_CLAIMS_VISIBLE_EMPTY = [
     category: "Technology",
     timestamp: BigInt(Date.now() - 259200000) * 1_000_000n,
     sessionId: "seed",
+    authorUsername: "",
     imageUrls: [],
     urls: [],
     ogThumbnailUrl: "",
@@ -138,6 +140,7 @@ const SEED_CLAIMS_VISIBLE_EMPTY = [
     category: "Politics",
     timestamp: BigInt(Date.now() - 432000000) * 1_000_000n,
     sessionId: "seed",
+    authorUsername: "",
     imageUrls: [],
     urls: [],
     ogThumbnailUrl: "",
@@ -171,7 +174,6 @@ export default function App() {
     canChangeUsername,
     timeUntilUsernameChange,
     principalId,
-    joinDate,
   } = useVerifiedAccount();
   const [usernameInput, setUsernameInput] = useState("");
   const [usernameDialogOpen, setUsernameDialogOpen] = useState(false);
@@ -188,7 +190,9 @@ export default function App() {
     }
   }, [needsUsernameSetup]);
 
-  // Debounced availability check
+  const { actor } = useActor();
+
+  // Debounced availability check via backend
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     const trimmed = usernameInput.trim();
@@ -196,20 +200,25 @@ export default function App() {
       setUsernameAvailable(null);
       return;
     }
-    debounceRef.current = setTimeout(() => {
-      const taken = isUsernameTaken(trimmed, principalId ?? undefined);
-      setUsernameAvailable(!taken);
+    debounceRef.current = setTimeout(async () => {
+      if (!actor) return;
+      try {
+        const available = await actor.isUsernameAvailable(trimmed);
+        setUsernameAvailable(available);
+      } catch {
+        setUsernameAvailable(null);
+      }
     }, 400);
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [usernameInput, principalId]);
+  }, [usernameInput, actor]);
 
-  function handleSaveUsername() {
+  async function handleSaveUsername() {
     const trimmed = usernameInput.trim();
     if (!trimmed) return;
     setUsernameError(null);
-    const result = setUsername(trimmed);
+    const result = await setUsername(trimmed);
     if (!result.success) {
       setUsernameError(result.error ?? "Failed to set username");
       return;
@@ -534,9 +543,6 @@ export default function App() {
           {isOnSettings && principalId ? (
             <SettingsPage
               key="settings"
-              principalId={principalId}
-              username={username}
-              joinDate={joinDate}
               onBack={goBack}
               onChangeUsername={() => {
                 setShowSettings(false);
@@ -545,7 +551,6 @@ export default function App() {
                 setUsernameAvailable(null);
                 setUsernameDialogOpen(true);
               }}
-              logout={logout}
             />
           ) : isOnProfile && showProfileUsername ? (
             <ProfilePage

@@ -13,6 +13,11 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
+import { useUpdateProfile } from "@/hooks/useQueries";
+import {
+  DEFAULT_PRIVACY_SETTINGS,
+  useVerifiedAccount,
+} from "@/hooks/useVerifiedAccount";
 import {
   ArrowLeft,
   AtSign,
@@ -24,68 +29,77 @@ import {
 } from "lucide-react";
 import { motion } from "motion/react";
 import { useState } from "react";
+import { toast } from "sonner";
 
 interface SettingsPageProps {
-  principalId: string;
-  username: string | null;
-  joinDate: string | null;
   onBack: () => void;
   onChangeUsername: () => void;
-  logout: () => void;
 }
 
-function getPrivacyKey(
-  type: "showVoteHistory" | "showActivityTabs",
-  principalId: string,
-) {
-  return `rebunked_privacy_${type}_${principalId}`;
-}
+export function SettingsPage({ onBack, onChangeUsername }: SettingsPageProps) {
+  const {
+    username,
+    joinDate,
+    privacySettings,
+    setAvatarUrl: _setAvatarUrl,
+    principal,
+    logout,
+  } = useVerifiedAccount();
+  const updateProfile = useUpdateProfile();
 
-function readPrivacy(
-  type: "showVoteHistory" | "showActivityTabs",
-  principalId: string,
-): boolean {
-  const val = localStorage.getItem(getPrivacyKey(type, principalId));
-  return val === null ? true : val === "true";
-}
-
-export function SettingsPage({
-  principalId,
-  username,
-  joinDate,
-  onBack,
-  onChangeUsername,
-  logout,
-}: SettingsPageProps) {
-  const [showVoteHistory, setShowVoteHistory] = useState(() =>
-    readPrivacy("showVoteHistory", principalId),
+  const [showVoteHistory, setShowVoteHistory] = useState(
+    () => privacySettings?.showVotes ?? true,
   );
-  const [showActivityTabs, setShowActivityTabs] = useState(() =>
-    readPrivacy("showActivityTabs", principalId),
+  const [showActivityTabs, setShowActivityTabs] = useState(
+    () =>
+      (privacySettings?.showClaims &&
+        privacySettings?.showEvidence &&
+        privacySettings?.showComments) ??
+      true,
   );
 
   function toggleVoteHistory(val: boolean) {
     setShowVoteHistory(val);
-    localStorage.setItem(
-      getPrivacyKey("showVoteHistory", principalId),
-      String(val),
-    );
+    if (principal) {
+      const newSettings = {
+        ...(privacySettings ?? DEFAULT_PRIVACY_SETTINGS),
+        showVotes: val,
+      };
+      updateProfile.mutate({
+        principal,
+        username: username ?? "",
+        bio: "",
+        avatarUrl: "",
+        privacySettings: newSettings,
+      });
+    }
   }
 
   function toggleActivityTabs(val: boolean) {
     setShowActivityTabs(val);
-    localStorage.setItem(
-      getPrivacyKey("showActivityTabs", principalId),
-      String(val),
-    );
+    if (principal) {
+      const newSettings = {
+        ...(privacySettings ?? DEFAULT_PRIVACY_SETTINGS),
+        showClaims: val,
+        showEvidence: val,
+        showComments: val,
+      };
+      updateProfile.mutate({
+        principal,
+        username: username ?? "",
+        bio: "",
+        avatarUrl: "",
+        privacySettings: newSettings,
+      });
+    }
   }
 
   function handleDeleteAccount() {
-    // Clear all rebunked_* keys containing this principalId
+    // Clear local session data
     const keysToRemove: string[] = [];
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
-      if (key && (key.includes(principalId) || key.startsWith("rebunked_"))) {
+      if (key?.startsWith("rebunked_") || key?.startsWith("claim_verifier_")) {
         keysToRemove.push(key);
       }
     }
@@ -93,6 +107,7 @@ export function SettingsPage({
       localStorage.removeItem(key);
     }
     logout();
+    toast.success("Account data cleared");
   }
 
   const formattedJoinDate = joinDate

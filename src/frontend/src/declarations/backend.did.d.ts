@@ -13,6 +13,7 @@ import type { Principal } from '@icp-sdk/core/principal';
 export interface Claim {
   'id' : bigint,
   'title' : string,
+  'authorUsername' : string,
   'imageUrls' : Array<string>,
   'urls' : Array<string>,
   'description' : string,
@@ -23,6 +24,7 @@ export interface Claim {
 }
 export interface Evidence {
   'id' : bigint,
+  'authorUsername' : string,
   'imageUrls' : Array<string>,
   'text' : string,
   'urls' : Array<string>,
@@ -30,6 +32,14 @@ export interface Evidence {
   'timestamp' : bigint,
   'sessionId' : string,
   'evidenceType' : string,
+}
+export interface PrivacySettings {
+  'showVotes' : boolean,
+  'showClaims' : boolean,
+  'showReputation' : boolean,
+  'showSources' : boolean,
+  'showEvidence' : boolean,
+  'showComments' : boolean,
 }
 export interface Reply {
   'id' : bigint,
@@ -40,6 +50,11 @@ export interface Reply {
   'sessionId' : string,
   'evidenceId' : bigint,
 }
+export interface ReputationEvent {
+  'action' : string,
+  'timestamp' : bigint,
+  'points' : bigint,
+}
 export interface SourceComment {
   'id' : bigint,
   'authorUsername' : string,
@@ -49,6 +64,18 @@ export interface SourceComment {
   'timestamp' : bigint,
   'sessionId' : string,
 }
+export interface UserProfile {
+  'bio' : string,
+  'privacySettings' : PrivacySettings,
+  'username' : string,
+  'joinDate' : bigint,
+  'avatarUrl' : string,
+  'usernameLastChanged' : bigint,
+  'lastActive' : bigint,
+}
+export type UserRole = { 'admin' : null } |
+  { 'user' : null } |
+  { 'guest' : null };
 export interface _CaffeineStorageCreateCertificateResult {
   'method' : string,
   'blob_hash' : string,
@@ -76,11 +103,13 @@ export interface _SERVICE {
     _CaffeineStorageRefillResult
   >,
   '_caffeineStorageUpdateGatewayPrincipals' : ActorMethod<[], undefined>,
+  '_initializeAccessControlWithSecret' : ActorMethod<[string], undefined>,
   'addReply' : ActorMethod<
     [bigint, bigint, string, string, string],
     { 'ok' : null } |
       { 'err' : string }
   >,
+  'addReputationEvent' : ActorMethod<[Principal, string, bigint], undefined>,
   'addSourceComment' : ActorMethod<
     [bigint, bigint, string, string, string],
     { 'ok' : null } |
@@ -121,13 +150,30 @@ export interface _SERVICE {
     { 'ok' : null } |
       { 'err' : string }
   >,
+  'assignCallerUserRole' : ActorMethod<[Principal, UserRole], undefined>,
   'createClaim' : ActorMethod<
-    [string, string, string, string, Array<string>, Array<string>, string],
+    [
+      string,
+      string,
+      string,
+      string,
+      string,
+      Array<string>,
+      Array<string>,
+      string,
+    ],
+    { 'ok' : null } |
+      { 'err' : string }
+  >,
+  'createOrUpdateProfile' : ActorMethod<
+    [Principal, string, string, string, PrivacySettings],
     { 'ok' : null } |
       { 'err' : string }
   >,
   'generateSessionId' : ActorMethod<[], string>,
   'getAllClaims' : ActorMethod<[], Array<Claim>>,
+  'getCallerUserProfile' : ActorMethod<[], [] | [UserProfile]>,
+  'getCallerUserRole' : ActorMethod<[], UserRole>,
   'getClaimById' : ActorMethod<[bigint], Claim>,
   'getClaimsByCategory' : ActorMethod<[string], Array<Claim>>,
   'getEnhancedVoteTally' : ActorMethod<
@@ -149,11 +195,14 @@ export interface _SERVICE {
   'getHiddenClaims' : ActorMethod<[string], Array<Claim>>,
   'getHiddenEvidence' : ActorMethod<[string], Array<Evidence>>,
   'getHiddenReplies' : ActorMethod<[string], Array<Reply>>,
+  'getProfile' : ActorMethod<[Principal], [] | [UserProfile]>,
+  'getProfileByUsername' : ActorMethod<[string], [] | [UserProfile]>,
   'getReplies' : ActorMethod<[bigint], Array<Reply>>,
   'getReplyLikeCount' : ActorMethod<[bigint], bigint>,
   'getReplyLikeCounts' : ActorMethod<[bigint], Array<[bigint, bigint]>>,
   'getReplyVoteTally' : ActorMethod<[bigint], { 'netScore' : bigint }>,
   'getReportCount' : ActorMethod<[bigint, string], bigint>,
+  'getReputationEvents' : ActorMethod<[Principal], Array<ReputationEvent>>,
   'getSessionLikeForReply' : ActorMethod<[bigint, string], boolean>,
   'getSessionLikeForSourceComment' : ActorMethod<[bigint, string], boolean>,
   'getSessionVoteForClaim' : ActorMethod<[bigint, string], [] | [string]>,
@@ -190,10 +239,13 @@ export interface _SERVICE {
       }
     >
   >,
+  'getUserProfile' : ActorMethod<[Principal], [] | [UserProfile]>,
   'getVoteTally' : ActorMethod<
     [bigint],
     { 'trueCount' : bigint, 'falseCount' : bigint, 'unverifiedCount' : bigint }
   >,
+  'isCallerAdmin' : ActorMethod<[], boolean>,
+  'isUsernameAvailable' : ActorMethod<[string], boolean>,
   'likeReply' : ActorMethod<[bigint, string], undefined>,
   'likeSourceComment' : ActorMethod<[bigint, string], undefined>,
   'reportContent' : ActorMethod<
@@ -226,8 +278,9 @@ export interface _SERVICE {
     { 'ok' : null } |
       { 'err' : string }
   >,
+  'saveCallerUserProfile' : ActorMethod<[UserProfile], undefined>,
   'submitEvidence' : ActorMethod<
-    [bigint, string, string, Array<string>, Array<string>, string],
+    [bigint, string, string, string, Array<string>, Array<string>, string],
     { 'ok' : null } |
       { 'err' : string }
   >,
@@ -237,6 +290,7 @@ export interface _SERVICE {
     { 'ok' : bigint } |
       { 'err' : string }
   >,
+  'updateLastActive' : ActorMethod<[Principal], undefined>,
   'voteEvidence' : ActorMethod<[bigint, string, string], undefined>,
   'voteOnSource' : ActorMethod<
     [bigint, string, string],

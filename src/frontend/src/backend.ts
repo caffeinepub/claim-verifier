@@ -89,9 +89,18 @@ export class ExternalBlob {
         return this;
     }
 }
+export interface PrivacySettings {
+    showVotes: boolean;
+    showClaims: boolean;
+    showReputation: boolean;
+    showSources: boolean;
+    showEvidence: boolean;
+    showComments: boolean;
+}
 export interface Claim {
     id: bigint;
     title: string;
+    authorUsername: string;
     imageUrls: Array<string>;
     urls: Array<string>;
     description: string;
@@ -123,6 +132,7 @@ export interface SourceComment {
 }
 export interface Evidence {
     id: bigint;
+    authorUsername: string;
     imageUrls: Array<string>;
     text: string;
     urls: Array<string>;
@@ -131,13 +141,32 @@ export interface Evidence {
     sessionId: string;
     evidenceType: string;
 }
+export interface ReputationEvent {
+    action: string;
+    timestamp: bigint;
+    points: bigint;
+}
 export interface _CaffeineStorageCreateCertificateResult {
     method: string;
     blob_hash: string;
 }
+export interface UserProfile {
+    bio: string;
+    privacySettings: PrivacySettings;
+    username: string;
+    joinDate: bigint;
+    avatarUrl: string;
+    usernameLastChanged: bigint;
+    lastActive: bigint;
+}
 export interface _CaffeineStorageRefillResult {
     success?: boolean;
     topped_up_amount?: bigint;
+}
+export enum UserRole {
+    admin = "admin",
+    user = "user",
+    guest = "guest"
 }
 export interface backendInterface {
     _caffeineStorageBlobIsLive(hash: Uint8Array): Promise<boolean>;
@@ -146,6 +175,7 @@ export interface backendInterface {
     _caffeineStorageCreateCertificate(blobHash: string): Promise<_CaffeineStorageCreateCertificateResult>;
     _caffeineStorageRefillCashier(refillInformation: _CaffeineStorageRefillInformation | null): Promise<_CaffeineStorageRefillResult>;
     _caffeineStorageUpdateGatewayPrincipals(): Promise<void>;
+    _initializeAccessControlWithSecret(userSecret: string): Promise<void>;
     addReply(evidenceId: bigint, parentReplyId: bigint, text: string, authorUsername: string, sessionId: string): Promise<{
         __kind__: "ok";
         ok: null;
@@ -153,6 +183,7 @@ export interface backendInterface {
         __kind__: "err";
         err: string;
     }>;
+    addReputationEvent(principal: Principal, action: string, points: bigint): Promise<void>;
     addSourceComment(sourceId: bigint, parentCommentId: bigint, text: string, authorUsername: string, sessionId: string): Promise<{
         __kind__: "ok";
         ok: null;
@@ -209,7 +240,15 @@ export interface backendInterface {
         __kind__: "err";
         err: string;
     }>;
-    createClaim(title: string, description: string, category: string, sessionId: string, imageUrls: Array<string>, urls: Array<string>, ogThumbnailUrl: string): Promise<{
+    assignCallerUserRole(user: Principal, role: UserRole): Promise<void>;
+    createClaim(title: string, description: string, category: string, sessionId: string, authorUsername: string, imageUrls: Array<string>, urls: Array<string>, ogThumbnailUrl: string): Promise<{
+        __kind__: "ok";
+        ok: null;
+    } | {
+        __kind__: "err";
+        err: string;
+    }>;
+    createOrUpdateProfile(principal: Principal, username: string, bio: string, avatarUrl: string, privacySettings: PrivacySettings): Promise<{
         __kind__: "ok";
         ok: null;
     } | {
@@ -218,6 +257,8 @@ export interface backendInterface {
     }>;
     generateSessionId(): Promise<string>;
     getAllClaims(): Promise<Array<Claim>>;
+    getCallerUserProfile(): Promise<UserProfile | null>;
+    getCallerUserRole(): Promise<UserRole>;
     getClaimById(id: bigint): Promise<Claim>;
     getClaimsByCategory(category: string): Promise<Array<Claim>>;
     getEnhancedVoteTally(claimId: bigint): Promise<{
@@ -238,6 +279,9 @@ export interface backendInterface {
     getHiddenClaims(password: string): Promise<Array<Claim>>;
     getHiddenEvidence(password: string): Promise<Array<Evidence>>;
     getHiddenReplies(password: string): Promise<Array<Reply>>;
+    getProfile(principal: Principal): Promise<UserProfile | null>;
+    getProfileByUsername(username: string): Promise<UserProfile | null>;
+    getStatsByUsername(username: string): Promise<{ claimCount: bigint; evidenceCount: bigint; commentCount: bigint; replyCount: bigint; activityPoints: bigint; trustScore: bigint }>;
     getReplies(evidenceId: bigint): Promise<Array<Reply>>;
     getReplyLikeCount(replyId: bigint): Promise<bigint>;
     getReplyLikeCounts(evidenceId: bigint): Promise<Array<[bigint, bigint]>>;
@@ -245,6 +289,7 @@ export interface backendInterface {
         netScore: bigint;
     }>;
     getReportCount(targetId: bigint, targetType: string): Promise<bigint>;
+    getReputationEvents(principal: Principal): Promise<Array<ReputationEvent>>;
     getSessionLikeForReply(replyId: bigint, sessionId: string): Promise<boolean>;
     getSessionLikeForSourceComment(commentId: bigint, sessionId: string): Promise<boolean>;
     getSessionVoteForClaim(claimId: bigint, sessionId: string): Promise<string | null>;
@@ -273,11 +318,14 @@ export interface backendInterface {
         downvotes: bigint;
         suggestedByUsername: string;
     }>>;
+    getUserProfile(user: Principal): Promise<UserProfile | null>;
     getVoteTally(claimId: bigint): Promise<{
         trueCount: bigint;
         falseCount: bigint;
         unverifiedCount: bigint;
     }>;
+    isCallerAdmin(): Promise<boolean>;
+    isUsernameAvailable(username: string): Promise<boolean>;
     likeReply(replyId: bigint, sessionId: string): Promise<void>;
     likeSourceComment(commentId: bigint, sessionId: string): Promise<void>;
     reportContent(targetId: bigint, targetType: string, sessionId: string): Promise<{
@@ -322,7 +370,8 @@ export interface backendInterface {
         __kind__: "err";
         err: string;
     }>;
-    submitEvidence(claimId: bigint, sessionId: string, text: string, imageUrls: Array<string>, urls: Array<string>, evidenceType: string): Promise<{
+    saveCallerUserProfile(profile: UserProfile): Promise<void>;
+    submitEvidence(claimId: bigint, sessionId: string, authorUsername: string, text: string, imageUrls: Array<string>, urls: Array<string>, evidenceType: string): Promise<{
         __kind__: "ok";
         ok: null;
     } | {
@@ -337,6 +386,7 @@ export interface backendInterface {
         __kind__: "err";
         err: string;
     }>;
+    updateLastActive(principal: Principal): Promise<void>;
     voteEvidence(evidenceId: bigint, sessionId: string, direction: string): Promise<void>;
     voteOnSource(sourceId: bigint, sessionId: string, direction: string): Promise<{
         __kind__: "ok";
@@ -347,7 +397,7 @@ export interface backendInterface {
     }>;
     voteReply(replyId: bigint, sessionId: string, direction: string): Promise<void>;
 }
-import type { _CaffeineStorageRefillInformation as __CaffeineStorageRefillInformation, _CaffeineStorageRefillResult as __CaffeineStorageRefillResult } from "./declarations/backend.did.d.ts";
+import type { UserProfile as _UserProfile, UserRole as _UserRole, _CaffeineStorageRefillInformation as __CaffeineStorageRefillInformation, _CaffeineStorageRefillResult as __CaffeineStorageRefillResult } from "./declarations/backend.did.d.ts";
 export class Backend implements backendInterface {
     constructor(private actor: ActorSubclass<_SERVICE>, private _uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, private _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, private processError?: (error: unknown) => never){}
     async _caffeineStorageBlobIsLive(arg0: Uint8Array): Promise<boolean> {
@@ -434,6 +484,20 @@ export class Backend implements backendInterface {
             return result;
         }
     }
+    async _initializeAccessControlWithSecret(arg0: string): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor._initializeAccessControlWithSecret(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor._initializeAccessControlWithSecret(arg0);
+            return result;
+        }
+    }
     async addReply(arg0: bigint, arg1: bigint, arg2: string, arg3: string, arg4: string): Promise<{
         __kind__: "ok";
         ok: null;
@@ -452,6 +516,20 @@ export class Backend implements backendInterface {
         } else {
             const result = await this.actor.addReply(arg0, arg1, arg2, arg3, arg4);
             return from_candid_variant_n8(this._uploadFile, this._downloadFile, result);
+        }
+    }
+    async addReputationEvent(arg0: Principal, arg1: string, arg2: bigint): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.addReputationEvent(arg0, arg1, arg2);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.addReputationEvent(arg0, arg1, arg2);
+            return result;
         }
     }
     async addSourceComment(arg0: bigint, arg1: bigint, arg2: string, arg3: string, arg4: string): Promise<{
@@ -614,7 +692,21 @@ export class Backend implements backendInterface {
             return from_candid_variant_n8(this._uploadFile, this._downloadFile, result);
         }
     }
-    async createClaim(arg0: string, arg1: string, arg2: string, arg3: string, arg4: Array<string>, arg5: Array<string>, arg6: string): Promise<{
+    async assignCallerUserRole(arg0: Principal, arg1: UserRole): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.assignCallerUserRole(arg0, to_candid_UserRole_n10(this._uploadFile, this._downloadFile, arg1));
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.assignCallerUserRole(arg0, to_candid_UserRole_n10(this._uploadFile, this._downloadFile, arg1));
+            return result;
+        }
+    }
+    async createClaim(arg0: string, arg1: string, arg2: string, arg3: string, arg4: string, arg5: Array<string>, arg6: Array<string>, arg7: string): Promise<{
         __kind__: "ok";
         ok: null;
     } | {
@@ -623,14 +715,34 @@ export class Backend implements backendInterface {
     }> {
         if (this.processError) {
             try {
-                const result = await this.actor.createClaim(arg0, arg1, arg2, arg3, arg4, arg5, arg6);
+                const result = await this.actor.createClaim(arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7);
                 return from_candid_variant_n8(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.createClaim(arg0, arg1, arg2, arg3, arg4, arg5, arg6);
+            const result = await this.actor.createClaim(arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7);
+            return from_candid_variant_n8(this._uploadFile, this._downloadFile, result);
+        }
+    }
+    async createOrUpdateProfile(arg0: Principal, arg1: string, arg2: string, arg3: string, arg4: PrivacySettings): Promise<{
+        __kind__: "ok";
+        ok: null;
+    } | {
+        __kind__: "err";
+        err: string;
+    }> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.createOrUpdateProfile(arg0, arg1, arg2, arg3, arg4);
+                return from_candid_variant_n8(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.createOrUpdateProfile(arg0, arg1, arg2, arg3, arg4);
             return from_candid_variant_n8(this._uploadFile, this._downloadFile, result);
         }
     }
@@ -660,6 +772,34 @@ export class Backend implements backendInterface {
         } else {
             const result = await this.actor.getAllClaims();
             return result;
+        }
+    }
+    async getCallerUserProfile(): Promise<UserProfile | null> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getCallerUserProfile();
+                return from_candid_opt_n12(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getCallerUserProfile();
+            return from_candid_opt_n12(this._uploadFile, this._downloadFile, result);
+        }
+    }
+    async getCallerUserRole(): Promise<UserRole> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getCallerUserRole();
+                return from_candid_UserRole_n13(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getCallerUserRole();
+            return from_candid_UserRole_n13(this._uploadFile, this._downloadFile, result);
         }
     }
     async getClaimById(arg0: bigint): Promise<Claim> {
@@ -786,6 +926,48 @@ export class Backend implements backendInterface {
             return result;
         }
     }
+    async getProfile(arg0: Principal): Promise<UserProfile | null> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getProfile(arg0);
+                return from_candid_opt_n12(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getProfile(arg0);
+            return from_candid_opt_n12(this._uploadFile, this._downloadFile, result);
+        }
+    }
+    async getProfileByUsername(arg0: string): Promise<UserProfile | null> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getProfileByUsername(arg0);
+                return from_candid_opt_n12(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getProfileByUsername(arg0);
+            return from_candid_opt_n12(this._uploadFile, this._downloadFile, result);
+        }
+    }
+    async getStatsByUsername(arg0: string): Promise<{ claimCount: bigint; evidenceCount: bigint; commentCount: bigint; replyCount: bigint; activityPoints: bigint; trustScore: bigint }> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getStatsByUsername(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getStatsByUsername(arg0);
+            return result;
+        }
+    }
     async getReplies(arg0: bigint): Promise<Array<Reply>> {
         if (this.processError) {
             try {
@@ -858,6 +1040,20 @@ export class Backend implements backendInterface {
             return result;
         }
     }
+    async getReputationEvents(arg0: Principal): Promise<Array<ReputationEvent>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getReputationEvents(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getReputationEvents(arg0);
+            return result;
+        }
+    }
     async getSessionLikeForReply(arg0: bigint, arg1: string): Promise<boolean> {
         if (this.processError) {
             try {
@@ -890,56 +1086,56 @@ export class Backend implements backendInterface {
         if (this.processError) {
             try {
                 const result = await this.actor.getSessionVoteForClaim(arg0, arg1);
-                return from_candid_opt_n10(this._uploadFile, this._downloadFile, result);
+                return from_candid_opt_n15(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
             const result = await this.actor.getSessionVoteForClaim(arg0, arg1);
-            return from_candid_opt_n10(this._uploadFile, this._downloadFile, result);
+            return from_candid_opt_n15(this._uploadFile, this._downloadFile, result);
         }
     }
     async getSessionVoteForEvidence(arg0: bigint, arg1: string): Promise<string | null> {
         if (this.processError) {
             try {
                 const result = await this.actor.getSessionVoteForEvidence(arg0, arg1);
-                return from_candid_opt_n10(this._uploadFile, this._downloadFile, result);
+                return from_candid_opt_n15(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
             const result = await this.actor.getSessionVoteForEvidence(arg0, arg1);
-            return from_candid_opt_n10(this._uploadFile, this._downloadFile, result);
+            return from_candid_opt_n15(this._uploadFile, this._downloadFile, result);
         }
     }
     async getSessionVoteForReply(arg0: bigint, arg1: string): Promise<string | null> {
         if (this.processError) {
             try {
                 const result = await this.actor.getSessionVoteForReply(arg0, arg1);
-                return from_candid_opt_n10(this._uploadFile, this._downloadFile, result);
+                return from_candid_opt_n15(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
             const result = await this.actor.getSessionVoteForReply(arg0, arg1);
-            return from_candid_opt_n10(this._uploadFile, this._downloadFile, result);
+            return from_candid_opt_n15(this._uploadFile, this._downloadFile, result);
         }
     }
     async getSessionVoteForSource(arg0: bigint, arg1: string): Promise<string | null> {
         if (this.processError) {
             try {
                 const result = await this.actor.getSessionVoteForSource(arg0, arg1);
-                return from_candid_opt_n10(this._uploadFile, this._downloadFile, result);
+                return from_candid_opt_n15(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
             const result = await this.actor.getSessionVoteForSource(arg0, arg1);
-            return from_candid_opt_n10(this._uploadFile, this._downloadFile, result);
+            return from_candid_opt_n15(this._uploadFile, this._downloadFile, result);
         }
     }
     async getSourceCommentLikeCounts(arg0: bigint): Promise<Array<[bigint, bigint]>> {
@@ -1016,6 +1212,20 @@ export class Backend implements backendInterface {
             return result;
         }
     }
+    async getUserProfile(arg0: Principal): Promise<UserProfile | null> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getUserProfile(arg0);
+                return from_candid_opt_n12(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getUserProfile(arg0);
+            return from_candid_opt_n12(this._uploadFile, this._downloadFile, result);
+        }
+    }
     async getVoteTally(arg0: bigint): Promise<{
         trueCount: bigint;
         falseCount: bigint;
@@ -1031,6 +1241,34 @@ export class Backend implements backendInterface {
             }
         } else {
             const result = await this.actor.getVoteTally(arg0);
+            return result;
+        }
+    }
+    async isCallerAdmin(): Promise<boolean> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.isCallerAdmin();
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.isCallerAdmin();
+            return result;
+        }
+    }
+    async isUsernameAvailable(arg0: string): Promise<boolean> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.isUsernameAvailable(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.isUsernameAvailable(arg0);
             return result;
         }
     }
@@ -1182,7 +1420,21 @@ export class Backend implements backendInterface {
             return from_candid_variant_n8(this._uploadFile, this._downloadFile, result);
         }
     }
-    async submitEvidence(arg0: bigint, arg1: string, arg2: string, arg3: Array<string>, arg4: Array<string>, arg5: string): Promise<{
+    async saveCallerUserProfile(arg0: UserProfile): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.saveCallerUserProfile(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.saveCallerUserProfile(arg0);
+            return result;
+        }
+    }
+    async submitEvidence(arg0: bigint, arg1: string, arg2: string, arg3: string, arg4: Array<string>, arg5: Array<string>, arg6: string): Promise<{
         __kind__: "ok";
         ok: null;
     } | {
@@ -1191,14 +1443,14 @@ export class Backend implements backendInterface {
     }> {
         if (this.processError) {
             try {
-                const result = await this.actor.submitEvidence(arg0, arg1, arg2, arg3, arg4, arg5);
+                const result = await this.actor.submitEvidence(arg0, arg1, arg2, arg3, arg4, arg5, arg6);
                 return from_candid_variant_n8(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.submitEvidence(arg0, arg1, arg2, arg3, arg4, arg5);
+            const result = await this.actor.submitEvidence(arg0, arg1, arg2, arg3, arg4, arg5, arg6);
             return from_candid_variant_n8(this._uploadFile, this._downloadFile, result);
         }
     }
@@ -1226,14 +1478,28 @@ export class Backend implements backendInterface {
         if (this.processError) {
             try {
                 const result = await this.actor.suggestTrustedSource(arg0, arg1, arg2, arg3);
-                return from_candid_variant_n11(this._uploadFile, this._downloadFile, result);
+                return from_candid_variant_n16(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
             const result = await this.actor.suggestTrustedSource(arg0, arg1, arg2, arg3);
-            return from_candid_variant_n11(this._uploadFile, this._downloadFile, result);
+            return from_candid_variant_n16(this._uploadFile, this._downloadFile, result);
+        }
+    }
+    async updateLastActive(arg0: Principal): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.updateLastActive(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.updateLastActive(arg0);
+            return result;
         }
     }
     async voteEvidence(arg0: bigint, arg1: string, arg2: string): Promise<void> {
@@ -1285,10 +1551,16 @@ export class Backend implements backendInterface {
         }
     }
 }
+function from_candid_UserRole_n13(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _UserRole): UserRole {
+    return from_candid_variant_n14(_uploadFile, _downloadFile, value);
+}
 function from_candid__CaffeineStorageRefillResult_n4(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: __CaffeineStorageRefillResult): _CaffeineStorageRefillResult {
     return from_candid_record_n5(_uploadFile, _downloadFile, value);
 }
-function from_candid_opt_n10(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [string]): string | null {
+function from_candid_opt_n12(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [_UserProfile]): UserProfile | null {
+    return value.length === 0 ? null : value[0];
+}
+function from_candid_opt_n15(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [string]): string | null {
     return value.length === 0 ? null : value[0];
 }
 function from_candid_opt_n6(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [boolean]): boolean | null {
@@ -1309,7 +1581,16 @@ function from_candid_record_n5(_uploadFile: (file: ExternalBlob) => Promise<Uint
         topped_up_amount: record_opt_to_undefined(from_candid_opt_n7(_uploadFile, _downloadFile, value.topped_up_amount))
     };
 }
-function from_candid_variant_n11(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
+function from_candid_variant_n14(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
+    admin: null;
+} | {
+    user: null;
+} | {
+    guest: null;
+}): UserRole {
+    return "admin" in value ? UserRole.admin : "user" in value ? UserRole.user : "guest" in value ? UserRole.guest : value;
+}
+function from_candid_variant_n16(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
     ok: bigint;
 } | {
     err: string;
@@ -1366,6 +1647,9 @@ function from_candid_variant_n9(_uploadFile: (file: ExternalBlob) => Promise<Uin
         err: value.err
     } : value;
 }
+function to_candid_UserRole_n10(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: UserRole): _UserRole {
+    return to_candid_variant_n11(_uploadFile, _downloadFile, value);
+}
 function to_candid__CaffeineStorageRefillInformation_n2(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _CaffeineStorageRefillInformation): __CaffeineStorageRefillInformation {
     return to_candid_record_n3(_uploadFile, _downloadFile, value);
 }
@@ -1380,6 +1664,21 @@ function to_candid_record_n3(_uploadFile: (file: ExternalBlob) => Promise<Uint8A
     return {
         proposed_top_up_amount: value.proposed_top_up_amount ? candid_some(value.proposed_top_up_amount) : candid_none()
     };
+}
+function to_candid_variant_n11(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: UserRole): {
+    admin: null;
+} | {
+    user: null;
+} | {
+    guest: null;
+} {
+    return value == UserRole.admin ? {
+        admin: null
+    } : value == UserRole.user ? {
+        user: null
+    } : value == UserRole.guest ? {
+        guest: null
+    } : value;
 }
 export interface CreateActorOptions {
     agent?: Agent;

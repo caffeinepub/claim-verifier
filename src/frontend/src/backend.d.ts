@@ -7,9 +7,18 @@ export interface None {
     __kind__: "None";
 }
 export type Option<T> = Some<T> | None;
+export interface PrivacySettings {
+    showVotes: boolean;
+    showClaims: boolean;
+    showReputation: boolean;
+    showSources: boolean;
+    showEvidence: boolean;
+    showComments: boolean;
+}
 export interface Claim {
     id: bigint;
     title: string;
+    authorUsername: string;
     imageUrls: Array<string>;
     urls: Array<string>;
     description: string;
@@ -38,6 +47,7 @@ export interface SourceComment {
 }
 export interface Evidence {
     id: bigint;
+    authorUsername: string;
     imageUrls: Array<string>;
     text: string;
     urls: Array<string>;
@@ -45,6 +55,25 @@ export interface Evidence {
     timestamp: bigint;
     sessionId: string;
     evidenceType: string;
+}
+export interface ReputationEvent {
+    action: string;
+    timestamp: bigint;
+    points: bigint;
+}
+export interface UserProfile {
+    bio: string;
+    privacySettings: PrivacySettings;
+    username: string;
+    joinDate: bigint;
+    avatarUrl: string;
+    usernameLastChanged: bigint;
+    lastActive: bigint;
+}
+export enum UserRole {
+    admin = "admin",
+    user = "user",
+    guest = "guest"
 }
 export interface backendInterface {
     addReply(evidenceId: bigint, parentReplyId: bigint, text: string, authorUsername: string, sessionId: string): Promise<{
@@ -54,6 +83,7 @@ export interface backendInterface {
         __kind__: "err";
         err: string;
     }>;
+    addReputationEvent(principal: Principal, action: string, points: bigint): Promise<void>;
     addSourceComment(sourceId: bigint, parentCommentId: bigint, text: string, authorUsername: string, sessionId: string): Promise<{
         __kind__: "ok";
         ok: null;
@@ -110,7 +140,15 @@ export interface backendInterface {
         __kind__: "err";
         err: string;
     }>;
-    createClaim(title: string, description: string, category: string, sessionId: string, imageUrls: Array<string>, urls: Array<string>, ogThumbnailUrl: string): Promise<{
+    assignCallerUserRole(user: Principal, role: UserRole): Promise<void>;
+    createClaim(title: string, description: string, category: string, sessionId: string, authorUsername: string, imageUrls: Array<string>, urls: Array<string>, ogThumbnailUrl: string): Promise<{
+        __kind__: "ok";
+        ok: null;
+    } | {
+        __kind__: "err";
+        err: string;
+    }>;
+    createOrUpdateProfile(principal: Principal, username: string, bio: string, avatarUrl: string, privacySettings: PrivacySettings): Promise<{
         __kind__: "ok";
         ok: null;
     } | {
@@ -119,6 +157,8 @@ export interface backendInterface {
     }>;
     generateSessionId(): Promise<string>;
     getAllClaims(): Promise<Array<Claim>>;
+    getCallerUserProfile(): Promise<UserProfile | null>;
+    getCallerUserRole(): Promise<UserRole>;
     getClaimById(id: bigint): Promise<Claim>;
     getClaimsByCategory(category: string): Promise<Array<Claim>>;
     getEnhancedVoteTally(claimId: bigint): Promise<{
@@ -139,6 +179,9 @@ export interface backendInterface {
     getHiddenClaims(password: string): Promise<Array<Claim>>;
     getHiddenEvidence(password: string): Promise<Array<Evidence>>;
     getHiddenReplies(password: string): Promise<Array<Reply>>;
+    getProfile(principal: Principal): Promise<UserProfile | null>;
+    getProfileByUsername(username: string): Promise<UserProfile | null>;
+    getStatsByUsername(username: string): Promise<{ claimCount: bigint; evidenceCount: bigint; commentCount: bigint; replyCount: bigint; activityPoints: bigint; trustScore: bigint }>;
     getReplies(evidenceId: bigint): Promise<Array<Reply>>;
     getReplyLikeCount(replyId: bigint): Promise<bigint>;
     getReplyLikeCounts(evidenceId: bigint): Promise<Array<[bigint, bigint]>>;
@@ -146,6 +189,7 @@ export interface backendInterface {
         netScore: bigint;
     }>;
     getReportCount(targetId: bigint, targetType: string): Promise<bigint>;
+    getReputationEvents(principal: Principal): Promise<Array<ReputationEvent>>;
     getSessionLikeForReply(replyId: bigint, sessionId: string): Promise<boolean>;
     getSessionLikeForSourceComment(commentId: bigint, sessionId: string): Promise<boolean>;
     getSessionVoteForClaim(claimId: bigint, sessionId: string): Promise<string | null>;
@@ -174,11 +218,14 @@ export interface backendInterface {
         downvotes: bigint;
         suggestedByUsername: string;
     }>>;
+    getUserProfile(user: Principal): Promise<UserProfile | null>;
     getVoteTally(claimId: bigint): Promise<{
         trueCount: bigint;
         falseCount: bigint;
         unverifiedCount: bigint;
     }>;
+    isCallerAdmin(): Promise<boolean>;
+    isUsernameAvailable(username: string): Promise<boolean>;
     likeReply(replyId: bigint, sessionId: string): Promise<void>;
     likeSourceComment(commentId: bigint, sessionId: string): Promise<void>;
     reportContent(targetId: bigint, targetType: string, sessionId: string): Promise<{
@@ -223,7 +270,8 @@ export interface backendInterface {
         __kind__: "err";
         err: string;
     }>;
-    submitEvidence(claimId: bigint, sessionId: string, text: string, imageUrls: Array<string>, urls: Array<string>, evidenceType: string): Promise<{
+    saveCallerUserProfile(profile: UserProfile): Promise<void>;
+    submitEvidence(claimId: bigint, sessionId: string, authorUsername: string, text: string, imageUrls: Array<string>, urls: Array<string>, evidenceType: string): Promise<{
         __kind__: "ok";
         ok: null;
     } | {
@@ -238,6 +286,7 @@ export interface backendInterface {
         __kind__: "err";
         err: string;
     }>;
+    updateLastActive(principal: Principal): Promise<void>;
     voteEvidence(evidenceId: bigint, sessionId: string, direction: string): Promise<void>;
     voteOnSource(sourceId: bigint, sessionId: string, direction: string): Promise<{
         __kind__: "ok";

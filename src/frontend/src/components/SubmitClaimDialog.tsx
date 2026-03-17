@@ -19,12 +19,15 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useAccountPermissions } from "@/hooks/useAccountPermissions";
+import { useInternetIdentity } from "@/hooks/useInternetIdentity";
 import { useCreateClaim } from "@/hooks/useQueries";
+import { useAddReputationEvent } from "@/hooks/useQueries";
+import { getOrInitUsername } from "@/hooks/useQueries";
 import { useSessionGate } from "@/hooks/useSessionGate";
 import {
-  appendRepEvent,
   appendUserClaim,
   getActivePrincipalId,
+  useVerifiedAccount,
 } from "@/hooks/useVerifiedAccount";
 import { Clock, Loader2, LogIn, Plus } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -73,6 +76,9 @@ export function SubmitClaimDialog({
   const createClaim = useCreateClaim();
   const { checkAction } = useSessionGate();
   const { canUploadImages } = useAccountPermissions();
+  const addRepEvent = useAddReputationEvent();
+  const { identity } = useInternetIdentity();
+  const { username: verifiedUsername } = useVerifiedAccount();
 
   // Countdown timer
   useEffect(() => {
@@ -111,6 +117,7 @@ export function SubmitClaimDialog({
         description: description.trim(),
         category,
         sessionId,
+        authorUsername: verifiedUsername ?? getOrInitUsername(),
         imageUrls: claimImageUrls,
         urls: claimUrls.filter((u) => u.trim()),
       });
@@ -123,12 +130,13 @@ export function SubmitClaimDialog({
           category,
           timestamp: ts,
         });
-        appendRepEvent(pid, {
-          id: `claim-${Date.now()}`,
-          label: "Claim submitted",
-          pointChange: 1,
-          trustChange: 0,
-          timestamp: ts,
+      }
+      const principal = identity?.getPrincipal();
+      if (principal) {
+        addRepEvent.mutate({
+          principal,
+          action: "claim_submitted",
+          points: 1n,
         });
       }
       toast.success("Claim submitted for community review");

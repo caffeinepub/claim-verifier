@@ -24,9 +24,9 @@ import {
   useSessionLikeForReply,
   useUsername,
 } from "@/hooks/useQueries";
+import { useAddReputationEvent } from "@/hooks/useQueries";
 import { useSessionGate } from "@/hooks/useSessionGate";
 import {
-  appendRepEvent,
   appendUserComment,
   getActivePrincipalId,
   isTrustedContributorSession,
@@ -79,6 +79,8 @@ function ReplyForm({
   const [cooldownLeft, setCooldownLeft] = useState(0);
   const addReply = useAddReply();
   const { checkAction } = useSessionGate();
+  const addRepEvent = useAddReputationEvent();
+  const { principal: verifiedPrincipal } = useVerifiedAccount();
 
   useEffect(() => {
     if (cooldownLeft <= 0) return;
@@ -123,12 +125,12 @@ function ReplyForm({
           text: text.trim(),
           timestamp: ts,
         });
-        appendRepEvent(pid, {
-          id: `comment-${Date.now()}`,
-          label: "Comment posted",
-          pointChange: 1,
-          trustChange: 0,
-          timestamp: ts,
+      }
+      if (verifiedPrincipal) {
+        addRepEvent.mutate({
+          principal: verifiedPrincipal,
+          action: "reply_posted",
+          points: 1n,
         });
       }
       onSuccess?.();
@@ -303,15 +305,15 @@ function ReplyCard({
               avatarUrl={displayAvatarUrl}
               isVerified={isOwnReply ? !!verifiedUsername : false}
             />
-            <span className="text-xs font-semibold text-foreground font-mono flex items-center gap-1">
+            <span className="text-xs font-semibold text-foreground font-body flex items-center gap-1">
               {displayAuthor}
               {isTrustedContributorSession(reply.sessionId) && (
                 <VerifiedBadge />
               )}
             </span>
           </UserProfileCard>
+          <span className="text-xs text-muted-foreground font-body">·</span>
           <span className="text-xs text-muted-foreground font-body">
-            {" · "}
             {formatRelativeTime(reply.timestamp)}
           </span>
         </div>

@@ -371,12 +371,12 @@ function CommentCard({
               avatarUrl={displayAvatarUrl}
               isVerified={isOwnComment ? !!verifiedUsername : false}
             />
-            <span className="text-xs font-semibold text-foreground font-mono">
+            <span className="text-xs font-semibold text-foreground font-body">
               {displayAuthor}
             </span>
           </UserProfileCard>
+          <span className="text-xs text-muted-foreground font-body">·</span>
           <span className="text-xs text-muted-foreground font-body">
-            {" · "}
             {formatRelativeTime(comment.timestamp)}
           </span>
         </div>

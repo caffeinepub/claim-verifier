@@ -17,14 +17,14 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
+  getOrInitUsername,
   useAllEvidenceTallies,
   useClaimById,
   useEnhancedVoteTally,
-  useEvidence,
+  useEvidenceForClaim,
   useSessionVote,
   useSubmitEvidence,
   useSubmitVote,
-  useUsername,
 } from "@/hooks/useQueries";
 import { cn } from "@/lib/utils";
 import { formatRelativeTime } from "@/utils/time";
@@ -81,7 +81,7 @@ function sortEvidence(
   }
 }
 import { UserAvatar } from "@/components/UserAvatar";
-import { UserProfileCard } from "@/components/UserProfileCard";
+import { AuthorDisplay, UserProfileCard } from "@/components/UserProfileCard";
 import { VerifiedBadge } from "@/components/VerifiedBadge";
 import { Input } from "@/components/ui/input";
 import {
@@ -91,9 +91,9 @@ import {
   useAccountPermissions,
 } from "@/hooks/useAccountPermissions";
 import { useReportContent } from "@/hooks/useQueries";
+import { useAddReputationEvent } from "@/hooks/useQueries";
 import { useSessionGate } from "@/hooks/useSessionGate";
 import {
-  appendRepEvent,
   appendUserEvidence,
   getActivePrincipalId,
   getVerifiedVoteForClaim,
@@ -327,7 +327,8 @@ export function ClaimDetail({
     refetch: refetchTally,
   } = useEnhancedVoteTally(claimId);
   const { data: sessionVote } = useSessionVote(claimId, sessionId);
-  const { data: evidence, isLoading: evidenceLoading } = useEvidence(claimId);
+  const { data: evidence, isLoading: evidenceLoading } =
+    useEvidenceForClaim(claimId);
 
   // Hot threshold: 10+ total votes as proxy for activity
   const claimTotalVotes = tally
@@ -335,12 +336,11 @@ export function ClaimDetail({
       Math.max(0, Number(tally.falseCount)) +
       Math.max(0, Number(tally.unverifiedCount))
     : 0;
-  const username = useUsername();
   const {
     isVerified,
     recordVerifiedVote,
     username: verifiedUsername,
-    avatarUrl,
+    principal: verifiedPrincipal,
   } = useVerifiedAccount();
   const { canUploadImages, canReport } = useAccountPermissions();
 
@@ -376,6 +376,7 @@ export function ClaimDetail({
     );
   }, [typeFilteredEvidence, evidenceSearch]);
   const submitVote = useSubmitVote();
+  const addRepEvent = useAddReputationEvent();
   const submitEvidence = useSubmitEvidence();
   const reportContent = useReportContent();
   const { checkAction, checkVoteAction } = useSessionGate();
@@ -425,15 +426,11 @@ export function ClaimDetail({
       if (isVerified && claim) {
         recordVerifiedVote(claimId.toString(), sessionId, verdict, claim.title);
       }
-      const votePid = getActivePrincipalId();
-      if (votePid) {
-        const ts = new Date().toISOString();
-        appendRepEvent(votePid, {
-          id: `vote-${Date.now()}`,
-          label: "Vote cast",
-          pointChange: 1,
-          trustChange: 0,
-          timestamp: ts,
+      if (verifiedPrincipal) {
+        addRepEvent.mutate({
+          principal: verifiedPrincipal,
+          action: "vote_cast",
+          points: 1n,
         });
       }
     } catch {
@@ -449,6 +446,7 @@ export function ClaimDetail({
       await submitEvidence.mutateAsync({
         claimId,
         sessionId,
+        authorUsername: verifiedUsername ?? getOrInitUsername(),
         text: evidenceText.trim(),
         imageUrls: evidenceImageUrls,
         urls: evidenceUrls.filter((u) => u.trim()),
@@ -465,12 +463,12 @@ export function ClaimDetail({
           evidenceType,
           timestamp: ts,
         });
-        appendRepEvent(evPid, {
-          id: `ev-${Date.now()}`,
-          label: "Evidence submitted",
-          pointChange: 1,
-          trustChange: 0,
-          timestamp: ts,
+      }
+      if (verifiedPrincipal) {
+        addRepEvent.mutate({
+          principal: verifiedPrincipal,
+          action: "evidence_submitted",
+          points: 1n,
         });
       }
       toast.success("Evidence submitted");
@@ -586,24 +584,7 @@ export function ClaimDetail({
               </span>
               <span className="text-muted-foreground text-xs">·</span>
               <span className="text-xs text-muted-foreground font-body flex items-center gap-1">
-                {claim.sessionId === sessionId && claim.sessionId !== "seed" ? (
-                  <UserProfileCard
-                    username={verifiedUsername ?? username}
-                    isVerified={!!verifiedUsername}
-                  >
-                    <UserAvatar
-                      username={verifiedUsername ?? username}
-                      avatarUrl={
-                        verifiedUsername ? (avatarUrl ?? undefined) : undefined
-                      }
-                      size="sm"
-                      isVerified={!!verifiedUsername}
-                    />
-                    {verifiedUsername ?? username}
-                  </UserProfileCard>
-                ) : (
-                  "Anonymous"
-                )}
+                <AuthorDisplay username={claim.authorUsername} />
               </span>
             </div>
             <div className="mb-4">
@@ -1089,24 +1070,13 @@ export function ClaimDetail({
                     >
                       {/* Line 1: username · timestamp [evidence type badge] */}
                       <div className="flex items-center gap-2 mb-1 flex-wrap">
-                        {item.sessionId === sessionId && (
-                          <UserAvatar
-                            username={verifiedUsername ?? username}
-                            size="sm"
-                            avatarUrl={avatarUrl ?? undefined}
-                            isVerified={!!verifiedUsername}
-                          />
+                        <AuthorDisplay username={item.authorUsername} />
+                        {item.authorUsername?.trim() && (
+                          <span className="text-xs text-muted-foreground font-body">
+                            ·
+                          </span>
                         )}
-                        <span className="text-xs font-semibold text-foreground font-mono flex items-center gap-1">
-                          {item.sessionId === sessionId
-                            ? (verifiedUsername ?? username)
-                            : "Anonymous"}
-                          {isTrustedContributorSession(item.sessionId) && (
-                            <VerifiedBadge />
-                          )}
-                        </span>
                         <span className="text-xs text-muted-foreground font-body">
-                          {" · "}
                           {formatRelativeTime(item.timestamp)}
                         </span>
                         <EvidenceTypeBadge

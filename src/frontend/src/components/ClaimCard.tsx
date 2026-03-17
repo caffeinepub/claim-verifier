@@ -11,13 +11,8 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import {
-  useEnhancedVoteTally,
-  useReportContent,
-  useUsername,
-} from "@/hooks/useQueries";
+import { useEnhancedVoteTally, useReportContent } from "@/hooks/useQueries";
 import { useSessionGate } from "@/hooks/useSessionGate";
-import { useVerifiedAccount } from "@/hooks/useVerifiedAccount";
 import { cn } from "@/lib/utils";
 import { formatRelativeTime } from "@/utils/time";
 import { computeOverallVerdict } from "@/utils/verdict";
@@ -40,8 +35,7 @@ import { toast } from "sonner";
 import type { Claim } from "../backend.d";
 import { CategoryBadge } from "./CategoryBadge";
 import { ReportDialog } from "./ReportDialog";
-import { UserAvatar } from "./UserAvatar";
-import { UserProfileCard } from "./UserProfileCard";
+import { AuthorDisplay } from "./UserProfileCard";
 import { VerdictBar } from "./VerdictBar";
 
 interface ClaimCardProps {
@@ -113,9 +107,6 @@ export function ClaimCard({
   );
   const reportContent = useReportContent();
   const { checkAction } = useSessionGate();
-  const username = useUsername();
-  const { username: verifiedUsername, avatarUrl: verifiedAvatarUrl } =
-    useVerifiedAccount();
   const [reported, setReported] = useState(false);
   const [reportDialogOpen, setReportDialogOpen] = useState(false);
 
@@ -162,19 +153,23 @@ export function ClaimCard({
       Math.max(0, Number(tally.falseCount)) +
       Math.max(0, Number(tally.unverifiedCount))
     : 0;
+
+  // Always compute percentages for the meter (even below threshold)
+  const trueRaw = tally ? Math.max(0, Number(tally.trueCount)) : 0;
+  const falseRaw = tally ? Math.max(0, Number(tally.falseCount)) : 0;
+
   const truePercent =
-    totalVotes >= 5 && tally
-      ? Math.round((Math.max(0, Number(tally.trueCount)) / totalVotes) * 100)
-      : null;
+    totalVotes > 0 ? Math.round((trueRaw / totalVotes) * 100) : 0;
   const falsePercent =
-    totalVotes >= 5 && tally
-      ? Math.round((Math.max(0, Number(tally.falseCount)) / totalVotes) * 100)
-      : null;
+    totalVotes > 0 ? Math.round((falseRaw / totalVotes) * 100) : 0;
+
+  // Threshold check for a "real" verdict display
+  const hasEnoughVotes = totalVotes >= 5;
 
   // Hot threshold: 10+ total votes as a proxy for activity
   const isHot = totalVotes >= 10;
 
-  // Meter bar color based on verdict
+  // Meter bar color based on verdict (fallback to muted for no/insufficient data)
   const meterBarColor =
     verdict === "REBUNKED"
       ? "bg-emerald-500"
@@ -186,13 +181,18 @@ export function ClaimCard({
             ? "bg-emerald-400"
             : verdict === "Leaning FALSE"
               ? "bg-red-400"
-              : "bg-muted-foreground";
+              : totalVotes > 0
+                ? "bg-muted-foreground/40"
+                : "bg-muted-foreground/20";
 
   // Meter fill % (true % for positive verdicts, false % for false verdict)
+  // When votes exist but no verdict yet, show a neutral partial bar based on true votes
   const meterFill =
-    verdict === "DEBUNKED" || verdict === "Leaning FALSE"
-      ? (falsePercent ?? 0)
-      : (truePercent ?? 0);
+    totalVotes === 0
+      ? 0
+      : verdict === "DEBUNKED" || verdict === "Leaning FALSE"
+        ? falsePercent
+        : truePercent;
 
   const borderClass = verdict ? verdictBorderClass[verdict] : "border-l-border";
 
@@ -219,28 +219,10 @@ export function ClaimCard({
             {formatRelativeTime(claim.timestamp)}
           </span>
           <span className="text-muted-foreground text-xs">·</span>
-          <span className="text-xs text-muted-foreground font-body flex items-center gap-1">
-            {claim.sessionId === sessionId && claim.sessionId !== "seed" ? (
-              <UserProfileCard
-                username={verifiedUsername ?? username}
-                isVerified={!!verifiedUsername}
-              >
-                <UserAvatar
-                  username={verifiedUsername ?? username}
-                  avatarUrl={
-                    verifiedUsername
-                      ? (verifiedAvatarUrl ?? undefined)
-                      : undefined
-                  }
-                  size="sm"
-                  isVerified={!!verifiedUsername}
-                />
-                {verifiedUsername ?? username}
-              </UserProfileCard>
-            ) : (
-              "Anonymous"
-            )}
-          </span>
+          <AuthorDisplay
+            username={claim.authorUsername}
+            className="flex items-center gap-1"
+          />
         </div>
 
         {/* Ellipsis dropdown menu -- stopPropagation prevents card navigation */}
@@ -347,7 +329,7 @@ export function ClaimCard({
         </div>
       )}
 
-      {/* Row 5: verdict label + verdict bar + confidence meter */}
+      {/* Row 5: verdict label + verdict bar + confidence meter (always shown) */}
       {tallyLoading ? (
         <div className="space-y-2">
           <Skeleton className="h-4 w-28 rounded" />
@@ -357,10 +339,11 @@ export function ClaimCard({
             <Skeleton className="h-3 w-24" />
           </div>
         </div>
-      ) : tally ? (
+      ) : (
         <div className="space-y-3">
-          {/* Inline verdict label flush to left border color */}
+          {/* Inline verdict label — only show when there's an actual verdict */}
           {verdict &&
+            tally &&
             (() => {
               const cfg = verdictBadgeConfig[verdict];
               const Icon = cfg.icon;
@@ -373,41 +356,52 @@ export function ClaimCard({
                 </div>
               );
             })()}
-          <VerdictBar
-            trueCount={tally.trueCount}
-            falseCount={tally.falseCount}
-            unverifiedCount={tally.unverifiedCount}
-            compact
-          />
-          {/* Confidence meter */}
-          {totalVotes >= 5 && truePercent !== null ? (
-            <div className="space-y-1">
-              <div className="flex items-center justify-between">
+
+          {/* Compact vote breakdown — only when tally exists */}
+          {tally && (
+            <VerdictBar
+              trueCount={tally.trueCount}
+              falseCount={tally.falseCount}
+              unverifiedCount={tally.unverifiedCount}
+              compact
+            />
+          )}
+
+          {/* Confidence meter — always visible */}
+          <div className="space-y-1">
+            <div className="flex items-center justify-between">
+              {totalVotes === 0 ? (
+                <span className="text-xs text-muted-foreground font-body">
+                  No votes yet
+                </span>
+              ) : !hasEnoughVotes ? (
+                <span className="text-xs text-muted-foreground font-body">
+                  {totalVotes}/5 votes needed
+                </span>
+              ) : (
                 <span className="text-xs font-bold font-body text-foreground">
                   {verdict === "DEBUNKED" || verdict === "Leaning FALSE"
                     ? `${falsePercent}% False`
                     : `${truePercent}% True`}
                 </span>
-                <span className="text-xs text-muted-foreground font-body">
-                  {totalVotes} vote{totalVotes !== 1 ? "s" : ""}
-                </span>
-              </div>
-              <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
-                <motion.div
-                  initial={{ width: 0 }}
-                  animate={{ width: `${meterFill}%` }}
-                  transition={{ duration: 0.6, ease: "easeOut" }}
-                  className={cn("h-full rounded-full", meterBarColor)}
-                />
-              </div>
+              )}
+              <span className="text-xs text-muted-foreground font-body">
+                {totalVotes > 0
+                  ? `${totalVotes} vote${totalVotes !== 1 ? "s" : ""}`
+                  : ""}
+              </span>
             </div>
-          ) : totalVotes > 0 ? (
-            <p className="text-xs text-muted-foreground font-body italic">
-              Not enough votes yet ({totalVotes}/5 needed)
-            </p>
-          ) : null}
+            <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
+              <motion.div
+                initial={{ width: 0 }}
+                animate={{ width: `${meterFill}%` }}
+                transition={{ duration: 0.6, ease: "easeOut" }}
+                className={cn("h-full rounded-full", meterBarColor)}
+              />
+            </div>
+          </div>
         </div>
-      ) : null}
+      )}
 
       {/* Report dialog -- stopPropagation prevents card click */}
       {/* biome-ignore lint/a11y/useKeyWithClickEvents: dialog handles keyboard */}

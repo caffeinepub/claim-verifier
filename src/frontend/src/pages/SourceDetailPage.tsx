@@ -56,7 +56,9 @@ import {
 } from "@/pages/TrustedSourcesPage";
 import {
   computeDynamicSourceBoost,
+  computeSourceAdjustment,
   getEvidenceCardsForDomain,
+  getSourceStatus,
 } from "@/utils/sourceCredibility";
 import { computeOverallVerdict } from "@/utils/verdict";
 import { useQueries, useQuery } from "@tanstack/react-query";
@@ -76,6 +78,7 @@ import {
   LogIn,
   Pencil,
   Pin,
+  Scale,
   Shield,
   ShieldCheck,
   ShieldX,
@@ -164,10 +167,38 @@ function CredibilityBoostInline({
   const total = upvotes + downvotes;
   const ratio = total > 0 ? upvotes / total : 0;
   const cards = getEvidenceCardsForDomain(domain);
-  const { dynamicBonus, ceilingLabel, hasTrackRecord } =
+  const { dynamicBonus, ceilingLabel, hasTrackRecord, isPenalty } =
     computeDynamicSourceBoost(sourceType, ratio, cards);
+  const status = getSourceStatus(upvotes, downvotes);
+
+  if (status === "pending") {
+    return (
+      <span className="text-xs font-body text-muted-foreground">
+        {ceilingLabel} potential boost
+      </span>
+    );
+  }
+  if (status === "contested") {
+    return (
+      <span className="text-xs font-body text-slate-500">
+        No credibility adjustment
+      </span>
+    );
+  }
+  if (status === "not-trusted") {
+    return (
+      <span className="text-xs font-body text-red-500 font-semibold">
+        {hasTrackRecord
+          ? dynamicBonus
+          : `-${ceilingLabel.replace("up to +", "up to ")}`}{" "}
+        credibility penalty
+      </span>
+    );
+  }
   return (
-    <span className="text-xs font-body text-primary font-semibold">
+    <span
+      className={`text-xs font-body font-semibold ${isPenalty ? "text-red-500" : "text-primary"}`}
+    >
       {hasTrackRecord ? dynamicBonus : ceilingLabel} credibility boost
     </span>
   );
@@ -194,9 +225,50 @@ function CredibilityBoostSection({
     trackRecordScore,
     hasTrackRecord,
     ceiling,
+    isPenalty,
   } = computeDynamicSourceBoost(sourceType, ratio, cards);
+  const status = getSourceStatus(upvotes, downvotes);
 
-  const bonusDisplay = hasTrackRecord ? dynamicBonus : ceilingLabel;
+  // Pending and Contested show a simplified neutral section
+  if (status === "pending") {
+    return (
+      <section>
+        <div className="flex items-center gap-2 mb-3">
+          <div className="w-1 h-5 bg-muted-foreground rounded-full" />
+          <h2 className="font-display text-lg font-bold text-foreground">
+            Credibility Adjustment
+          </h2>
+        </div>
+        <div className="p-4 bg-card border border-border rounded-sm text-sm font-body text-muted-foreground">
+          No credibility adjustment yet — this source is pending review (needs
+          25+ votes).
+        </div>
+      </section>
+    );
+  }
+  if (status === "contested") {
+    return (
+      <section>
+        <div className="flex items-center gap-2 mb-3">
+          <div className="w-1 h-5 bg-slate-400 rounded-full" />
+          <h2 className="font-display text-lg font-bold text-foreground">
+            Credibility Adjustment
+          </h2>
+        </div>
+        <div className="p-4 bg-card border border-slate-300 rounded-sm text-sm font-body text-muted-foreground">
+          No credibility adjustment — community is divided on this source
+          (40–60% approval). Evidence citing this source receives no boost or
+          penalty.
+        </div>
+      </section>
+    );
+  }
+
+  const bonusDisplay = hasTrackRecord
+    ? dynamicBonus
+    : isPenalty
+      ? `-${ceilingLabel.replace("up to +", "up to ")}`
+      : ceilingLabel;
   const bonusDesc = hasTrackRecord
     ? "Based on community approval + evidence track record"
     : "Based on community approval (track record pending)";
@@ -211,9 +283,11 @@ function CredibilityBoostSection({
   return (
     <section>
       <div className="flex items-center gap-2 mb-3">
-        <div className="w-1 h-5 bg-primary rounded-full" />
+        <div
+          className={`w-1 h-5 rounded-full ${isPenalty ? "bg-red-500" : "bg-primary"}`}
+        />
         <h2 className="font-display text-lg font-bold text-foreground">
-          Credibility Boost
+          {isPenalty ? "Credibility Penalty" : "Credibility Boost"}
         </h2>
       </div>
       <div className="p-4 bg-card border border-border rounded-sm space-y-4">
@@ -1188,9 +1262,14 @@ export function SourceDetailPage({
   const approvalProgress = Math.min(100, upvotePct);
   const needsMoreVotes = totalVotes < 25;
 
-  // Contested indicator: trusted but ratio is narrowly above the 60% threshold
+  // Contested indicator
+  const sourceStatus = source
+    ? getSourceStatus(Number(source.upvotes), Number(source.downvotes))
+    : "pending";
   const isNarrowlyTrusted =
-    source?.isTrusted === true && upvoteRatio >= 0.6 && upvoteRatio < 0.65;
+    sourceStatus === "trusted" && upvoteRatio >= 0.6 && upvoteRatio < 0.65;
+  const isContested = sourceStatus === "contested";
+  const isNotTrusted = sourceStatus === "not-trusted";
 
   // Suggested date from nanosecond timestamp
 
@@ -1203,8 +1282,8 @@ export function SourceDetailPage({
     source?.domain ?? null,
   );
 
-  // Manual About blurb state (localStorage fallback when wiki fails)
-  const { principalId: currentPrincipalId } = useVerifiedAccount();
+  // About blurb: use backend source.aboutBlurb or wiki, with localStorage fallback for editing
+  const { username: currentUsername } = useVerifiedAccount();
   const manualBlurbAdminKey = `about_blurb_admin_${domain}`;
   const manualBlurbKey = `about_blurb_${domain}`;
   const [manualBlurb, setManualBlurb] = useState<string>(
@@ -1216,21 +1295,19 @@ export function SourceDetailPage({
   const [editingBlurb, setEditingBlurb] = useState(false);
   const [blurbDraft, setBlurbDraft] = useState("");
 
-  // Check if current user is admin (via sessionStorage) or the source suggester
+  // Check if current user is admin or the source suggester (by username)
   const isAdminSession = sessionStorage.getItem(ADMIN_SESSION_KEY) === "1";
-  // Use principalId as the canonical identity anchor for isSuggester check
-  const suggestedByPrincipalKey = `source_principal_${domain}`;
-  const suggestedByPrincipal = localStorage.getItem(suggestedByPrincipalKey);
   const isSuggester =
-    !!currentPrincipalId &&
-    !!suggestedByPrincipal &&
-    currentPrincipalId === suggestedByPrincipal;
+    !!currentUsername &&
+    !!source?.suggestedByUsername &&
+    currentUsername === source.suggestedByUsername;
   const canEditBlurb = isAdminSession || isSuggester;
 
-  // Determine which About blurb to show (priority: admin override > wiki > suggester)
+  // Determine which About blurb to show (priority: admin override > wiki > backend blurb > suggester local)
   const adminBlurb = localStorage.getItem(manualBlurbAdminKey) ?? "";
   const suggestorBlurb = localStorage.getItem(manualBlurbKey) ?? "";
-  const displayedBlurb = adminBlurb || wikiBlurb || suggestorBlurb || "";
+  const displayedBlurb =
+    adminBlurb || wikiBlurb || source?.aboutBlurb || suggestorBlurb || "";
 
   function startEditBlurb() {
     setBlurbDraft(manualBlurb);
@@ -1304,9 +1381,13 @@ export function SourceDetailPage({
             <div
               className={cn(
                 "p-5 bg-card border rounded-sm",
-                source.isTrusted
+                sourceStatus === "trusted"
                   ? "border-emerald-500/30 shadow-sm shadow-emerald-500/5"
-                  : "border-border",
+                  : sourceStatus === "not-trusted"
+                    ? "border-red-400/30"
+                    : sourceStatus === "contested"
+                      ? "border-slate-400/30"
+                      : "border-border",
               )}
             >
               {/* Domain name + trust badge row */}
@@ -1323,7 +1404,7 @@ export function SourceDetailPage({
                       {source.domain}
                       <ExternalLink className="h-4 w-4 opacity-50" />
                     </a>
-                    {source.isTrusted ? (
+                    {sourceStatus === "trusted" ? (
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <span className="inline-flex items-center cursor-default text-emerald-600">
@@ -1336,6 +1417,37 @@ export function SourceDetailPage({
                         >
                           Trusted source — verified by the community with 60%+
                           approval
+                        </TooltipContent>
+                      </Tooltip>
+                    ) : sourceStatus === "contested" ? (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="inline-flex items-center cursor-default text-slate-500">
+                            <Scale className="h-3.5 w-3.5" />
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent
+                          side="top"
+                          className="text-xs max-w-[240px]"
+                        >
+                          Contested — community is divided on this source&apos;s
+                          credibility. Needs clear 60%+ approval to become
+                          trusted
+                        </TooltipContent>
+                      </Tooltip>
+                    ) : sourceStatus === "not-trusted" ? (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="inline-flex items-center cursor-default text-red-500">
+                            <ShieldX className="h-3.5 w-3.5" />
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent
+                          side="top"
+                          className="text-xs max-w-[220px]"
+                        >
+                          Not Trusted — community voted this source as
+                          unreliable (less than 40% approval)
                         </TooltipContent>
                       </Tooltip>
                     ) : (
@@ -1390,39 +1502,7 @@ export function SourceDetailPage({
 
                 <div className="flex items-center gap-1.5 flex-wrap text-xs text-muted-foreground font-body">
                   <span>Suggested by</span>
-                  {(() => {
-                    const sugUsername =
-                      (isSuggester && currentPrincipalId
-                        ? localStorage.getItem(
-                            `rebunked_username_${currentPrincipalId}`,
-                          ) ||
-                          source.suggestedByUsername ||
-                          "unknown"
-                        : source.suggestedByUsername) || "unknown";
-                    const sugAvatarUrl =
-                      isSuggester && currentPrincipalId
-                        ? (localStorage.getItem(
-                            `rebunked_avatar_${currentPrincipalId}`,
-                          ) ?? undefined)
-                        : undefined;
-                    const sugIsVerified =
-                      !!(isSuggester && currentPrincipalId) ||
-                      isVerifiedUsername(sugUsername);
-                    return (
-                      <UserProfileCard
-                        username={sugUsername}
-                        isVerified={sugIsVerified}
-                      >
-                        <UserAvatar
-                          username={sugUsername}
-                          avatarUrl={sugAvatarUrl}
-                          size="sm"
-                          isVerified={!!(isSuggester && currentPrincipalId)}
-                        />
-                        <span>{sugUsername}</span>
-                      </UserProfileCard>
-                    );
-                  })()}
+                  <span>{source.suggestedByUsername || "unknown"}</span>
                 </div>
 
                 {/* Admin override note */}
@@ -1437,7 +1517,7 @@ export function SourceDetailPage({
                 )}
               </div>
 
-              {/* Narrowly trusted indicator */}
+              {/* Narrowly trusted / Contested / Not Trusted indicator */}
               {isNarrowlyTrusted && (
                 <div
                   data-ocid="source_detail.card"
@@ -1447,6 +1527,34 @@ export function SourceDetailPage({
                   <p className="text-xs font-body">
                     <span className="font-semibold">Narrowly trusted</span> —
                     community opinions are divided.
+                  </p>
+                </div>
+              )}
+              {isContested && (
+                <div
+                  data-ocid="source_detail.card"
+                  className="flex items-center gap-2 px-3 py-2 mb-4 rounded-sm bg-slate-50 border border-slate-200 text-slate-700"
+                >
+                  <Scale className="h-3.5 w-3.5 flex-shrink-0" />
+                  <p className="text-xs font-body">
+                    <span className="font-semibold">Contested</span> — the
+                    community is divided on this source&apos;s credibility
+                    (40–60% approval). A clear 60%+ majority is needed to become
+                    trusted.
+                  </p>
+                </div>
+              )}
+              {isNotTrusted && (
+                <div
+                  data-ocid="source_detail.card"
+                  className="flex items-center gap-2 px-3 py-2 mb-4 rounded-sm bg-red-50 border border-red-200 text-red-700"
+                >
+                  <ShieldX className="h-3.5 w-3.5 flex-shrink-0" />
+                  <p className="text-xs font-body">
+                    <span className="font-semibold">Not Trusted</span> — the
+                    community has voted this source as unreliable (less than 40%
+                    approval). Evidence citing this source receives a
+                    credibility penalty.
                   </p>
                 </div>
               )}
@@ -1500,14 +1608,12 @@ export function SourceDetailPage({
             </div>
 
             {/* ── Credibility Boost ────────────────────────────── */}
-            {source.isTrusted && (
-              <CredibilityBoostSection
-                sourceType={source.sourceType}
-                domain={source.domain}
-                upvotes={upvotes}
-                downvotes={downvotes}
-              />
-            )}
+            <CredibilityBoostSection
+              sourceType={source.sourceType}
+              domain={source.domain}
+              upvotes={upvotes}
+              downvotes={downvotes}
+            />
 
             {/* ── About Blurb ──────────────────────────────────── */}
             {wikiLoading ? (

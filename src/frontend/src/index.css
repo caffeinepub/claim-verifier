@@ -1,0 +1,191 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@font-face {
+  font-family: "Cabinet Grotesk";
+  src: url("/assets/fonts/CabinetGrotesk.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Bricolage Grotesque";
+  src: url("/assets/fonts/BricolageGrotesque.woff2") format("woff2");
+  font-weight: 200 800;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Outfit";
+  src: url("/assets/fonts/Outfit.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@layer base {
+  :root {
+    --radius: 0.75rem;
+
+    /* Social fun light theme — white background, coral-orange primary, violet accent */
+    --background: 1 0 0;
+    --foreground: 0.18 0.018 260;
+    --card: 1 0 0;
+    --card-foreground: 0.18 0.018 260;
+    --popover: 1 0 0;
+    --popover-foreground: 0.18 0.018 260;
+    /* Coral-orange primary */
+    --primary: 0.62 0.21 32;
+    --primary-foreground: 1 0 0;
+    /* Light warm gray secondary */
+    --secondary: 0.95 0.008 50;
+    --secondary-foreground: 0.25 0.015 260;
+    --muted: 0.95 0.006 50;
+    --muted-foreground: 0.52 0.02 260;
+    /* Electric violet accent */
+    --accent: 0.93 0.04 300;
+    --accent-foreground: 0.35 0.12 300;
+    --destructive: 0.52 0.22 22;
+    --destructive-foreground: 0.98 0 0;
+    --border: 0.9 0.008 50;
+    --input: 0.9 0.008 50;
+    --ring: 0.62 0.21 32;
+
+    /* Verdict colors — vivid for social feel */
+    --verdict-true: 0.55 0.2 145;
+    --verdict-true-bg: 0.94 0.07 145;
+    --verdict-false: 0.55 0.24 22;
+    --verdict-false-bg: 0.95 0.08 22;
+    --verdict-unverified: 0.6 0.15 75;
+    --verdict-unverified-bg: 0.95 0.08 75;
+
+    /* Chart */
+    --chart-1: 0.62 0.21 32;
+    --chart-2: 0.55 0.2 145;
+    --chart-3: 0.55 0.24 22;
+    --chart-4: 0.58 0.18 300;
+    --chart-5: 0.55 0.15 200;
+
+    /* Sidebar */
+    --sidebar: 1 0 0;
+    --sidebar-foreground: 0.18 0.018 260;
+    --sidebar-primary: 0.62 0.21 32;
+    --sidebar-primary-foreground: 1 0 0;
+    --sidebar-accent: 0.95 0.006 50;
+    --sidebar-accent-foreground: 0.25 0.015 260;
+    --sidebar-border: 0.9 0.008 50;
+    --sidebar-ring: 0.62 0.21 32;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-body;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    @apply font-display;
+  }
+}
+
+@layer utilities {
+  .font-logo {
+    font-family: "Darker Grotesque", "Cabinet Grotesk", sans-serif;
+  }
+
+  .verdict-true {
+    color: oklch(var(--verdict-true));
+  }
+  .verdict-false {
+    color: oklch(var(--verdict-false));
+  }
+  .verdict-unverified {
+    color: oklch(var(--verdict-unverified));
+  }
+  .bg-verdict-true {
+    background-color: oklch(var(--verdict-true));
+  }
+  .bg-verdict-false {
+    background-color: oklch(var(--verdict-false));
+  }
+  .bg-verdict-unverified {
+    background-color: oklch(var(--verdict-unverified));
+  }
+  .bg-verdict-true-subtle {
+    background-color: oklch(var(--verdict-true-bg));
+  }
+  .bg-verdict-false-subtle {
+    background-color: oklch(var(--verdict-false-bg));
+  }
+  .bg-verdict-unverified-subtle {
+    background-color: oklch(var(--verdict-unverified-bg));
+  }
+  .border-verdict-true {
+    border-color: oklch(var(--verdict-true));
+  }
+  .border-verdict-false {
+    border-color: oklch(var(--verdict-false));
+  }
+  .border-verdict-unverified {
+    border-color: oklch(var(--verdict-unverified));
+  }
+  .masthead-rule {
+    background: linear-gradient(
+      to right,
+      oklch(var(--border)),
+      oklch(var(--primary)),
+      oklch(var(--border))
+    );
+  }
+  .noise-bg {
+    position: relative;
+  }
+  .noise-bg::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none;
+    opacity: 0.4;
+  }
+
+  /* Vote bounce animation */
+  @keyframes voteBounce {
+    0% {
+      transform: scale(1);
+    }
+    30% {
+      transform: scale(1.35);
+    }
+    60% {
+      transform: scale(0.92);
+    }
+    100% {
+      transform: scale(1);
+    }
+  }
+
+  .vote-bounce {
+    animation: voteBounce 0.35s cubic-bezier(0.36, 0.07, 0.19, 0.97) forwards;
+  }
+}
+
+/* Hide scrollbar for tab strips */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}

@@ -9,12 +9,13 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useReputationEvents } from "@/hooks/useQueries";
 import { useStorageClient } from "@/hooks/useStorageClient";
 import {
+  getActivePrincipalId,
   getUserClaims,
   getUserComments,
   getUserEvidence,
-  getUserRepEvents,
   getUserSources,
   getVerifiedVotes,
   useVerifiedAccount,
@@ -255,6 +256,17 @@ function changeColor(event: {
 
 // ---------------------------------------------------------------------------
 
+function formatRepEventLabel(action: string): string {
+  const labels: Record<string, string> = {
+    claim_submitted: "Claim submitted",
+    evidence_submitted: "Evidence submitted",
+    vote_cast: "Vote cast",
+    reply_posted: "Comment posted",
+    source_suggested: "Trusted source suggested",
+  };
+  return labels[action] ?? action.replace(/_/g, " ");
+}
+
 export function ProfilePage({ username, onBack }: ProfilePageProps) {
   const {
     username: currentUsername,
@@ -268,6 +280,8 @@ export function ProfilePage({ username, onBack }: ProfilePageProps) {
     activityPoints,
     trustScore,
     isTrustedContributor,
+    privacySettings,
+    principal,
   } = useVerifiedAccount();
   const isOwnProfile = isVerified && currentUsername === username;
 
@@ -334,33 +348,19 @@ export function ProfilePage({ username, onBack }: ProfilePageProps) {
   const tierConfig = TIER_CONFIG[tier];
   const tierProgress = getTierProgress(activityPoints);
 
-  // Privacy settings for the profile being viewed (when it's not own profile)
-  const profileOwnerPrincipalId = (() => {
-    if (isOwnProfile) return null;
-    const registry: Record<string, string> = JSON.parse(
-      localStorage.getItem("rebunked_username_registry") ?? "{}",
-    );
-    return registry[username] ?? null;
-  })();
+  // Privacy settings from backend profile (own profile uses privacySettings from useVerifiedAccount)
+  // For other users' profiles, we show a limited view
   const profileOwnerShowsVoteHistory = isOwnProfile
-    ? true
-    : profileOwnerPrincipalId
-      ? localStorage.getItem(
-          `rebunked_privacy_showVoteHistory_${profileOwnerPrincipalId}`,
-        ) !== "false"
-      : false;
+    ? privacySettings.showVotes
+    : true; // Show by default for others (can't load their profile without principal)
   const profileOwnerShowsActivityTabs = isOwnProfile
-    ? true
-    : profileOwnerPrincipalId
-      ? localStorage.getItem(
-          `rebunked_privacy_showActivityTabs_${profileOwnerPrincipalId}`,
-        ) !== "false"
-      : false;
+    ? privacySettings.showClaims &&
+      privacySettings.showEvidence &&
+      privacySettings.showComments
+    : true;
 
-  // Real reputation events from localStorage
-  const activePrincipalId = isVerified
-    ? localStorage.getItem("rebunked_active_verified")
-    : null;
+  // Activity tracking from localStorage cache
+  const activePrincipalId = getActivePrincipalId();
   const userClaims =
     isOwnProfile && activePrincipalId ? getUserClaims(activePrincipalId) : [];
   const userEvidence =
@@ -369,10 +369,20 @@ export function ProfilePage({ username, onBack }: ProfilePageProps) {
     isOwnProfile && activePrincipalId ? getUserComments(activePrincipalId) : [];
   const userSources =
     isOwnProfile && activePrincipalId ? getUserSources(activePrincipalId) : [];
-  const repEvents =
-    isOwnProfile && activePrincipalId
-      ? getUserRepEvents(activePrincipalId)
-      : [];
+
+  // Reputation events from backend
+  const { data: repEventsRaw = [] } = useReputationEvents(
+    isOwnProfile ? principal : null,
+  );
+  const repEvents = repEventsRaw.map((e) => ({
+    id: `rep-${e.timestamp.toString()}`,
+    label: formatRepEventLabel(e.action),
+    pointChange: Number(e.points),
+    trustChange: 0,
+    timestamp: new Date(Number(e.timestamp) / 1_000_000).toISOString(),
+    relatedLink: undefined as string | undefined,
+    relatedLabel: undefined as string | undefined,
+  }));
 
   async function handleAvatarUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];

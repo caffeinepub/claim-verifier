@@ -19,9 +19,23 @@ export const _CaffeineStorageRefillResult = IDL.Record({
   'success' : IDL.Opt(IDL.Bool),
   'topped_up_amount' : IDL.Opt(IDL.Nat),
 });
+export const UserRole = IDL.Variant({
+  'admin' : IDL.Null,
+  'user' : IDL.Null,
+  'guest' : IDL.Null,
+});
+export const PrivacySettings = IDL.Record({
+  'showVotes' : IDL.Bool,
+  'showClaims' : IDL.Bool,
+  'showReputation' : IDL.Bool,
+  'showSources' : IDL.Bool,
+  'showEvidence' : IDL.Bool,
+  'showComments' : IDL.Bool,
+});
 export const Claim = IDL.Record({
   'id' : IDL.Nat,
   'title' : IDL.Text,
+  'authorUsername' : IDL.Text,
   'imageUrls' : IDL.Vec(IDL.Text),
   'urls' : IDL.Vec(IDL.Text),
   'description' : IDL.Text,
@@ -30,8 +44,18 @@ export const Claim = IDL.Record({
   'category' : IDL.Text,
   'sessionId' : IDL.Text,
 });
+export const UserProfile = IDL.Record({
+  'bio' : IDL.Text,
+  'privacySettings' : PrivacySettings,
+  'username' : IDL.Text,
+  'joinDate' : IDL.Int,
+  'avatarUrl' : IDL.Text,
+  'usernameLastChanged' : IDL.Int,
+  'lastActive' : IDL.Int,
+});
 export const Evidence = IDL.Record({
   'id' : IDL.Nat,
+  'authorUsername' : IDL.Text,
   'imageUrls' : IDL.Vec(IDL.Text),
   'text' : IDL.Text,
   'urls' : IDL.Vec(IDL.Text),
@@ -48,6 +72,11 @@ export const Reply = IDL.Record({
   'parentReplyId' : IDL.Nat,
   'sessionId' : IDL.Text,
   'evidenceId' : IDL.Nat,
+});
+export const ReputationEvent = IDL.Record({
+  'action' : IDL.Text,
+  'timestamp' : IDL.Int,
+  'points' : IDL.Int,
 });
 export const SourceComment = IDL.Record({
   'id' : IDL.Nat,
@@ -86,11 +115,13 @@ export const idlService = IDL.Service({
       [],
     ),
   '_caffeineStorageUpdateGatewayPrincipals' : IDL.Func([], [], []),
+  '_initializeAccessControlWithSecret' : IDL.Func([IDL.Text], [], []),
   'addReply' : IDL.Func(
       [IDL.Nat, IDL.Nat, IDL.Text, IDL.Text, IDL.Text],
       [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
       [],
     ),
+  'addReputationEvent' : IDL.Func([IDL.Principal, IDL.Text, IDL.Int], [], []),
   'addSourceComment' : IDL.Func(
       [IDL.Nat, IDL.Nat, IDL.Text, IDL.Text, IDL.Text],
       [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
@@ -131,8 +162,10 @@ export const idlService = IDL.Service({
       [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
       [],
     ),
+  'assignCallerUserRole' : IDL.Func([IDL.Principal, UserRole], [], []),
   'createClaim' : IDL.Func(
       [
+        IDL.Text,
         IDL.Text,
         IDL.Text,
         IDL.Text,
@@ -144,8 +177,15 @@ export const idlService = IDL.Service({
       [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
       [],
     ),
+  'createOrUpdateProfile' : IDL.Func(
+      [IDL.Principal, IDL.Text, IDL.Text, IDL.Text, PrivacySettings],
+      [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
+      [],
+    ),
   'generateSessionId' : IDL.Func([], [IDL.Text], []),
   'getAllClaims' : IDL.Func([], [IDL.Vec(Claim)], ['query']),
+  'getCallerUserProfile' : IDL.Func([], [IDL.Opt(UserProfile)], ['query']),
+  'getCallerUserRole' : IDL.Func([], [UserRole], ['query']),
   'getClaimById' : IDL.Func([IDL.Nat], [Claim], ['query']),
   'getClaimsByCategory' : IDL.Func([IDL.Text], [IDL.Vec(Claim)], ['query']),
   'getEnhancedVoteTally' : IDL.Func(
@@ -174,6 +214,12 @@ export const idlService = IDL.Service({
   'getHiddenClaims' : IDL.Func([IDL.Text], [IDL.Vec(Claim)], ['query']),
   'getHiddenEvidence' : IDL.Func([IDL.Text], [IDL.Vec(Evidence)], ['query']),
   'getHiddenReplies' : IDL.Func([IDL.Text], [IDL.Vec(Reply)], ['query']),
+  'getProfile' : IDL.Func([IDL.Principal], [IDL.Opt(UserProfile)], ['query']),
+  'getProfileByUsername' : IDL.Func(
+      [IDL.Text],
+      [IDL.Opt(UserProfile)],
+      ['query'],
+    ),
   'getReplies' : IDL.Func([IDL.Nat], [IDL.Vec(Reply)], ['query']),
   'getReplyLikeCount' : IDL.Func([IDL.Nat], [IDL.Nat], ['query']),
   'getReplyLikeCounts' : IDL.Func(
@@ -187,6 +233,11 @@ export const idlService = IDL.Service({
       ['query'],
     ),
   'getReportCount' : IDL.Func([IDL.Nat, IDL.Text], [IDL.Nat], ['query']),
+  'getReputationEvents' : IDL.Func(
+      [IDL.Principal],
+      [IDL.Vec(ReputationEvent)],
+      ['query'],
+    ),
   'getSessionLikeForReply' : IDL.Func(
       [IDL.Nat, IDL.Text],
       [IDL.Bool],
@@ -261,6 +312,11 @@ export const idlService = IDL.Service({
       ],
       ['query'],
     ),
+  'getUserProfile' : IDL.Func(
+      [IDL.Principal],
+      [IDL.Opt(UserProfile)],
+      ['query'],
+    ),
   'getVoteTally' : IDL.Func(
       [IDL.Nat],
       [
@@ -272,6 +328,8 @@ export const idlService = IDL.Service({
       ],
       ['query'],
     ),
+  'isCallerAdmin' : IDL.Func([], [IDL.Bool], ['query']),
+  'isUsernameAvailable' : IDL.Func([IDL.Text], [IDL.Bool], ['query']),
   'likeReply' : IDL.Func([IDL.Nat, IDL.Text], [], []),
   'likeSourceComment' : IDL.Func([IDL.Nat, IDL.Text], [], []),
   'reportContent' : IDL.Func(
@@ -304,9 +362,11 @@ export const idlService = IDL.Service({
       [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
       [],
     ),
+  'saveCallerUserProfile' : IDL.Func([UserProfile], [], []),
   'submitEvidence' : IDL.Func(
       [
         IDL.Nat,
+        IDL.Text,
         IDL.Text,
         IDL.Text,
         IDL.Vec(IDL.Text),
@@ -322,6 +382,7 @@ export const idlService = IDL.Service({
       [IDL.Variant({ 'ok' : IDL.Nat, 'err' : IDL.Text })],
       [],
     ),
+  'updateLastActive' : IDL.Func([IDL.Principal], [], []),
   'voteEvidence' : IDL.Func([IDL.Nat, IDL.Text, IDL.Text], [], []),
   'voteOnSource' : IDL.Func(
       [IDL.Nat, IDL.Text, IDL.Text],
@@ -345,9 +406,23 @@ export const idlFactory = ({ IDL }) => {
     'success' : IDL.Opt(IDL.Bool),
     'topped_up_amount' : IDL.Opt(IDL.Nat),
   });
+  const UserRole = IDL.Variant({
+    'admin' : IDL.Null,
+    'user' : IDL.Null,
+    'guest' : IDL.Null,
+  });
+  const PrivacySettings = IDL.Record({
+    'showVotes' : IDL.Bool,
+    'showClaims' : IDL.Bool,
+    'showReputation' : IDL.Bool,
+    'showSources' : IDL.Bool,
+    'showEvidence' : IDL.Bool,
+    'showComments' : IDL.Bool,
+  });
   const Claim = IDL.Record({
     'id' : IDL.Nat,
     'title' : IDL.Text,
+    'authorUsername' : IDL.Text,
     'imageUrls' : IDL.Vec(IDL.Text),
     'urls' : IDL.Vec(IDL.Text),
     'description' : IDL.Text,
@@ -356,8 +431,18 @@ export const idlFactory = ({ IDL }) => {
     'category' : IDL.Text,
     'sessionId' : IDL.Text,
   });
+  const UserProfile = IDL.Record({
+    'bio' : IDL.Text,
+    'privacySettings' : PrivacySettings,
+    'username' : IDL.Text,
+    'joinDate' : IDL.Int,
+    'avatarUrl' : IDL.Text,
+    'usernameLastChanged' : IDL.Int,
+    'lastActive' : IDL.Int,
+  });
   const Evidence = IDL.Record({
     'id' : IDL.Nat,
+    'authorUsername' : IDL.Text,
     'imageUrls' : IDL.Vec(IDL.Text),
     'text' : IDL.Text,
     'urls' : IDL.Vec(IDL.Text),
@@ -374,6 +459,11 @@ export const idlFactory = ({ IDL }) => {
     'parentReplyId' : IDL.Nat,
     'sessionId' : IDL.Text,
     'evidenceId' : IDL.Nat,
+  });
+  const ReputationEvent = IDL.Record({
+    'action' : IDL.Text,
+    'timestamp' : IDL.Int,
+    'points' : IDL.Int,
   });
   const SourceComment = IDL.Record({
     'id' : IDL.Nat,
@@ -412,11 +502,13 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     '_caffeineStorageUpdateGatewayPrincipals' : IDL.Func([], [], []),
+    '_initializeAccessControlWithSecret' : IDL.Func([IDL.Text], [], []),
     'addReply' : IDL.Func(
         [IDL.Nat, IDL.Nat, IDL.Text, IDL.Text, IDL.Text],
         [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
         [],
       ),
+    'addReputationEvent' : IDL.Func([IDL.Principal, IDL.Text, IDL.Int], [], []),
     'addSourceComment' : IDL.Func(
         [IDL.Nat, IDL.Nat, IDL.Text, IDL.Text, IDL.Text],
         [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
@@ -457,8 +549,10 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
         [],
       ),
+    'assignCallerUserRole' : IDL.Func([IDL.Principal, UserRole], [], []),
     'createClaim' : IDL.Func(
         [
+          IDL.Text,
           IDL.Text,
           IDL.Text,
           IDL.Text,
@@ -470,8 +564,15 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
         [],
       ),
+    'createOrUpdateProfile' : IDL.Func(
+        [IDL.Principal, IDL.Text, IDL.Text, IDL.Text, PrivacySettings],
+        [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
+        [],
+      ),
     'generateSessionId' : IDL.Func([], [IDL.Text], []),
     'getAllClaims' : IDL.Func([], [IDL.Vec(Claim)], ['query']),
+    'getCallerUserProfile' : IDL.Func([], [IDL.Opt(UserProfile)], ['query']),
+    'getCallerUserRole' : IDL.Func([], [UserRole], ['query']),
     'getClaimById' : IDL.Func([IDL.Nat], [Claim], ['query']),
     'getClaimsByCategory' : IDL.Func([IDL.Text], [IDL.Vec(Claim)], ['query']),
     'getEnhancedVoteTally' : IDL.Func(
@@ -500,6 +601,12 @@ export const idlFactory = ({ IDL }) => {
     'getHiddenClaims' : IDL.Func([IDL.Text], [IDL.Vec(Claim)], ['query']),
     'getHiddenEvidence' : IDL.Func([IDL.Text], [IDL.Vec(Evidence)], ['query']),
     'getHiddenReplies' : IDL.Func([IDL.Text], [IDL.Vec(Reply)], ['query']),
+    'getProfile' : IDL.Func([IDL.Principal], [IDL.Opt(UserProfile)], ['query']),
+    'getProfileByUsername' : IDL.Func(
+        [IDL.Text],
+        [IDL.Opt(UserProfile)],
+        ['query'],
+      ),
     'getReplies' : IDL.Func([IDL.Nat], [IDL.Vec(Reply)], ['query']),
     'getReplyLikeCount' : IDL.Func([IDL.Nat], [IDL.Nat], ['query']),
     'getReplyLikeCounts' : IDL.Func(
@@ -513,6 +620,11 @@ export const idlFactory = ({ IDL }) => {
         ['query'],
       ),
     'getReportCount' : IDL.Func([IDL.Nat, IDL.Text], [IDL.Nat], ['query']),
+    'getReputationEvents' : IDL.Func(
+        [IDL.Principal],
+        [IDL.Vec(ReputationEvent)],
+        ['query'],
+      ),
     'getSessionLikeForReply' : IDL.Func(
         [IDL.Nat, IDL.Text],
         [IDL.Bool],
@@ -587,6 +699,11 @@ export const idlFactory = ({ IDL }) => {
         ],
         ['query'],
       ),
+    'getUserProfile' : IDL.Func(
+        [IDL.Principal],
+        [IDL.Opt(UserProfile)],
+        ['query'],
+      ),
     'getVoteTally' : IDL.Func(
         [IDL.Nat],
         [
@@ -598,6 +715,8 @@ export const idlFactory = ({ IDL }) => {
         ],
         ['query'],
       ),
+    'isCallerAdmin' : IDL.Func([], [IDL.Bool], ['query']),
+    'isUsernameAvailable' : IDL.Func([IDL.Text], [IDL.Bool], ['query']),
     'likeReply' : IDL.Func([IDL.Nat, IDL.Text], [], []),
     'likeSourceComment' : IDL.Func([IDL.Nat, IDL.Text], [], []),
     'reportContent' : IDL.Func(
@@ -630,9 +749,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
         [],
       ),
+    'saveCallerUserProfile' : IDL.Func([UserProfile], [], []),
     'submitEvidence' : IDL.Func(
         [
           IDL.Nat,
+          IDL.Text,
           IDL.Text,
           IDL.Text,
           IDL.Vec(IDL.Text),
@@ -648,6 +769,7 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'ok' : IDL.Nat, 'err' : IDL.Text })],
         [],
       ),
+    'updateLastActive' : IDL.Func([IDL.Principal], [], []),
     'voteEvidence' : IDL.Func([IDL.Nat, IDL.Text, IDL.Text], [], []),
     'voteOnSource' : IDL.Func(
         [IDL.Nat, IDL.Text, IDL.Text],

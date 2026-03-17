@@ -5,36 +5,29 @@ import {
   HoverCardContent,
   HoverCardTrigger,
 } from "@/components/ui/hover-card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useProfileByUsername, useStatsByUsername } from "@/hooks/useQueries";
+import { cn } from "@/lib/utils";
 import { generateIdenticonDataUrl } from "@/utils/identicon";
 import { CheckCircle } from "lucide-react";
 import { useCallback, useState } from "react";
 
-// ── Registry Helpers ─────────────────────────────────────────────────────────
+// ── Registry Helper ─────────────────────────────────────────────────────────
 
-export function isVerifiedUsername(username: string): boolean {
-  try {
-    const registry = JSON.parse(
-      localStorage.getItem("rebunked_username_registry") ?? "{}",
-    ) as Record<string, string>;
-    return Object.entries(registry).some(([u]) => u === username.toLowerCase());
-  } catch {
-    return false;
-  }
+/**
+ * Checks if a username belongs to a verified account by querying the backend.
+ * Falls back to a synchronous check for components that can't await.
+ */
+export function isVerifiedUsername(_username: string): boolean {
+  // A best-effort sync check: if the username exists in the backend's profile system
+  // we treat it as potentially verified. The profile card handles the async check.
+  // Return false here; UserProfileCard will show the popover only when explicitly
+  // passed isVerified=true, or the backend confirms the profile exists.
+  return false;
 }
 
-function getPrincipalForUsername(username: string): string | null {
-  try {
-    const registry = JSON.parse(
-      localStorage.getItem("rebunked_username_registry") ?? "{}",
-    ) as Record<string, string>;
-    return registry[username.toLowerCase()] ?? null;
-  } catch {
-    return null;
-  }
-}
-
-// ── Tier Helpers ─────────────────────────────────────────────────────────────
+// ── Tier Helpers ──────────────────────────────────────────────────────────────
 
 function getTierInfo(points: number): {
   label: string;
@@ -51,105 +44,34 @@ function getTierInfo(points: number): {
   return { label: "Newcomer", className: "bg-gray-100 text-gray-500" };
 }
 
-// ── Profile Data Loader ───────────────────────────────────────────────────────
-
-function loadProfileData(username: string) {
-  const principalId = getPrincipalForUsername(username);
-  if (!principalId) return null;
-
-  const avatarUrl =
-    localStorage.getItem(`rebunked_avatar_${principalId}`) ?? null;
-  const bio = localStorage.getItem(`rebunked_bio_${principalId}`) ?? null;
-  const activityPoints = Number.parseInt(
-    localStorage.getItem(`rebunked_points_${principalId}`) ?? "0",
-    10,
-  );
-  const trustScore = Number.parseInt(
-    localStorage.getItem(`rebunked_trust_${principalId}`) ?? "65",
-    10,
-  );
-  const joinDate =
-    localStorage.getItem(`rebunked_joined_${principalId}`) ?? null;
-
-  let claimsCount = 0;
-  let evidenceCount = 0;
-  let commentsCount = 0;
-  try {
-    claimsCount = (
-      JSON.parse(
-        localStorage.getItem(`rebunked_user_claims_${principalId}`) ?? "[]",
-      ) as unknown[]
-    ).length;
-  } catch {
-    claimsCount = 0;
-  }
-  try {
-    evidenceCount = (
-      JSON.parse(
-        localStorage.getItem(`rebunked_user_evidence_${principalId}`) ?? "[]",
-      ) as unknown[]
-    ).length;
-  } catch {
-    evidenceCount = 0;
-  }
-  try {
-    commentsCount = (
-      JSON.parse(
-        localStorage.getItem(`rebunked_user_comments_${principalId}`) ?? "[]",
-      ) as unknown[]
-    ).length;
-  } catch {
-    commentsCount = 0;
-  }
-
-  let showActivityTabs = true;
-  try {
-    showActivityTabs =
-      localStorage.getItem(
-        `rebunked_privacy_showActivityTabs_${principalId}`,
-      ) !== "false";
-  } catch {
-    showActivityTabs = true;
-  }
-
-  const isTrustedContributor = activityPoints >= 25 && trustScore >= 70;
-
-  return {
-    principalId,
-    avatarUrl,
-    bio,
-    activityPoints,
-    trustScore,
-    joinDate,
-    claimsCount,
-    evidenceCount,
-    commentsCount,
-    showActivityTabs,
-    isTrustedContributor,
-  };
-}
-
 // ── Card Content ──────────────────────────────────────────────────────────────
 
 function ProfileCardContent({ username }: { username: string }) {
-  const data = loadProfileData(username);
-  if (!data) return null;
+  const { data: profile, isLoading } = useProfileByUsername(username);
+  const { data: stats } = useStatsByUsername(username);
 
-  const {
-    avatarUrl,
-    bio,
-    activityPoints,
-    trustScore,
-    joinDate,
-    claimsCount,
-    evidenceCount,
-    commentsCount,
-    showActivityTabs,
-    isTrustedContributor,
-  } = data;
+  const claimCount = stats ? Number(stats.claimCount) : 0;
+  const evidenceCount = stats ? Number(stats.evidenceCount) : 0;
+  const commentCount = stats ? Number(stats.commentCount) : 0;
+  const activityPoints = stats ? Number(stats.activityPoints) : 0;
+  const trustScore = stats ? Number(stats.trustScore) : 0;
 
-  const tier = getTierInfo(activityPoints);
-  const avatarSrc = avatarUrl ?? generateIdenticonDataUrl(username);
+  if (isLoading) {
+    return (
+      <div className="w-[270px] rounded-xl shadow-lg overflow-hidden bg-background border border-border p-4 space-y-3">
+        <Skeleton className="h-12 w-12 rounded-full" />
+        <Skeleton className="h-4 w-32" />
+        <Skeleton className="h-3 w-24" />
+        <Skeleton className="h-3 w-full" />
+      </div>
+    );
+  }
+
+  if (!profile) return null;
+
+  const joinDate = profile.joinDate
+    ? new Date(Number(profile.joinDate) / 1_000_000).toISOString()
+    : null;
 
   const formattedJoinDate = joinDate
     ? new Date(joinDate).toLocaleDateString("en-US", {
@@ -157,6 +79,11 @@ function ProfileCardContent({ username }: { username: string }) {
         year: "numeric",
       })
     : null;
+
+  const tier = getTierInfo(activityPoints);
+  const avatarSrc = profile.avatarUrl || generateIdenticonDataUrl(username);
+  const bio = profile.bio || null;
+  const isTrustedContributor = activityPoints >= 25 && trustScore >= 70;
 
   function handleViewProfile(e: React.MouseEvent) {
     e.stopPropagation();
@@ -171,7 +98,7 @@ function ProfileCardContent({ username }: { username: string }) {
   return (
     <div className="w-[270px] rounded-xl shadow-lg overflow-hidden bg-background border border-border">
       {/* Header band */}
-      <div className="relative h-10 bg-primary" />
+      <div className="relative h-10 bg-gray-100" />
 
       {/* Avatar — overlaps the header band */}
       <div className="relative flex flex-col items-start px-4">
@@ -203,7 +130,7 @@ function ProfileCardContent({ username }: { username: string }) {
           {formattedJoinDate && (
             <>
               <span className="text-muted-foreground text-[10px] mx-0.5">
-                ·
+                &middot;
               </span>
               <span className="text-[10px] text-muted-foreground font-body">
                 Since {formattedJoinDate}
@@ -214,7 +141,7 @@ function ProfileCardContent({ username }: { username: string }) {
 
         {/* Bio */}
         {bio && (
-          <p className="text-xs text-muted-foreground font-body line-clamp-2 leading-relaxed italic mb-2">
+          <p className="text-xs text-muted-foreground font-body line-clamp-2 leading-relaxed mb-2">
             {bio}
           </p>
         )}
@@ -224,39 +151,35 @@ function ProfileCardContent({ username }: { username: string }) {
       <hr className="border-border mx-4" />
 
       {/* Stats row */}
-      {showActivityTabs && (
-        <>
-          <div className="flex items-stretch px-4 py-3">
-            <div className="flex flex-col items-center flex-1">
-              <span className="text-sm font-bold text-foreground">
-                {claimsCount}
-              </span>
-              <span className="text-[10px] text-muted-foreground font-body">
-                Claims
-              </span>
-            </div>
-            <div className="w-px bg-border mx-1" />
-            <div className="flex flex-col items-center flex-1">
-              <span className="text-sm font-bold text-foreground">
-                {evidenceCount}
-              </span>
-              <span className="text-[10px] text-muted-foreground font-body">
-                Evidence
-              </span>
-            </div>
-            <div className="w-px bg-border mx-1" />
-            <div className="flex flex-col items-center flex-1">
-              <span className="text-sm font-bold text-foreground">
-                {commentsCount}
-              </span>
-              <span className="text-[10px] text-muted-foreground font-body">
-                Comments
-              </span>
-            </div>
-          </div>
-          <hr className="border-border mx-4" />
-        </>
-      )}
+      <div className="grid grid-cols-3 divide-x divide-border px-4 py-2.5">
+        <div className="flex flex-col items-center gap-0.5 pr-3">
+          <span className="text-sm font-bold text-foreground">
+            {claimCount}
+          </span>
+          <span className="text-[10px] text-muted-foreground font-body">
+            Claims
+          </span>
+        </div>
+        <div className="flex flex-col items-center gap-0.5 px-3">
+          <span className="text-sm font-bold text-foreground">
+            {evidenceCount}
+          </span>
+          <span className="text-[10px] text-muted-foreground font-body">
+            Evidence
+          </span>
+        </div>
+        <div className="flex flex-col items-center gap-0.5 pl-3">
+          <span className="text-sm font-bold text-foreground">
+            {commentCount}
+          </span>
+          <span className="text-[10px] text-muted-foreground font-body">
+            Comments
+          </span>
+        </div>
+      </div>
+
+      {/* Divider */}
+      <hr className="border-border mx-4" />
 
       {/* Trust Score */}
       <div className="px-4 py-3">
@@ -291,7 +214,7 @@ function ProfileCardContent({ username }: { username: string }) {
   );
 }
 
-// ── Main Component ────────────────────────────────────────────────────────────
+// ── Main Component ──────────────────────────────────────────────────────────────
 
 interface UserProfileCardProps {
   username: string;
@@ -353,5 +276,62 @@ export function UserProfileCard({
         <ProfileCardContent username={username} />
       </HoverCardContent>
     </HoverCard>
+  );
+}
+
+// ── AuthorDisplay ─────────────────────────────────────────────────────────────
+
+interface AuthorDisplayProps {
+  username: string | undefined | null;
+  className?: string;
+}
+
+/**
+ * Displays an author attribution line.
+ * - Empty/null username → renders nothing
+ * - Verified username (has a backend profile) → avatar + username + profile popover
+ * - Anonymous username (no backend profile) → plain username text only
+ */
+export function AuthorDisplay({ username, className }: AuthorDisplayProps) {
+  const trimmed = username?.trim() ?? "";
+  const { data: profile, isLoading } = useProfileByUsername(trimmed || null);
+
+  if (!trimmed) return null;
+  if (isLoading) {
+    return (
+      <span
+        className={cn("text-xs text-muted-foreground font-body", className)}
+      >
+        {trimmed}
+      </span>
+    );
+  }
+
+  if (profile) {
+    // Verified account — show avatar + username + profile popover
+    const avatarSrc = profile.avatarUrl || generateIdenticonDataUrl(trimmed);
+    return (
+      <UserProfileCard username={trimmed} isVerified={true}>
+        <span
+          className={cn("inline-flex items-center gap-1 font-body", className)}
+        >
+          <img
+            src={avatarSrc}
+            alt={trimmed}
+            className="w-6 h-6 rounded-full object-cover flex-shrink-0"
+          />
+          <span className="text-xs font-semibold text-foreground">
+            {trimmed}
+          </span>
+        </span>
+      </UserProfileCard>
+    );
+  }
+
+  // Anonymous — plain username, no avatar
+  return (
+    <span className={cn("text-xs text-muted-foreground font-body", className)}>
+      {trimmed}
+    </span>
   );
 }

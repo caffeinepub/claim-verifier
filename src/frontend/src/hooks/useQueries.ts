@@ -1,5 +1,14 @@
+import type { Principal } from "@icp-sdk/core/principal";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { Claim, Evidence, Reply, SourceComment } from "../backend.d";
+import type {
+  Claim,
+  Evidence,
+  PrivacySettings,
+  Reply,
+  ReputationEvent,
+  SourceComment,
+  UserProfile,
+} from "../backend.d";
 import { useActor } from "./useActor";
 
 // ── Session ──────────────────────────────────────────────────────────────────
@@ -34,7 +43,6 @@ export function getOrInitUsername(): string {
 }
 
 export function useUsername(): string {
-  // Initialize once -- no reactive updates needed since username never changes mid-session
   return getOrInitUsername();
 }
 
@@ -46,7 +54,6 @@ export function useSessionId() {
     queryFn: async () => {
       const existing = localStorage.getItem(SESSION_KEY);
       if (existing) {
-        // Ensure username is also initialized alongside session
         getOrInitUsername();
         if (!localStorage.getItem("rebunked_session_created_at")) {
           localStorage.setItem(
@@ -59,7 +66,6 @@ export function useSessionId() {
       if (!actor) throw new Error("No actor");
       const id = await actor.generateSessionId();
       localStorage.setItem(SESSION_KEY, id);
-      // Initialize username at the same time as session
       localStorage.setItem(
         "rebunked_session_created_at",
         new Date().toISOString(),
@@ -143,6 +149,7 @@ export function useCreateClaim() {
       description,
       category,
       sessionId,
+      authorUsername,
       imageUrls = [],
       urls = [],
     }: {
@@ -150,12 +157,12 @@ export function useCreateClaim() {
       description: string;
       category: string;
       sessionId: string;
+      authorUsername: string;
       imageUrls?: string[];
       urls?: string[];
     }) => {
       if (!actor) throw new Error("No actor");
 
-      // Attempt OG image extraction from first URL if no images uploaded
       let ogThumbnailUrl = "";
       if (imageUrls.length === 0 && urls.length > 0 && urls[0]) {
         ogThumbnailUrl = await fetchOgImageFromUrl(urls[0]);
@@ -166,6 +173,7 @@ export function useCreateClaim() {
         description,
         category,
         sessionId,
+        authorUsername,
         imageUrls,
         urls,
         ogThumbnailUrl,
@@ -269,7 +277,7 @@ export function useSubmitVote() {
 
 // ── Evidence ──────────────────────────────────────────────────────────────────
 
-export function useEvidence(claimId: bigint | null) {
+export function useEvidenceForClaim(claimId: bigint | null) {
   const { actor, isFetching } = useActor();
   return useQuery<Evidence[]>({
     queryKey: ["evidence", claimId?.toString()],
@@ -289,26 +297,29 @@ export function useSubmitEvidence() {
     mutationFn: async ({
       claimId,
       sessionId,
+      authorUsername,
       text,
       imageUrls = [],
       urls = [],
-      evidenceType = "Unverified",
+      evidenceType,
     }: {
       claimId: bigint;
       sessionId: string;
+      authorUsername: string;
       text: string;
       imageUrls?: string[];
       urls?: string[];
-      evidenceType?: string;
+      evidenceType: string;
     }) => {
       if (!actor) throw new Error("No actor");
       const result = await actor.submitEvidence(
         claimId,
         sessionId,
+        authorUsername,
         text,
         imageUrls,
         urls,
-        evidenceType ?? "Unverified",
+        evidenceType,
       );
       if (result && "err" in result) {
         throw new Error(result.err as string);
@@ -319,11 +330,12 @@ export function useSubmitEvidence() {
       queryClient.invalidateQueries({
         queryKey: ["evidence", variables.claimId.toString()],
       });
+      queryClient.invalidateQueries({
+        queryKey: ["enhanced-tally", variables.claimId.toString()],
+      });
     },
   });
 }
-
-// ── Evidence Votes ────────────────────────────────────────────────────────────
 
 export function useEvidenceVoteTally(evidenceId: bigint | null) {
   const { actor, isFetching } = useActor();
@@ -397,7 +409,6 @@ export function useVoteEvidence() {
       queryClient.invalidateQueries({
         queryKey: ["evidence-vote", variables.evidenceId.toString()],
       });
-      // Also refresh the enhanced claim tally since evidence votes affect it
       if (variables.claimId != null) {
         queryClient.invalidateQueries({
           queryKey: ["enhanced-tally", variables.claimId.toString()],
@@ -581,13 +592,7 @@ export function useRestoreReply() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({
-      id,
-      password,
-    }: {
-      id: bigint;
-      password: string;
-    }) => {
+    mutationFn: async ({ id, password }: { id: bigint; password: string }) => {
       if (!actor) throw new Error("No actor");
       const result = await actor.restoreReply(id, password);
       if (result && result.__kind__ === "err") {
@@ -609,13 +614,7 @@ export function useAdminDeleteReply() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({
-      id,
-      password,
-    }: {
-      id: bigint;
-      password: string;
-    }) => {
+    mutationFn: async ({ id, password }: { id: bigint; password: string }) => {
       if (!actor) throw new Error("No actor");
       const result = await actor.adminDeleteReply(id, password);
       if (result && result.__kind__ === "err") {
@@ -665,18 +664,10 @@ export function useRestoreClaim() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({
-      id,
-      password,
-    }: {
-      id: bigint;
-      password: string;
-    }) => {
+    mutationFn: async ({ id, password }: { id: bigint; password: string }) => {
       if (!actor) throw new Error("No actor");
       const result = await (actor as any).restoreClaim(id, password);
-      if (result && "err" in result) {
-        throw new Error(result.err as string);
-      }
+      if (result && "err" in result) throw new Error(result.err as string);
       return result;
     },
     onSuccess: (_data, variables) => {
@@ -693,18 +684,10 @@ export function useRestoreEvidence() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({
-      id,
-      password,
-    }: {
-      id: bigint;
-      password: string;
-    }) => {
+    mutationFn: async ({ id, password }: { id: bigint; password: string }) => {
       if (!actor) throw new Error("No actor");
       const result = await (actor as any).restoreEvidence(id, password);
-      if (result && "err" in result) {
-        throw new Error(result.err as string);
-      }
+      if (result && "err" in result) throw new Error(result.err as string);
       return result;
     },
     onSuccess: (_data, variables) => {
@@ -721,18 +704,10 @@ export function useAdminDeleteClaim() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({
-      id,
-      password,
-    }: {
-      id: bigint;
-      password: string;
-    }) => {
+    mutationFn: async ({ id, password }: { id: bigint; password: string }) => {
       if (!actor) throw new Error("No actor");
       const result = await (actor as any).adminDeleteClaim(id, password);
-      if (result && "err" in result) {
-        throw new Error(result.err as string);
-      }
+      if (result && "err" in result) throw new Error(result.err as string);
       return result;
     },
     onSuccess: (_data, variables) => {
@@ -749,18 +724,10 @@ export function useAdminDeleteEvidence() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({
-      id,
-      password,
-    }: {
-      id: bigint;
-      password: string;
-    }) => {
+    mutationFn: async ({ id, password }: { id: bigint; password: string }) => {
       if (!actor) throw new Error("No actor");
       const result = await (actor as any).adminDeleteEvidence(id, password);
-      if (result && "err" in result) {
-        throw new Error(result.err as string);
-      }
+      if (result && "err" in result) throw new Error(result.err as string);
       return result;
     },
     onSuccess: (_data, variables) => {
@@ -853,7 +820,6 @@ export function useReplyLikeCounts(evidenceId: bigint | null) {
 
 // ── Trusted Sources ───────────────────────────────────────────────────────────
 
-// TrustedSourceInfo type derived from backend
 export type TrustedSourceInfo = {
   id: bigint;
   upvotes: bigint;
@@ -973,10 +939,7 @@ export function useAdminRemoveSource() {
     mutationFn: async ({
       sourceId,
       password,
-    }: {
-      sourceId: bigint;
-      password: string;
-    }) => {
+    }: { sourceId: bigint; password: string }) => {
       if (!actor) throw new Error("No actor");
       const result = await (actor as any).adminRemoveSource(sourceId, password);
       if (result && result.__kind__ === "err") {
@@ -1049,7 +1012,7 @@ export function useAdminSetPinnedComment() {
       }
       return result;
     },
-    onSuccess: (_data, _vars) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["trusted-sources"] });
     },
   });
@@ -1063,10 +1026,7 @@ export function useAdminFetchAboutBlurb() {
     mutationFn: async ({
       sourceId,
       password,
-    }: {
-      sourceId: bigint;
-      password: string;
-    }) => {
+    }: { sourceId: bigint; password: string }) => {
       if (!actor) throw new Error("No actor");
       const result = await (actor as any).adminFetchAboutBlurb(
         sourceId,
@@ -1075,7 +1035,7 @@ export function useAdminFetchAboutBlurb() {
       if (result && result.__kind__ === "err") {
         throw new Error(result.err as string);
       }
-      return result;
+      return result.__kind__ === "ok" ? (result.ok as string) : "";
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["trusted-sources"] });
@@ -1213,10 +1173,7 @@ export function useReportSourceComment() {
     mutationFn: async ({
       commentId,
       sessionId,
-    }: {
-      commentId: bigint;
-      sessionId: string;
-    }) => {
+    }: { commentId: bigint; sessionId: string }) => {
       if (!actor) throw new Error("No actor");
       const result = await actor.reportSourceComment(commentId, sessionId);
       if (result && result.__kind__ === "err") {
@@ -1248,5 +1205,133 @@ export function useWikipediaBlurb(domain: string | null) {
     },
     enabled: !!domain,
     staleTime: 1000 * 60 * 60,
+  });
+}
+
+// ── User Profiles ──────────────────────────────────────────────────────────────
+
+export type { UserProfile, ReputationEvent };
+
+export function useProfile(principal: Principal | null) {
+  const { actor, isFetching } = useActor();
+  return useQuery<UserProfile | null>({
+    queryKey: ["profile", principal?.toString()],
+    queryFn: async () => {
+      if (!actor || !principal) return null;
+      return actor.getProfile(principal);
+    },
+    enabled: !!actor && !isFetching && !!principal,
+    staleTime: 30_000,
+  });
+}
+
+export function useProfileByUsername(username: string | null) {
+  const { actor, isFetching } = useActor();
+  return useQuery<UserProfile | null>({
+    queryKey: ["profile-by-username", username],
+    queryFn: async () => {
+      if (!actor || !username) return null;
+      return actor.getProfileByUsername(username);
+    },
+    enabled: !!actor && !isFetching && !!username,
+    staleTime: 60_000,
+  });
+}
+
+export function useStatsByUsername(username: string | null) {
+  const { actor, isFetching } = useActor();
+  return useQuery<{
+    claimCount: bigint;
+    evidenceCount: bigint;
+    commentCount: bigint;
+    replyCount: bigint;
+    activityPoints: bigint;
+    trustScore: bigint;
+  } | null>({
+    queryKey: ["stats-by-username", username],
+    queryFn: async () => {
+      if (!actor || !username) return null;
+      return actor.getStatsByUsername(username);
+    },
+    enabled: !!actor && !isFetching && !!username,
+    staleTime: 60_000,
+  });
+}
+
+export function useUpdateProfile() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      principal,
+      username,
+      bio,
+      avatarUrl,
+      privacySettings,
+    }: {
+      principal: Principal;
+      username: string;
+      bio: string;
+      avatarUrl: string;
+      privacySettings: PrivacySettings;
+    }) => {
+      if (!actor) throw new Error("No actor");
+      const result = await actor.createOrUpdateProfile(
+        principal,
+        username,
+        bio,
+        avatarUrl,
+        privacySettings,
+      );
+      if (result.__kind__ === "err") throw new Error(result.err);
+      return result;
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: ["profile", variables.principal.toString()],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["profile-by-username", variables.username],
+      });
+    },
+  });
+}
+
+export function useReputationEvents(principal: Principal | null) {
+  const { actor, isFetching } = useActor();
+  return useQuery<ReputationEvent[]>({
+    queryKey: ["reputation-events", principal?.toString()],
+    queryFn: async () => {
+      if (!actor || !principal) return [];
+      return actor.getReputationEvents(principal);
+    },
+    enabled: !!actor && !isFetching && !!principal,
+    staleTime: 30_000,
+  });
+}
+
+export function useAddReputationEvent() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      principal,
+      action,
+      points,
+    }: {
+      principal: Principal;
+      action: string;
+      points: bigint;
+    }) => {
+      if (!actor) return;
+      return actor.addReputationEvent(principal, action, points);
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: ["reputation-events", variables.principal.toString()],
+      });
+    },
   });
 }
