@@ -166,7 +166,7 @@ function ArcMeter({ value }: { value: number }) {
         {/* Background arc */}
         <path
           d={`M ${startX} ${startY} A ${radius} ${radius} 0 0 1 ${endX} ${endY}`}
-          stroke="hsl(var(--border))"
+          stroke="#e5e7eb"
           strokeWidth={strokeWidth}
           fill="none"
           strokeLinecap="round"
@@ -174,7 +174,7 @@ function ArcMeter({ value }: { value: number }) {
         {/* Filled arc */}
         <path
           d={`M ${startX} ${startY} A ${radius} ${radius} 0 0 1 ${endX} ${endY}`}
-          stroke="hsl(var(--primary))"
+          stroke="#f97316"
           strokeWidth={strokeWidth}
           fill="none"
           strokeLinecap="round"
@@ -189,7 +189,7 @@ function ArcMeter({ value }: { value: number }) {
           dominantBaseline="middle"
           fontSize="11"
           fontWeight="700"
-          fill="hsl(var(--primary))"
+          fill="#f97316"
         >
           {value}%
         </text>
@@ -258,7 +258,7 @@ function ProfileCardContent({ username }: { username: string }) {
         />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="font-semibold text-sm text-foreground font-mono truncate">
+            <span className="font-semibold text-sm text-foreground truncate">
               {username}
             </span>
             {isTrustedContributor && (

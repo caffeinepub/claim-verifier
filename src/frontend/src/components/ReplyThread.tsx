@@ -311,7 +311,8 @@ function ReplyCard({
             </span>
           </UserProfileCard>
           <span className="text-xs text-muted-foreground font-body">
-            · {formatRelativeTime(reply.timestamp)}
+            {" · "}
+            {formatRelativeTime(reply.timestamp)}
           </span>
         </div>
 

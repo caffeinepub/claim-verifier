@@ -497,7 +497,7 @@ export function ProfilePage({ username, onBack }: ProfilePageProps) {
               </p>
             )}
             {lastActive && formattedJoinDate && (
-              <span className="text-muted-foreground/40 text-xs">·</span>
+              <span className="mx-1 text-muted-foreground/40 text-xs">·</span>
             )}
             {lastActive && (
               <p className="text-xs text-muted-foreground font-body">
@@ -1119,13 +1119,17 @@ export function ProfilePage({ username, onBack }: ProfilePageProps) {
                         {activityPoints} pts
                       </span>
                     </div>
-                    <span className="text-muted-foreground/40 text-xs">·</span>
+                    <span className="mx-1 text-muted-foreground/40 text-xs">
+                      ·
+                    </span>
                     <span
                       className={`text-xs font-body font-medium px-2 py-0.5 rounded-full ${tierConfig?.className ?? "bg-muted text-muted-foreground"}`}
                     >
                       {tier}
                     </span>
-                    <span className="text-muted-foreground/40 text-xs">·</span>
+                    <span className="mx-1 text-muted-foreground/40 text-xs">
+                      ·
+                    </span>
                     <span className="text-xs font-body text-muted-foreground">
                       <span className="font-semibold text-primary">
                         {trustScore}%
@@ -1176,7 +1180,7 @@ export function ProfilePage({ username, onBack }: ProfilePageProps) {
                               </span>
                               {event.relatedLink && event.relatedLabel && (
                                 <>
-                                  <span className="text-muted-foreground/40 text-[11px]">
+                                  <span className="mx-1 text-muted-foreground/40 text-[11px]">
                                     ·
                                   </span>
                                   <a

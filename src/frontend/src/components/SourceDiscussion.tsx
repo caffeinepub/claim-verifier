@@ -376,7 +376,8 @@ function CommentCard({
             </span>
           </UserProfileCard>
           <span className="text-xs text-muted-foreground font-body">
-            · {formatRelativeTime(comment.timestamp)}
+            {" · "}
+            {formatRelativeTime(comment.timestamp)}
           </span>
         </div>
 

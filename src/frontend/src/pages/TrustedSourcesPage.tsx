@@ -353,7 +353,7 @@ function SourceCard({
             );
           })()}
           Suggested by{" "}
-          <span className="font-mono">
+          <span>
             {(() => {
               if (currentPrincipalId) {
                 const storedPrincipal = localStorage.getItem(

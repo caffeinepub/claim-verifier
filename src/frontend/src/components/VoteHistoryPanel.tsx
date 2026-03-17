@@ -80,8 +80,10 @@ export function VoteHistoryPanel() {
                       >
                         {meta.label}
                       </span>
+                      <span className="text-muted-foreground/40 text-[11px]">
+                        ·
+                      </span>
                       <span className="text-[11px] text-muted-foreground font-body">
-                        ·{" "}
                         {formatRelativeTime(
                           BigInt(record.timestamp) * 1_000_000n,
                         )}

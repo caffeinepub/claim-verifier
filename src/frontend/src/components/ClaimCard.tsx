@@ -218,8 +218,8 @@ export function ClaimCard({
           <span className="text-xs text-muted-foreground font-body">
             {formatRelativeTime(claim.timestamp)}
           </span>
+          <span className="text-muted-foreground text-xs">·</span>
           <span className="text-xs text-muted-foreground font-body flex items-center gap-1">
-            ·{" "}
             {claim.sessionId === sessionId && claim.sessionId !== "seed" ? (
               <UserProfileCard
                 username={verifiedUsername ?? username}

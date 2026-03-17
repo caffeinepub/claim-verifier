@@ -584,8 +584,8 @@ export function ClaimDetail({
               <span className="text-xs text-muted-foreground font-body">
                 {formatRelativeTime(claim.timestamp)}
               </span>
+              <span className="text-muted-foreground text-xs">·</span>
               <span className="text-xs text-muted-foreground font-body flex items-center gap-1">
-                ·{" "}
                 {claim.sessionId === sessionId && claim.sessionId !== "seed" ? (
                   <UserProfileCard
                     username={verifiedUsername ?? username}
@@ -987,8 +987,8 @@ export function ClaimDetail({
                     <span>
                       {evidenceTypeFilter === "all"
                         ? "All"
-                        : evidenceTypeFilter}{" "}
-                      ·{" "}
+                        : evidenceTypeFilter}
+                      {" · "}
                       {sortOption === "most_upvotes"
                         ? "Most Upvotes"
                         : sortOption === "most_downvotes"
@@ -1106,7 +1106,8 @@ export function ClaimDetail({
                           )}
                         </span>
                         <span className="text-xs text-muted-foreground font-body">
-                          · {formatRelativeTime(item.timestamp)}
+                          {" · "}
+                          {formatRelativeTime(item.timestamp)}
                         </span>
                         <EvidenceTypeBadge
                           data-ocid={`evidence.badge.${idx + 1}`}
