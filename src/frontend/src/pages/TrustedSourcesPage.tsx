@@ -1,4 +1,8 @@
 import { UserAvatar } from "@/components/UserAvatar";
+import {
+  UserProfileCard,
+  isVerifiedUsername,
+} from "@/components/UserProfileCard";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -318,48 +322,36 @@ function SourceCard({
           {totalVotes} {totalVotes === 1 ? "vote" : "votes"}
         </span>
         <span className="text-[10px] font-body text-muted-foreground flex items-center gap-1">
-          <UserAvatar
-            username={(() => {
-              if (currentPrincipalId) {
-                const storedPrincipal = localStorage.getItem(
-                  `source_principal_${source.domain}`,
-                );
-                if (storedPrincipal === currentPrincipalId) {
-                  return (
-                    localStorage.getItem(
-                      `rebunked_username_${currentPrincipalId}`,
-                    ) ||
-                    source.suggestedByUsername ||
-                    "unknown"
-                  );
-                }
-              }
-              return source.suggestedByUsername || "unknown";
-            })()}
-            avatarUrl={(() => {
-              if (currentPrincipalId) {
-                const storedPrincipal = localStorage.getItem(
-                  `source_principal_${source.domain}`,
-                );
-                if (storedPrincipal === currentPrincipalId) {
-                  return (
-                    localStorage.getItem(
-                      `rebunked_avatar_${currentPrincipalId}`,
-                    ) ?? undefined
-                  );
-                }
-              }
-              return undefined;
-            })()}
-            size="sm"
-            isVerified={
-              !!(
-                currentPrincipalId &&
-                localStorage.getItem(`source_principal_${source.domain}`) ===
-                  currentPrincipalId
-              )
-            }
-          />
+          {(() => {
+            const isSugg = !!(
+              currentPrincipalId &&
+              localStorage.getItem(`source_principal_${source.domain}`) ===
+                currentPrincipalId
+            );
+            const sugUsername = isSugg
+              ? localStorage.getItem(
+                  `rebunked_username_${currentPrincipalId}`,
+                ) ||
+                source.suggestedByUsername ||
+                "unknown"
+              : source.suggestedByUsername || "unknown";
+            const sugAvatarUrl = isSugg
+              ? (localStorage.getItem(
+                  `rebunked_avatar_${currentPrincipalId}`,
+                ) ?? undefined)
+              : undefined;
+            const sugVerified = isSugg || isVerifiedUsername(sugUsername);
+            return (
+              <UserProfileCard username={sugUsername} isVerified={sugVerified}>
+                <UserAvatar
+                  username={sugUsername}
+                  avatarUrl={sugAvatarUrl}
+                  size="xs"
+                  isVerified={isSugg}
+                />
+              </UserProfileCard>
+            );
+          })()}
           Suggested by{" "}
           <span className="font-mono">
             {(() => {

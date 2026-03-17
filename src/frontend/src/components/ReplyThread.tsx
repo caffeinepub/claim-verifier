@@ -1,5 +1,9 @@
 import { ReportDialog } from "@/components/ReportDialog";
 import { UserAvatar } from "@/components/UserAvatar";
+import {
+  UserProfileCard,
+  isVerifiedUsername,
+} from "@/components/UserProfileCard";
 import { VerifiedBadge } from "@/components/VerifiedBadge";
 import { Button } from "@/components/ui/button";
 import {
@@ -285,16 +289,27 @@ function ReplyCard({
       <div className="group py-2">
         {/* Author + timestamp */}
         <div className="flex items-center gap-2 mb-1">
-          <UserAvatar
+          <UserProfileCard
             username={displayAuthor}
-            size="sm"
-            avatarUrl={displayAvatarUrl}
-            isVerified={isOwnReply ? !!verifiedUsername : false}
-          />
-          <span className="text-xs font-semibold text-foreground font-mono flex items-center gap-1">
-            {displayAuthor}
-            {isTrustedContributorSession(reply.sessionId) && <VerifiedBadge />}
-          </span>
+            isVerified={
+              isOwnReply
+                ? !!verifiedUsername
+                : isVerifiedUsername(displayAuthor)
+            }
+          >
+            <UserAvatar
+              username={displayAuthor}
+              size="sm"
+              avatarUrl={displayAvatarUrl}
+              isVerified={isOwnReply ? !!verifiedUsername : false}
+            />
+            <span className="text-xs font-semibold text-foreground font-mono flex items-center gap-1">
+              {displayAuthor}
+              {isTrustedContributorSession(reply.sessionId) && (
+                <VerifiedBadge />
+              )}
+            </span>
+          </UserProfileCard>
           <span className="text-xs text-muted-foreground font-body">
             · {formatRelativeTime(reply.timestamp)}
           </span>

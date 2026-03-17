@@ -41,6 +41,7 @@ import type { Claim } from "../backend.d";
 import { CategoryBadge } from "./CategoryBadge";
 import { ReportDialog } from "./ReportDialog";
 import { UserAvatar } from "./UserAvatar";
+import { UserProfileCard } from "./UserProfileCard";
 import { VerdictBar } from "./VerdictBar";
 
 interface ClaimCardProps {
@@ -220,7 +221,10 @@ export function ClaimCard({
           <span className="text-xs text-muted-foreground font-body flex items-center gap-1">
             ·{" "}
             {claim.sessionId === sessionId && claim.sessionId !== "seed" ? (
-              <>
+              <UserProfileCard
+                username={verifiedUsername ?? username}
+                isVerified={!!verifiedUsername}
+              >
                 <UserAvatar
                   username={verifiedUsername ?? username}
                   avatarUrl={
@@ -232,7 +236,7 @@ export function ClaimCard({
                   isVerified={!!verifiedUsername}
                 />
                 {verifiedUsername ?? username}
-              </>
+              </UserProfileCard>
             ) : (
               "Anonymous"
             )}

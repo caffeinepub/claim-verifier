@@ -1,6 +1,10 @@
 import type { Claim, Evidence } from "@/backend.d";
 import { SourceDiscussion } from "@/components/SourceDiscussion";
 import { UserAvatar } from "@/components/UserAvatar";
+import {
+  UserProfileCard,
+  isVerifiedUsername,
+} from "@/components/UserProfileCard";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import {
@@ -1406,26 +1410,39 @@ export function SourceDetailPage({
                 </div>
 
                 <div className="flex items-center gap-1.5 flex-wrap text-xs text-muted-foreground font-body">
-                  <UserAvatar
-                    username={
+                  {(() => {
+                    const sugUsername =
                       (isSuggester && currentPrincipalId
                         ? localStorage.getItem(
                             `rebunked_username_${currentPrincipalId}`,
                           ) ||
                           source.suggestedByUsername ||
                           "unknown"
-                        : source.suggestedByUsername) || "unknown"
-                    }
-                    avatarUrl={
+                        : source.suggestedByUsername) || "unknown";
+                    const sugAvatarUrl =
                       isSuggester && currentPrincipalId
                         ? (localStorage.getItem(
                             `rebunked_avatar_${currentPrincipalId}`,
                           ) ?? undefined)
-                        : undefined
-                    }
-                    size="sm"
-                    isVerified={!!(isSuggester && currentPrincipalId)}
-                  />
+                        : undefined;
+                    const sugIsVerified =
+                      !!(isSuggester && currentPrincipalId) ||
+                      isVerifiedUsername(sugUsername);
+                    return (
+                      <UserProfileCard
+                        username={sugUsername}
+                        isVerified={sugIsVerified}
+                      >
+                        <UserAvatar
+                          username={sugUsername}
+                          avatarUrl={sugAvatarUrl}
+                          size="sm"
+                          isVerified={!!(isSuggester && currentPrincipalId)}
+                        />
+                        <span className="font-mono">{sugUsername}</span>
+                      </UserProfileCard>
+                    );
+                  })()}
                   <span>
                     Suggested by{" "}
                     <span className="font-mono">

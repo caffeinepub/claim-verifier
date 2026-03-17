@@ -5,13 +5,14 @@ import { useState } from "react";
 interface UserAvatarProps {
   username?: string;
   avatarUrl?: string;
-  size?: "sm" | "md" | "lg";
+  size?: "xs" | "sm" | "md" | "lg";
   className?: string;
   /** Only render the avatar for verified (logged-in) users. If false/undefined, returns null. */
   isVerified?: boolean;
 }
 
 const sizeMap = {
+  xs: "h-5 w-5 min-w-[20px] min-h-[20px]",
   sm: "h-6 w-6 min-w-[24px] min-h-[24px]",
   md: "h-8 w-8 min-w-[32px] min-h-[32px]",
   lg: "h-20 w-20 min-w-[80px] min-h-[80px]",

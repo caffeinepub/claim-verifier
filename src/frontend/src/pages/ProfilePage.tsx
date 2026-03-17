@@ -33,6 +33,7 @@ import {
   Minus,
   Pencil,
   Shield,
+  ShieldCheck,
   Star,
   TrendingDown,
   TrendingUp,
@@ -615,14 +616,17 @@ export function ProfilePage({ username, onBack }: ProfilePageProps) {
 
           {/* Trust Score — separate quality metric block */}
           <div className="bg-primary/[0.04] rounded-xl px-5 py-4">
-            <div className="flex items-baseline justify-between mb-2">
-              <div>
-                <span className="text-xs font-semibold font-body text-foreground">
-                  Trust Score
-                </span>
-                <p className="text-[11px] text-muted-foreground font-body mt-0.5">
-                  How accurate your contributions have been
-                </p>
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-start gap-2">
+                <ShieldCheck className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
+                <div>
+                  <span className="text-xs font-semibold font-body text-foreground">
+                    Trust Score
+                  </span>
+                  <p className="text-[11px] text-muted-foreground font-body mt-0.5">
+                    How accurate your contributions have been
+                  </p>
+                </div>
               </div>
               <span className="text-xl font-bold font-display text-primary leading-none">
                 {trustScore}%

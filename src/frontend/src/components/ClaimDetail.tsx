@@ -81,6 +81,7 @@ function sortEvidence(
   }
 }
 import { UserAvatar } from "@/components/UserAvatar";
+import { UserProfileCard } from "@/components/UserProfileCard";
 import { VerifiedBadge } from "@/components/VerifiedBadge";
 import { Input } from "@/components/ui/input";
 import {
@@ -586,7 +587,10 @@ export function ClaimDetail({
               <span className="text-xs text-muted-foreground font-body flex items-center gap-1">
                 ·{" "}
                 {claim.sessionId === sessionId && claim.sessionId !== "seed" ? (
-                  <>
+                  <UserProfileCard
+                    username={verifiedUsername ?? username}
+                    isVerified={!!verifiedUsername}
+                  >
                     <UserAvatar
                       username={verifiedUsername ?? username}
                       avatarUrl={
@@ -596,7 +600,7 @@ export function ClaimDetail({
                       isVerified={!!verifiedUsername}
                     />
                     {verifiedUsername ?? username}
-                  </>
+                  </UserProfileCard>
                 ) : (
                   "Anonymous"
                 )}

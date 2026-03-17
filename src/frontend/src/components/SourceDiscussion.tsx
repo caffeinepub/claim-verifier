@@ -1,6 +1,10 @@
 import { ImageUploader } from "@/components/ImageUploader";
 import { UrlInputList } from "@/components/UrlInputList";
 import { UserAvatar } from "@/components/UserAvatar";
+import {
+  UserProfileCard,
+  isVerifiedUsername,
+} from "@/components/UserProfileCard";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -353,15 +357,24 @@ function CommentCard({
       <div className="group py-2">
         {/* Author + timestamp */}
         <div className="flex items-center gap-2 mb-1">
-          <UserAvatar
+          <UserProfileCard
             username={displayAuthor}
-            size="sm"
-            avatarUrl={displayAvatarUrl}
-            isVerified={isOwnComment ? !!verifiedUsername : false}
-          />
-          <span className="text-xs font-semibold text-foreground font-mono">
-            {displayAuthor}
-          </span>
+            isVerified={
+              isOwnComment
+                ? !!verifiedUsername
+                : isVerifiedUsername(displayAuthor)
+            }
+          >
+            <UserAvatar
+              username={displayAuthor}
+              size="sm"
+              avatarUrl={displayAvatarUrl}
+              isVerified={isOwnComment ? !!verifiedUsername : false}
+            />
+            <span className="text-xs font-semibold text-foreground font-mono">
+              {displayAuthor}
+            </span>
+          </UserProfileCard>
           <span className="text-xs text-muted-foreground font-body">
             · {formatRelativeTime(comment.timestamp)}
           </span>
