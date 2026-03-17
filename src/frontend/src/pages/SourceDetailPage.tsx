@@ -1389,6 +1389,7 @@ export function SourceDetailPage({
                 </div>
 
                 <div className="flex items-center gap-1.5 flex-wrap text-xs text-muted-foreground font-body">
+                  <span>Suggested by</span>
                   {(() => {
                     const sugUsername =
                       (isSuggester && currentPrincipalId

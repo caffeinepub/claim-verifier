@@ -62,7 +62,7 @@ const categoryConfig: Record<string, { style: string; icon: LucideIcon }> = {
     icon: Eye,
   },
   General: {
-    style: "bg-secondary text-white border-border",
+    style: "bg-slate-600 text-white border-slate-500",
     icon: Globe,
   },
 };

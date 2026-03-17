@@ -43,17 +43,11 @@ function getTierInfo(points: number): {
   if (points >= 500)
     return { label: "Expert", className: "bg-purple-100 text-purple-700" };
   if (points >= 100)
-    return {
-      label: "Investigator",
-      className: "bg-blue-100 text-blue-700",
-    };
+    return { label: "Investigator", className: "bg-blue-100 text-blue-700" };
   if (points >= 25)
     return { label: "Analyst", className: "bg-green-100 text-green-700" };
   if (points >= 5)
-    return {
-      label: "Contributor",
-      className: "bg-yellow-100 text-yellow-700",
-    };
+    return { label: "Contributor", className: "bg-yellow-100 text-yellow-700" };
   return { label: "Newcomer", className: "bg-gray-100 text-gray-500" };
 }
 
@@ -135,79 +129,6 @@ function loadProfileData(username: string) {
   };
 }
 
-// ── Circular Arc Meter ───────────────────────────────────────────────────────
-
-function ArcMeter({ value }: { value: number }) {
-  // Semi-circle arc from 180° to 0° (left to right)
-  const radius = 28;
-  const strokeWidth = 5;
-  const cx = 36;
-  const cy = 36;
-  const circumference = Math.PI * radius; // half circle
-  const clampedValue = Math.min(100, Math.max(0, value));
-  const filled = (clampedValue / 100) * circumference;
-
-  // Arc starts at left (180°) and sweeps clockwise
-  const startX = cx - radius;
-  const startY = cy;
-  const endX = cx + radius;
-  const endY = cy;
-
-  return (
-    <div className="flex flex-col items-center">
-      <svg
-        width="72"
-        height="42"
-        viewBox="0 0 72 42"
-        fill="none"
-        aria-label="Trust score meter"
-        role="img"
-      >
-        {/* Background arc */}
-        <path
-          d={`M ${startX} ${startY} A ${radius} ${radius} 0 0 1 ${endX} ${endY}`}
-          stroke="#e5e7eb"
-          strokeWidth={strokeWidth}
-          fill="none"
-          strokeLinecap="round"
-        />
-        {/* Filled arc */}
-        <path
-          d={`M ${startX} ${startY} A ${radius} ${radius} 0 0 1 ${endX} ${endY}`}
-          stroke="#f97316"
-          strokeWidth={strokeWidth}
-          fill="none"
-          strokeLinecap="round"
-          strokeDasharray={`${filled} ${circumference}`}
-          style={{ transition: "stroke-dasharray 0.5s ease" }}
-        />
-        {/* Percentage text */}
-        <text
-          x={cx}
-          y={cy - 2}
-          textAnchor="middle"
-          dominantBaseline="middle"
-          fontSize="11"
-          fontWeight="700"
-          fill="#f97316"
-        >
-          {value}%
-        </text>
-        <text
-          x={cx}
-          y={cy + 10}
-          textAnchor="middle"
-          dominantBaseline="middle"
-          fontSize="7"
-          fill="hsl(var(--muted-foreground))"
-        >
-          trust
-        </text>
-      </svg>
-    </div>
-  );
-}
-
 // ── Card Content ──────────────────────────────────────────────────────────────
 
 function ProfileCardContent({ username }: { username: string }) {
@@ -248,49 +169,65 @@ function ProfileCardContent({ username }: { username: string }) {
   }
 
   return (
-    <div className="w-72 p-4 bg-background border border-border rounded-xl shadow-lg">
-      {/* Identity row */}
-      <div className="flex items-center gap-3 mb-3">
-        <img
-          src={avatarSrc}
-          alt={username}
-          className="w-10 h-10 rounded-full object-cover flex-shrink-0"
-        />
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="font-semibold text-sm text-foreground truncate">
-              {username}
-            </span>
-            {isTrustedContributor && (
-              <CheckCircle className="w-3.5 h-3.5 text-primary flex-shrink-0" />
-            )}
-          </div>
+    <div className="w-[270px] rounded-xl shadow-lg overflow-hidden bg-background border border-border">
+      {/* Header band */}
+      <div className="relative h-10 bg-primary" />
+
+      {/* Avatar — overlaps the header band */}
+      <div className="relative flex flex-col items-start px-4">
+        <div className="-mt-6 mb-2">
+          <img
+            src={avatarSrc}
+            alt={username}
+            className="w-12 h-12 rounded-full object-cover border-2 border-white shadow-sm"
+          />
+        </div>
+
+        {/* Username + badge */}
+        <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
+          <span className="font-bold text-sm text-foreground leading-tight">
+            {username}
+          </span>
+          {isTrustedContributor && (
+            <CheckCircle className="w-3.5 h-3.5 text-primary flex-shrink-0" />
+          )}
+        </div>
+
+        {/* Tier + join date */}
+        <div className="flex items-center gap-1.5 flex-wrap mb-2">
           <Badge
-            className={`mt-0.5 text-[10px] px-1.5 py-0 rounded-full font-body ${tier.className} border-0`}
+            className={`text-[10px] px-1.5 py-0 rounded-full font-body border-0 ${tier.className}`}
           >
             {tier.label}
           </Badge>
           {formattedJoinDate && (
-            <p className="text-[10px] text-muted-foreground font-body mt-0.5">
-              Member since {formattedJoinDate}
-            </p>
+            <>
+              <span className="text-muted-foreground text-[10px] mx-0.5">
+                ·
+              </span>
+              <span className="text-[10px] text-muted-foreground font-body">
+                Since {formattedJoinDate}
+              </span>
+            </>
           )}
         </div>
+
+        {/* Bio */}
+        {bio && (
+          <p className="text-xs text-muted-foreground font-body line-clamp-2 leading-relaxed italic mb-2">
+            {bio}
+          </p>
+        )}
       </div>
 
-      {/* Bio */}
-      {bio && (
-        <p className="text-xs text-muted-foreground font-body line-clamp-2 mb-3 leading-relaxed">
-          {bio}
-        </p>
-      )}
+      {/* Divider */}
+      <hr className="border-border mx-4" />
 
-      {/* Stats row + Arc meter */}
-      {showActivityTabs ? (
-        <div className="flex items-center justify-between mb-3">
-          {/* Claims / Evidence / Comments */}
-          <div className="flex gap-3">
-            <div className="flex flex-col items-center">
+      {/* Stats row */}
+      {showActivityTabs && (
+        <>
+          <div className="flex items-stretch px-4 py-3">
+            <div className="flex flex-col items-center flex-1">
               <span className="text-sm font-bold text-foreground">
                 {claimsCount}
               </span>
@@ -298,8 +235,8 @@ function ProfileCardContent({ username }: { username: string }) {
                 Claims
               </span>
             </div>
-            <div className="w-px bg-border" />
-            <div className="flex flex-col items-center">
+            <div className="w-px bg-border mx-1" />
+            <div className="flex flex-col items-center flex-1">
               <span className="text-sm font-bold text-foreground">
                 {evidenceCount}
               </span>
@@ -307,8 +244,8 @@ function ProfileCardContent({ username }: { username: string }) {
                 Evidence
               </span>
             </div>
-            <div className="w-px bg-border" />
-            <div className="flex flex-col items-center">
+            <div className="w-px bg-border mx-1" />
+            <div className="flex flex-col items-center flex-1">
               <span className="text-sm font-bold text-foreground">
                 {commentsCount}
               </span>
@@ -317,27 +254,39 @@ function ProfileCardContent({ username }: { username: string }) {
               </span>
             </div>
           </div>
-
-          {/* Arc trust score meter */}
-          <ArcMeter value={trustScore} />
-        </div>
-      ) : (
-        /* If activity tabs are hidden, still show trust score arc */
-        <div className="flex justify-center mb-3">
-          <ArcMeter value={trustScore} />
-        </div>
+          <hr className="border-border mx-4" />
+        </>
       )}
 
+      {/* Trust Score */}
+      <div className="px-4 py-3">
+        <div className="flex items-center justify-between mb-1.5">
+          <span className="text-xs font-semibold text-foreground">
+            Trust Score
+          </span>
+          <span className="text-xs font-bold text-primary">{trustScore}%</span>
+        </div>
+        {/* Progress bar */}
+        <div className="w-full h-1.5 rounded-full bg-muted overflow-hidden">
+          <div
+            className="h-full rounded-full bg-primary transition-all duration-500"
+            style={{ width: `${trustScore}%` }}
+          />
+        </div>
+      </div>
+
       {/* View Profile button */}
-      <Button
-        variant="outline"
-        size="sm"
-        className="w-full text-xs hover:border-primary hover:text-primary transition-colors"
-        onClick={handleViewProfile}
-        data-ocid="profile_card.link"
-      >
-        View Profile
-      </Button>
+      <div className="px-4 pb-3">
+        <Button
+          variant="outline"
+          size="sm"
+          className="w-full text-xs hover:border-primary hover:text-primary transition-colors"
+          onClick={handleViewProfile}
+          data-ocid="profile_card.link"
+        >
+          View Profile
+        </Button>
+      </div>
     </div>
   );
 }
