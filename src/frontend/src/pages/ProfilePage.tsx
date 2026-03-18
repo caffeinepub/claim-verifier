@@ -726,7 +726,7 @@ export function ProfilePage({ username, onBack }: ProfilePageProps) {
         <div className="grid grid-cols-4 bg-muted/50 rounded-xl px-2 py-4">
           <div className="flex flex-col items-center gap-1">
             <span className="text-xl font-bold font-display text-foreground leading-none">
-              {isOwnProfile ? voteCount : "—"}
+              {isOwnProfile ? voteCount : otherUserVotes.length}
             </span>
             <span className="text-[11px] text-muted-foreground font-body">
               Votes

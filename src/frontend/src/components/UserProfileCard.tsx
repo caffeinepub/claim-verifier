@@ -163,6 +163,7 @@ function ProfileCardContent({ username }: { username: string }) {
             Claims
           </span>
         </div>
+        <div className="w-px bg-gray-200 self-stretch my-1.5" />
         <div className="flex-1 flex flex-col items-center gap-0.5 py-2.5">
           <span className="text-sm font-bold text-foreground">
             {evidenceCount}
@@ -171,6 +172,7 @@ function ProfileCardContent({ username }: { username: string }) {
             Evidence
           </span>
         </div>
+        <div className="w-px bg-gray-200 self-stretch my-1.5" />
         <div className="flex-1 flex flex-col items-center gap-0.5 py-2.5">
           <span className="text-sm font-bold text-foreground">
             {commentCount}
@@ -180,9 +182,6 @@ function ProfileCardContent({ username }: { username: string }) {
           </span>
         </div>
       </div>
-
-      {/* Divider before trust score */}
-      <hr className="border-border mx-4" />
 
       {/* Trust Score */}
       <div className="px-4 py-3">
