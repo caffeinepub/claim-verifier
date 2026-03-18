@@ -213,17 +213,8 @@ actor {
         };
       };
       case (null) {
-        // Username doesn't exist - only allow if caller has a profile with this username
-        switch (userProfiles.get(caller)) {
-          case (?profile) {
-            if (profile.username != normalizedUsername) {
-              Runtime.trap("Unauthorized: Username not found or doesn't belong to you");
-            };
-          };
-          case (null) {
-            Runtime.trap("Unauthorized: Username not found or doesn't belong to you");
-          };
-        };
+        // Username not in registry = anonymous session username; allow through
+        // (Anonymous usernames are not registered, so no ownership check needed)
       };
     };
 

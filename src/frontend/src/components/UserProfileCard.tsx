@@ -12,19 +12,11 @@ import { cn } from "@/lib/utils";
 import { generateIdenticonDataUrl } from "@/utils/identicon";
 import { useQueryClient } from "@tanstack/react-query";
 import { CheckCircle } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect } from "react";
 
 // ── Registry Helper ─────────────────────────────────────────────────────────
 
-/**
- * Checks if a username belongs to a verified account by querying the backend.
- * Falls back to a synchronous check for components that can't await.
- */
 export function isVerifiedUsername(_username: string): boolean {
-  // A best-effort sync check: if the username exists in the backend's profile system
-  // we treat it as potentially verified. The profile card handles the async check.
-  // Return false here; UserProfileCard will show the popover only when explicitly
-  // passed isVerified=true, or the backend confirms the profile exists.
   return false;
 }
 
@@ -50,7 +42,6 @@ function getTierInfo(points: number): {
 function ProfileCardContent({ username }: { username: string }) {
   const queryClient = useQueryClient();
 
-  // Invalidate on every mount so stats are always fresh
   useEffect(() => {
     if (username) {
       queryClient.invalidateQueries({
@@ -162,12 +153,9 @@ function ProfileCardContent({ username }: { username: string }) {
         )}
       </div>
 
-      {/* Divider */}
-      <hr className="border-border mx-4" />
-
-      {/* Stats row */}
-      <div className="grid grid-cols-3 divide-x divide-border px-4 py-2.5">
-        <div className="flex flex-col items-center gap-0.5 pr-3">
+      {/* Stats row — light gray background container */}
+      <div className="mx-4 my-2.5 bg-gray-100 rounded-lg flex">
+        <div className="flex-1 flex flex-col items-center gap-0.5 py-2.5">
           <span className="text-sm font-bold text-foreground">
             {claimCount}
           </span>
@@ -175,7 +163,7 @@ function ProfileCardContent({ username }: { username: string }) {
             Claims
           </span>
         </div>
-        <div className="flex flex-col items-center gap-0.5 px-3">
+        <div className="flex-1 flex flex-col items-center gap-0.5 py-2.5">
           <span className="text-sm font-bold text-foreground">
             {evidenceCount}
           </span>
@@ -183,7 +171,7 @@ function ProfileCardContent({ username }: { username: string }) {
             Evidence
           </span>
         </div>
-        <div className="flex flex-col items-center gap-0.5 pl-3">
+        <div className="flex-1 flex flex-col items-center gap-0.5 py-2.5">
           <span className="text-sm font-bold text-foreground">
             {commentCount}
           </span>
@@ -193,7 +181,7 @@ function ProfileCardContent({ username }: { username: string }) {
         </div>
       </div>
 
-      {/* Divider */}
+      {/* Divider before trust score */}
       <hr className="border-border mx-4" />
 
       {/* Trust Score */}
@@ -204,7 +192,6 @@ function ProfileCardContent({ username }: { username: string }) {
           </span>
           <span className="text-xs font-bold text-primary">{trustScore}%</span>
         </div>
-        {/* Progress bar */}
         <div className="w-full h-1.5 rounded-full bg-muted overflow-hidden">
           <div
             className="h-full rounded-full bg-primary transition-all duration-500"
@@ -243,40 +230,43 @@ export function UserProfileCard({
   children,
 }: UserProfileCardProps) {
   const isMobile = useIsMobile();
-  const [open, setOpen] = useState(false);
-
-  const handleTriggerClick = useCallback(
-    (e: React.MouseEvent) => {
-      e.stopPropagation();
-      if (isMobile) {
-        setOpen((prev) => !prev);
-      }
-    },
-    [isMobile],
-  );
 
   // No popover for anonymous users
   if (!isVerified) {
     return <>{children}</>;
   }
 
+  // Mobile: tap the author row to navigate to profile
+  if (isMobile) {
+    function handleMobileClick(e: React.MouseEvent) {
+      e.stopPropagation();
+      window.history.pushState(
+        {},
+        "",
+        `/profile/${encodeURIComponent(username)}`,
+      );
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    }
+
+    return (
+      // biome-ignore lint/a11y/useKeyWithClickEvents: mobile tap nav
+      <span
+        className="inline-flex items-center gap-1.5 cursor-pointer"
+        onClick={handleMobileClick}
+      >
+        {children}
+      </span>
+    );
+  }
+
+  // Desktop: hover card popover
   return (
-    <HoverCard
-      open={open}
-      onOpenChange={setOpen}
-      openDelay={200}
-      closeDelay={100}
-    >
+    <HoverCard openDelay={200} closeDelay={100}>
       <HoverCardTrigger asChild>
         {/* biome-ignore lint/a11y/useKeyWithClickEvents: hover card trigger */}
         <span
           className="inline-flex items-center gap-1.5 cursor-pointer"
-          onClick={handleTriggerClick}
-          onTouchEnd={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            setOpen((prev) => !prev);
-          }}
+          onClick={(e) => e.stopPropagation()}
         >
           {children}
         </span>
@@ -304,7 +294,7 @@ interface AuthorDisplayProps {
 /**
  * Displays an author attribution line.
  * - Empty/null username → renders nothing
- * - Verified username (has a backend profile) → avatar + username + profile popover
+ * - Verified username (has a backend profile) → avatar + username + profile popover/nav
  * - Anonymous username (no backend profile) → plain username text only
  */
 export function AuthorDisplay({ username, className }: AuthorDisplayProps) {
@@ -323,7 +313,6 @@ export function AuthorDisplay({ username, className }: AuthorDisplayProps) {
   }
 
   if (profile) {
-    // Verified account — show avatar + username + profile popover
     const avatarSrc = profile.avatarUrl || generateIdenticonDataUrl(trimmed);
     return (
       <UserProfileCard username={trimmed} isVerified={true}>
@@ -343,7 +332,6 @@ export function AuthorDisplay({ username, className }: AuthorDisplayProps) {
     );
   }
 
-  // Anonymous — plain username, no avatar
   return (
     <span className={cn("text-xs text-muted-foreground font-body", className)}>
       {trimmed}
