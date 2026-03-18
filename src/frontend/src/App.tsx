@@ -719,7 +719,7 @@ export default function App() {
             <div className="flex items-center gap-2">
               <RotateCcw className="h-3.5 w-3.5 text-muted-foreground" />
               <span className="text-xs text-muted-foreground font-body">
-                Anonymous \u00b7 Decentralized \u00b7 Community-Verified
+                Anonymous · Decentralized · Community-Verified
               </span>
             </div>
             {(isVerified ? username : anonUsername) && (
@@ -732,14 +732,14 @@ export default function App() {
             )}
             <div className="flex items-center gap-3">
               <p className="text-xs text-muted-foreground font-body">
-                \u00a9 {new Date().getFullYear()}.{" "}
+                © {new Date().getFullYear()}.{" "}
                 <a
                   href={`https://caffeine.ai?utm_source=caffeine-footer&utm_medium=referral&utm_content=${encodeURIComponent(window.location.hostname)}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="hover:text-foreground transition-colors"
                 >
-                  Built with \u2764 using caffeine.ai
+                  Built with ❤ using caffeine.ai
                 </a>
               </p>
               <button

@@ -284,8 +284,8 @@ export interface VerifiedAccountState {
   login: () => void;
   logout: () => void;
   setUsername: (name: string) => Promise<{ success: boolean; error?: string }>;
-  setAvatarUrl: (url: string) => void;
-  setBio: (bio: string) => void;
+  setAvatarUrl: (url: string) => Promise<void>;
+  setBio: (bio: string) => Promise<void>;
   recordVerifiedVote: (
     claimId: string,
     sessionId: string,
@@ -457,43 +457,71 @@ export function useVerifiedAccount(): VerifiedAccountState {
   );
 
   const setAvatarUrl = useCallback(
-    (url: string) => {
-      if (!principalId || !actor || !principal) return;
+    async (url: string): Promise<void> => {
+      if (!principalId || !actor || !principal) {
+        throw new Error("Not logged in");
+      }
+      const currentUsername = profile?.username;
+      if (!currentUsername) {
+        throw new Error("Profile not loaded");
+      }
       const currentPrivacy =
         profile?.privacySettings ?? DEFAULT_PRIVACY_SETTINGS;
-      actor
-        .createOrUpdateProfile(
-          principal,
-          profile?.username ?? "",
-          profile?.bio ?? "",
-          url,
-          currentPrivacy,
-        )
-        .then(() => {
-          queryClient.invalidateQueries({ queryKey: ["profile", principalId] });
-        })
-        .catch(() => {});
+      const result = await actor.createOrUpdateProfile(
+        principal,
+        currentUsername,
+        profile?.bio ?? "",
+        url,
+        currentPrivacy,
+      );
+      if (result.__kind__ === "err") {
+        throw new Error(result.err);
+      }
+      queryClient.setQueryData(
+        ["profile", principalId],
+        (old: UserProfile | null) => {
+          if (!old) return old;
+          return { ...old, avatarUrl: url };
+        },
+      );
+      await queryClient.invalidateQueries({
+        queryKey: ["profile", principalId],
+      });
     },
     [principalId, actor, principal, profile, queryClient],
   );
 
   const setBio = useCallback(
-    (bioText: string) => {
-      if (!principalId || !actor || !principal) return;
+    async (bioText: string): Promise<void> => {
+      if (!principalId || !actor || !principal) {
+        throw new Error("Not logged in");
+      }
+      const currentUsername = profile?.username;
+      if (!currentUsername) {
+        throw new Error("Profile not loaded");
+      }
       const currentPrivacy =
         profile?.privacySettings ?? DEFAULT_PRIVACY_SETTINGS;
-      actor
-        .createOrUpdateProfile(
-          principal,
-          profile?.username ?? "",
-          bioText,
-          profile?.avatarUrl ?? "",
-          currentPrivacy,
-        )
-        .then(() => {
-          queryClient.invalidateQueries({ queryKey: ["profile", principalId] });
-        })
-        .catch(() => {});
+      const result = await actor.createOrUpdateProfile(
+        principal,
+        currentUsername,
+        bioText,
+        profile?.avatarUrl ?? "",
+        currentPrivacy,
+      );
+      if (result.__kind__ === "err") {
+        throw new Error(result.err);
+      }
+      queryClient.setQueryData(
+        ["profile", principalId],
+        (old: UserProfile | null) => {
+          if (!old) return old;
+          return { ...old, bio: bioText };
+        },
+      );
+      await queryClient.invalidateQueries({
+        queryKey: ["profile", principalId],
+      });
     },
     [principalId, actor, principal, profile, queryClient],
   );

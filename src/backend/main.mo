@@ -15,8 +15,6 @@ import MixinStorage "blob-storage/Mixin";
 import AccessControl "authorization/access-control";
 import MixinAuthorization "authorization/MixinAuthorization";
 
-
-
 actor {
   include MixinStorage();
 
@@ -123,6 +121,16 @@ actor {
     sessionId : Text;
   };
 
+  // New user vote-by-username tracking type
+  public type UserVote = {
+    claimId : Nat;
+    sessionId : Text;
+    verdict : Text;
+    authorUsername : Text;
+    claimTitle : Text;
+    timestamp : Int;
+  };
+
   // New user profile/reputation structs
   public type PrivacySettings = {
     showClaims : Bool;
@@ -174,6 +182,9 @@ actor {
   var sourceCount : Nat = 0;
   var sourceCommentCount : Nat = 0;
 
+  // New votes-by-username tracking
+  var userVotesArray : [UserVote] = [];
+
   let claimCooldownsList = List.empty<(Text, Int)>();
   let evidenceCooldownsList = List.empty<(Text, Int)>();
   let replyCooldownsList = List.empty<(Text, Int)>();
@@ -189,6 +200,51 @@ actor {
   // Trusted source thresholds
   let SOURCE_MIN_VOTES : Nat = 25;
   let SOURCE_MIN_UPVOTE_PCT : Nat = 60;
+
+  // Record vote by username (additive function)
+  // Authorization: Caller must own the username they're voting as
+  public shared ({ caller }) func recordVoteWithUsername(claimId : Nat, sessionId : Text, verdict : Text, authorUsername : Text, claimTitle : Text) : async () {
+    // Verify the caller owns the username they're trying to vote as
+    let normalizedUsername = authorUsername.trim(#char ' ');
+    switch (usernames.get(normalizedUsername)) {
+      case (?ownerPrincipal) {
+        if (caller != ownerPrincipal and not AccessControl.isAdmin(accessControlState, caller)) {
+          Runtime.trap("Unauthorized: Can only record votes for your own username");
+        };
+      };
+      case (null) {
+        // Username doesn't exist - only allow if caller has a profile with this username
+        switch (userProfiles.get(caller)) {
+          case (?profile) {
+            if (profile.username != normalizedUsername) {
+              Runtime.trap("Unauthorized: Username not found or doesn't belong to you");
+            };
+          };
+          case (null) {
+            Runtime.trap("Unauthorized: Username not found or doesn't belong to you");
+          };
+        };
+      };
+    };
+
+    let vote : UserVote = {
+      claimId;
+      sessionId;
+      verdict;
+      authorUsername = normalizedUsername;
+      claimTitle;
+      timestamp = Time.now();
+    };
+    let list = List.fromArray<UserVote>(userVotesArray);
+    list.add(vote);
+    userVotesArray := list.toArray();
+  };
+
+  // Get all votes by a specific username
+  // Authorization: Public read access
+  public query ({ caller = _ }) func getVotesByUsername(username : Text) : async [UserVote] {
+    userVotesArray.filter(func(v : UserVote) : Bool { v.authorUsername == username });
+  };
 
   // Profile/reputation query functions
   // Create or update a user profile (checks username uniqueness and previously active)
@@ -238,21 +294,27 @@ actor {
         #ok;
       };
       case (?existing) {
-        // Existing user (check last username change)
-        let timeSinceLastChange = now - existing.usernameLastChanged;
-        if (timeSinceLastChange < 86_400_000_000_000) {
-          return #err("Usernames can only be changed once per day");
+        // Only enforce username cooldown if the username is actually changing
+        let isUsernameChanging = normalizedUsername != existing.username;
+        if (isUsernameChanging) {
+          let timeSinceLastChange = now - existing.usernameLastChanged;
+          if (timeSinceLastChange < 86_400_000_000_000) {
+            return #err("Usernames can only be changed once per day");
+          };
         };
+        let newUsernameLastChanged = if (isUsernameChanging) { now } else { existing.usernameLastChanged };
         let profile : UserProfile = {
           username = normalizedUsername;
           bio;
           avatarUrl;
           joinDate = existing.joinDate;
           lastActive = now;
-          usernameLastChanged = now;
+          usernameLastChanged = newUsernameLastChanged;
           privacySettings;
         };
-        updateUsernameRegistry(principal, normalizedUsername);
+        if (isUsernameChanging) {
+          updateUsernameRegistry(principal, normalizedUsername);
+        };
         userProfiles.add(principal, profile);
         #ok;
       };
@@ -529,7 +591,7 @@ actor {
       if (bonus > maxBonus) { maxBonus := bonus };
     };
     if (maxBonus == 0) return netScore;
-    // Apply bonus: netScore * (1000 + maxBonus) / 1000, using integer math
+    // Apply bonus: netScore * (1000 + maxBonus).toInt() / 1000, using integer math
     let adjusted = (netScore * (1000 + maxBonus).toInt()) / 1000;
     adjusted;
   };
@@ -1630,3 +1692,4 @@ actor {
     { claimCount; evidenceCount; commentCount; replyCount; activityPoints; trustScore = 0 };
   };
 };
+

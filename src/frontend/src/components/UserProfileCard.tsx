@@ -10,8 +10,9 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { useProfileByUsername, useStatsByUsername } from "@/hooks/useQueries";
 import { cn } from "@/lib/utils";
 import { generateIdenticonDataUrl } from "@/utils/identicon";
+import { useQueryClient } from "@tanstack/react-query";
 import { CheckCircle } from "lucide-react";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 // ── Registry Helper ─────────────────────────────────────────────────────────
 
@@ -47,6 +48,20 @@ function getTierInfo(points: number): {
 // ── Card Content ──────────────────────────────────────────────────────────────
 
 function ProfileCardContent({ username }: { username: string }) {
+  const queryClient = useQueryClient();
+
+  // Invalidate on every mount so stats are always fresh
+  useEffect(() => {
+    if (username) {
+      queryClient.invalidateQueries({
+        queryKey: ["stats-by-username", username],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["profile-by-username", username],
+      });
+    }
+  }, [username, queryClient]);
+
   const { data: profile, isLoading } = useProfileByUsername(username);
   const { data: stats } = useStatsByUsername(username);
 
@@ -121,7 +136,7 @@ function ProfileCardContent({ username }: { username: string }) {
         </div>
 
         {/* Tier + join date */}
-        <div className="flex items-center gap-1.5 flex-wrap mb-2">
+        <div className="flex items-center gap-1.5 flex-wrap mb-3">
           <Badge
             className={`text-[10px] px-1.5 py-0 rounded-full font-body border-0 ${tier.className}`}
           >

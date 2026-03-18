@@ -36,6 +36,14 @@ export interface Reply {
     sessionId: string;
     evidenceId: bigint;
 }
+export interface UserVote {
+    authorUsername: string;
+    claimTitle: string;
+    claimId: bigint;
+    verdict: string;
+    timestamp: bigint;
+    sessionId: string;
+}
 export interface SourceComment {
     id: bigint;
     authorUsername: string;
@@ -181,7 +189,6 @@ export interface backendInterface {
     getHiddenReplies(password: string): Promise<Array<Reply>>;
     getProfile(principal: Principal): Promise<UserProfile | null>;
     getProfileByUsername(username: string): Promise<UserProfile | null>;
-    getStatsByUsername(username: string): Promise<{ claimCount: bigint; evidenceCount: bigint; commentCount: bigint; replyCount: bigint; activityPoints: bigint; trustScore: bigint }>;
     getReplies(evidenceId: bigint): Promise<Array<Reply>>;
     getReplyLikeCount(replyId: bigint): Promise<bigint>;
     getReplyLikeCounts(evidenceId: bigint): Promise<Array<[bigint, bigint]>>;
@@ -204,6 +211,14 @@ export interface backendInterface {
         sourceType: string;
         bonusPct: bigint;
     }>;
+    getStatsByUsername(username: string): Promise<{
+        activityPoints: bigint;
+        trustScore: bigint;
+        claimCount: bigint;
+        replyCount: bigint;
+        commentCount: bigint;
+        evidenceCount: bigint;
+    }>;
     getTrustedSources(): Promise<Array<{
         id: bigint;
         upvotes: bigint;
@@ -224,10 +239,12 @@ export interface backendInterface {
         falseCount: bigint;
         unverifiedCount: bigint;
     }>;
+    getVotesByUsername(username: string): Promise<Array<UserVote>>;
     isCallerAdmin(): Promise<boolean>;
     isUsernameAvailable(username: string): Promise<boolean>;
     likeReply(replyId: bigint, sessionId: string): Promise<void>;
     likeSourceComment(commentId: bigint, sessionId: string): Promise<void>;
+    recordVoteWithUsername(claimId: bigint, sessionId: string, verdict: string, authorUsername: string, claimTitle: string): Promise<void>;
     reportContent(targetId: bigint, targetType: string, sessionId: string): Promise<{
         __kind__: "ok";
         ok: null;

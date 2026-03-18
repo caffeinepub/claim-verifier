@@ -76,6 +76,14 @@ export interface UserProfile {
 export type UserRole = { 'admin' : null } |
   { 'user' : null } |
   { 'guest' : null };
+export interface UserVote {
+  'authorUsername' : string,
+  'claimTitle' : string,
+  'claimId' : bigint,
+  'verdict' : string,
+  'timestamp' : bigint,
+  'sessionId' : string,
+}
 export interface _CaffeineStorageCreateCertificateResult {
   'method' : string,
   'blob_hash' : string,
@@ -220,6 +228,17 @@ export interface _SERVICE {
       'bonusPct' : bigint,
     }
   >,
+  'getStatsByUsername' : ActorMethod<
+    [string],
+    {
+      'activityPoints' : bigint,
+      'trustScore' : bigint,
+      'claimCount' : bigint,
+      'replyCount' : bigint,
+      'commentCount' : bigint,
+      'evidenceCount' : bigint,
+    }
+  >,
   'getTrustedSources' : ActorMethod<
     [],
     Array<
@@ -244,10 +263,15 @@ export interface _SERVICE {
     [bigint],
     { 'trueCount' : bigint, 'falseCount' : bigint, 'unverifiedCount' : bigint }
   >,
+  'getVotesByUsername' : ActorMethod<[string], Array<UserVote>>,
   'isCallerAdmin' : ActorMethod<[], boolean>,
   'isUsernameAvailable' : ActorMethod<[string], boolean>,
   'likeReply' : ActorMethod<[bigint, string], undefined>,
   'likeSourceComment' : ActorMethod<[bigint, string], undefined>,
+  'recordVoteWithUsername' : ActorMethod<
+    [bigint, string, string, string, string],
+    undefined
+  >,
   'reportContent' : ActorMethod<
     [bigint, string, string],
     { 'ok' : null } |

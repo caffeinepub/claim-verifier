@@ -18,6 +18,7 @@ import {
   type Reply,
   useAddReply,
   useLikeReply,
+  useProfileByUsername,
   useReplies,
   useReplyLikeCounts,
   useReportReply,
@@ -251,7 +252,12 @@ function ReplyCard({
   const displayAuthor = isOwnReply
     ? (verifiedUsername ?? username)
     : reply.authorUsername;
-  const displayAvatarUrl = isOwnReply ? avatarUrl : undefined;
+  const { data: authorProfile } = useProfileByUsername(
+    isOwnReply ? null : reply.authorUsername,
+  );
+  const displayAvatarUrl = isOwnReply
+    ? avatarUrl
+    : authorProfile?.avatarUrl || undefined;
   const isReplying = replyingToId === reply.id;
   const [reportDialogOpen, setReportDialogOpen] = useState(false);
 
@@ -303,7 +309,9 @@ function ReplyCard({
               username={displayAuthor}
               size="sm"
               avatarUrl={displayAvatarUrl}
-              isVerified={isOwnReply ? !!verifiedUsername : false}
+              isVerified={
+                isOwnReply ? !!verifiedUsername : !!authorProfile?.username
+              }
             />
             <span className="text-xs font-semibold text-foreground font-body flex items-center gap-1">
               {displayAuthor}

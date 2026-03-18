@@ -87,6 +87,14 @@ export const SourceComment = IDL.Record({
   'timestamp' : IDL.Int,
   'sessionId' : IDL.Text,
 });
+export const UserVote = IDL.Record({
+  'authorUsername' : IDL.Text,
+  'claimTitle' : IDL.Text,
+  'claimId' : IDL.Nat,
+  'verdict' : IDL.Text,
+  'timestamp' : IDL.Int,
+  'sessionId' : IDL.Text,
+});
 
 export const idlService = IDL.Service({
   '_caffeineStorageBlobIsLive' : IDL.Func(
@@ -290,6 +298,20 @@ export const idlService = IDL.Service({
       ],
       ['query'],
     ),
+  'getStatsByUsername' : IDL.Func(
+      [IDL.Text],
+      [
+        IDL.Record({
+          'activityPoints' : IDL.Int,
+          'trustScore' : IDL.Nat,
+          'claimCount' : IDL.Nat,
+          'replyCount' : IDL.Nat,
+          'commentCount' : IDL.Nat,
+          'evidenceCount' : IDL.Nat,
+        }),
+      ],
+      ['query'],
+    ),
   'getTrustedSources' : IDL.Func(
       [],
       [
@@ -328,10 +350,16 @@ export const idlService = IDL.Service({
       ],
       ['query'],
     ),
+  'getVotesByUsername' : IDL.Func([IDL.Text], [IDL.Vec(UserVote)], ['query']),
   'isCallerAdmin' : IDL.Func([], [IDL.Bool], ['query']),
   'isUsernameAvailable' : IDL.Func([IDL.Text], [IDL.Bool], ['query']),
   'likeReply' : IDL.Func([IDL.Nat, IDL.Text], [], []),
   'likeSourceComment' : IDL.Func([IDL.Nat, IDL.Text], [], []),
+  'recordVoteWithUsername' : IDL.Func(
+      [IDL.Nat, IDL.Text, IDL.Text, IDL.Text, IDL.Text],
+      [],
+      [],
+    ),
   'reportContent' : IDL.Func(
       [IDL.Nat, IDL.Text, IDL.Text],
       [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
@@ -471,6 +499,14 @@ export const idlFactory = ({ IDL }) => {
     'parentCommentId' : IDL.Nat,
     'text' : IDL.Text,
     'sourceId' : IDL.Nat,
+    'timestamp' : IDL.Int,
+    'sessionId' : IDL.Text,
+  });
+  const UserVote = IDL.Record({
+    'authorUsername' : IDL.Text,
+    'claimTitle' : IDL.Text,
+    'claimId' : IDL.Nat,
+    'verdict' : IDL.Text,
     'timestamp' : IDL.Int,
     'sessionId' : IDL.Text,
   });
@@ -677,6 +713,20 @@ export const idlFactory = ({ IDL }) => {
         ],
         ['query'],
       ),
+    'getStatsByUsername' : IDL.Func(
+        [IDL.Text],
+        [
+          IDL.Record({
+            'activityPoints' : IDL.Int,
+            'trustScore' : IDL.Nat,
+            'claimCount' : IDL.Nat,
+            'replyCount' : IDL.Nat,
+            'commentCount' : IDL.Nat,
+            'evidenceCount' : IDL.Nat,
+          }),
+        ],
+        ['query'],
+      ),
     'getTrustedSources' : IDL.Func(
         [],
         [
@@ -715,10 +765,16 @@ export const idlFactory = ({ IDL }) => {
         ],
         ['query'],
       ),
+    'getVotesByUsername' : IDL.Func([IDL.Text], [IDL.Vec(UserVote)], ['query']),
     'isCallerAdmin' : IDL.Func([], [IDL.Bool], ['query']),
     'isUsernameAvailable' : IDL.Func([IDL.Text], [IDL.Bool], ['query']),
     'likeReply' : IDL.Func([IDL.Nat, IDL.Text], [], []),
     'likeSourceComment' : IDL.Func([IDL.Nat, IDL.Text], [], []),
+    'recordVoteWithUsername' : IDL.Func(
+        [IDL.Nat, IDL.Text, IDL.Text, IDL.Text, IDL.Text],
+        [],
+        [],
+      ),
     'reportContent' : IDL.Func(
         [IDL.Nat, IDL.Text, IDL.Text],
         [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],

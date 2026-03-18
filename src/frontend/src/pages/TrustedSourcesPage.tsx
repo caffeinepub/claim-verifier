@@ -282,7 +282,7 @@ function SourceCard({
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <span className="inline-flex items-center cursor-default text-emerald-600">
-                          <ShieldCheck className="h-3.5 w-3.5" />
+                          <ShieldCheck className="h-3 w-3" />
                         </span>
                       </TooltipTrigger>
                       <TooltipContent
@@ -301,7 +301,7 @@ function SourceCard({
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <span className="inline-flex items-center cursor-default text-slate-500">
-                          <Scale className="h-3.5 w-3.5" />
+                          <Scale className="h-3 w-3" />
                         </span>
                       </TooltipTrigger>
                       <TooltipContent
@@ -320,7 +320,7 @@ function SourceCard({
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <span className="inline-flex items-center cursor-default text-red-500">
-                          <ShieldX className="h-3.5 w-3.5" />
+                          <ShieldX className="h-3 w-3" />
                         </span>
                       </TooltipTrigger>
                       <TooltipContent
@@ -339,7 +339,7 @@ function SourceCard({
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <span className="inline-flex items-center cursor-default text-amber-500">
-                        <Clock className="h-3.5 w-3.5" />
+                        <Clock className="h-3 w-3" />
                       </span>
                     </TooltipTrigger>
                     <TooltipContent
@@ -640,7 +640,7 @@ function SuggestSourceDialog({ sessionId }: { sessionId: string | null }) {
                 data-ocid="sources.select"
                 className="font-body bg-secondary border-border"
               >
-                <SelectValue placeholder="Select a type\u2026" />
+                <SelectValue placeholder="Select a type…" />
               </SelectTrigger>
               <SelectContent>
                 {SOURCE_TYPES.map((t) => (
@@ -801,11 +801,7 @@ export function TrustedSourcesPage({
           <span className="font-semibold text-primary tabular-nums">
             {trustedSources.length} trusted
           </span>{" "}
-          and{" "}
-          <span className="font-semibold text-foreground tabular-nums">
-            {pendingSources.length} pending
-          </span>{" "}
-          sources.
+          and {pendingSources.length} pending sources.
         </p>
       )}
 

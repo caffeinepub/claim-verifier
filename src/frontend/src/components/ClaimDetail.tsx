@@ -420,7 +420,13 @@ export function ClaimDetail({
     if (!sessionId || hasVoted) return;
     if (!checkVoteAction()) return;
     try {
-      await submitVote.mutateAsync({ claimId, sessionId, verdict });
+      await submitVote.mutateAsync({
+        claimId,
+        sessionId,
+        verdict,
+        authorUsername: verifiedUsername ?? getOrInitUsername(),
+        claimTitle: claim?.title ?? "",
+      });
       toast.success(`Your verdict: ${verdict}`);
       // Record verified vote for 1.5x multiplier tracking
       if (isVerified && claim) {

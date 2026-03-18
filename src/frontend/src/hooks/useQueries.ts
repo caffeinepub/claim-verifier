@@ -253,13 +253,30 @@ export function useSubmitVote() {
       claimId,
       sessionId,
       verdict,
+      authorUsername,
+      claimTitle,
     }: {
       claimId: bigint;
       sessionId: string;
       verdict: string;
+      authorUsername?: string;
+      claimTitle?: string;
     }) => {
       if (!actor) throw new Error("No actor");
-      return actor.submitVote(claimId, sessionId, verdict);
+      await actor.submitVote(claimId, sessionId, verdict);
+      if (authorUsername && claimTitle) {
+        try {
+          await actor.recordVoteWithUsername(
+            claimId,
+            sessionId,
+            verdict,
+            authorUsername,
+            claimTitle,
+          );
+        } catch {
+          // Non-critical: don't fail the whole vote if attribution fails
+        }
+      }
     },
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({
@@ -272,6 +289,19 @@ export function useSubmitVote() {
         queryKey: ["vote", variables.claimId.toString()],
       });
     },
+  });
+}
+
+export function useVotesByUsername(username: string | null) {
+  const { actor, isFetching } = useActor();
+  return useQuery({
+    queryKey: ["votes-by-username", username],
+    queryFn: async () => {
+      if (!actor || !username) return [];
+      return actor.getVotesByUsername(username);
+    },
+    enabled: !!actor && !isFetching && !!username,
+    staleTime: 30_000,
   });
 }
 

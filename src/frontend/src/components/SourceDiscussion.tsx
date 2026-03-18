@@ -19,6 +19,7 @@ import {
   type SourceComment,
   useAddSourceComment,
   useLikeSourceComment,
+  useProfileByUsername,
   useReportSourceComment,
   useSessionLikeForSourceComment,
   useSourceCommentLikeCounts,
@@ -310,7 +311,12 @@ function CommentCard({
   const displayAuthor = isOwnComment
     ? (verifiedUsername ?? username)
     : comment.authorUsername;
-  const displayAvatarUrl = isOwnComment ? avatarUrl : undefined;
+  const { data: authorProfile } = useProfileByUsername(
+    isOwnComment ? null : comment.authorUsername,
+  );
+  const displayAvatarUrl = isOwnComment
+    ? avatarUrl
+    : authorProfile?.avatarUrl || undefined;
   const isReplying = replyingToId === comment.id;
 
   const likeComment = useLikeSourceComment();
@@ -369,7 +375,9 @@ function CommentCard({
               username={displayAuthor}
               size="sm"
               avatarUrl={displayAvatarUrl}
-              isVerified={isOwnComment ? !!verifiedUsername : false}
+              isVerified={
+                isOwnComment ? !!verifiedUsername : !!authorProfile?.username
+              }
             />
             <span className="text-xs font-semibold text-foreground font-body">
               {displayAuthor}

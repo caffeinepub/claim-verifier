@@ -118,6 +118,14 @@ export interface Reply {
     sessionId: string;
     evidenceId: bigint;
 }
+export interface UserVote {
+    authorUsername: string;
+    claimTitle: string;
+    claimId: bigint;
+    verdict: string;
+    timestamp: bigint;
+    sessionId: string;
+}
 export interface _CaffeineStorageRefillInformation {
     proposed_top_up_amount?: bigint;
 }
@@ -281,7 +289,6 @@ export interface backendInterface {
     getHiddenReplies(password: string): Promise<Array<Reply>>;
     getProfile(principal: Principal): Promise<UserProfile | null>;
     getProfileByUsername(username: string): Promise<UserProfile | null>;
-    getStatsByUsername(username: string): Promise<{ claimCount: bigint; evidenceCount: bigint; commentCount: bigint; replyCount: bigint; activityPoints: bigint; trustScore: bigint }>;
     getReplies(evidenceId: bigint): Promise<Array<Reply>>;
     getReplyLikeCount(replyId: bigint): Promise<bigint>;
     getReplyLikeCounts(evidenceId: bigint): Promise<Array<[bigint, bigint]>>;
@@ -304,6 +311,14 @@ export interface backendInterface {
         sourceType: string;
         bonusPct: bigint;
     }>;
+    getStatsByUsername(username: string): Promise<{
+        activityPoints: bigint;
+        trustScore: bigint;
+        claimCount: bigint;
+        replyCount: bigint;
+        commentCount: bigint;
+        evidenceCount: bigint;
+    }>;
     getTrustedSources(): Promise<Array<{
         id: bigint;
         upvotes: bigint;
@@ -324,10 +339,12 @@ export interface backendInterface {
         falseCount: bigint;
         unverifiedCount: bigint;
     }>;
+    getVotesByUsername(username: string): Promise<Array<UserVote>>;
     isCallerAdmin(): Promise<boolean>;
     isUsernameAvailable(username: string): Promise<boolean>;
     likeReply(replyId: bigint, sessionId: string): Promise<void>;
     likeSourceComment(commentId: bigint, sessionId: string): Promise<void>;
+    recordVoteWithUsername(claimId: bigint, sessionId: string, verdict: string, authorUsername: string, claimTitle: string): Promise<void>;
     reportContent(targetId: bigint, targetType: string, sessionId: string): Promise<{
         __kind__: "ok";
         ok: null;
@@ -954,20 +971,6 @@ export class Backend implements backendInterface {
             return from_candid_opt_n12(this._uploadFile, this._downloadFile, result);
         }
     }
-    async getStatsByUsername(arg0: string): Promise<{ claimCount: bigint; evidenceCount: bigint; commentCount: bigint; replyCount: bigint; activityPoints: bigint; trustScore: bigint }> {
-        if (this.processError) {
-            try {
-                const result = await this.actor.getStatsByUsername(arg0);
-                return result;
-            } catch (e) {
-                this.processError(e);
-                throw new Error("unreachable");
-            }
-        } else {
-            const result = await this.actor.getStatsByUsername(arg0);
-            return result;
-        }
-    }
     async getReplies(arg0: bigint): Promise<Array<Reply>> {
         if (this.processError) {
             try {
@@ -1185,6 +1188,27 @@ export class Backend implements backendInterface {
             return result;
         }
     }
+    async getStatsByUsername(arg0: string): Promise<{
+        activityPoints: bigint;
+        trustScore: bigint;
+        claimCount: bigint;
+        replyCount: bigint;
+        commentCount: bigint;
+        evidenceCount: bigint;
+    }> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getStatsByUsername(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getStatsByUsername(arg0);
+            return result;
+        }
+    }
     async getTrustedSources(): Promise<Array<{
         id: bigint;
         upvotes: bigint;
@@ -1244,6 +1268,20 @@ export class Backend implements backendInterface {
             return result;
         }
     }
+    async getVotesByUsername(arg0: string): Promise<Array<UserVote>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getVotesByUsername(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getVotesByUsername(arg0);
+            return result;
+        }
+    }
     async isCallerAdmin(): Promise<boolean> {
         if (this.processError) {
             try {
@@ -1297,6 +1335,20 @@ export class Backend implements backendInterface {
             }
         } else {
             const result = await this.actor.likeSourceComment(arg0, arg1);
+            return result;
+        }
+    }
+    async recordVoteWithUsername(arg0: bigint, arg1: string, arg2: string, arg3: string, arg4: string): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.recordVoteWithUsername(arg0, arg1, arg2, arg3, arg4);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.recordVoteWithUsername(arg0, arg1, arg2, arg3, arg4);
             return result;
         }
     }
