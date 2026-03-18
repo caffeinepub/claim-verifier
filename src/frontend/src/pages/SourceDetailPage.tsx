@@ -1,10 +1,6 @@
 import type { Claim, Evidence } from "@/backend.d";
 import { SourceDiscussion } from "@/components/SourceDiscussion";
-import { UserAvatar } from "@/components/UserAvatar";
-import {
-  UserProfileCard,
-  isVerifiedUsername,
-} from "@/components/UserProfileCard";
+import { UserProfileCard } from "@/components/UserProfileCard";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import {
@@ -37,29 +33,21 @@ import {
   useAdminRemoveSource,
   useAdminSetPinnedComment,
   useAllClaims,
+  useAllEvidenceForAllClaims,
+  useAllEvidenceTallies,
   useEnhancedVoteTally,
-  useSessionVoteForSource,
   useTrustedSources,
-  useVoteOnSource,
   useWikipediaBlurb,
 } from "@/hooks/useQueries";
 import { useSessionGate } from "@/hooks/useSessionGate";
-import {
-  getVerifiedVotes,
-  useVerifiedAccount,
-} from "@/hooks/useVerifiedAccount";
+import { useVerifiedAccount } from "@/hooks/useVerifiedAccount";
 import { cn } from "@/lib/utils";
 import {
+  SourceLogo,
   getSourceTypeBadgeClasses,
-  getSourceTypeBonus,
   getSourceTypeLabel,
 } from "@/pages/TrustedSourcesPage";
-import {
-  computeDynamicSourceBoost,
-  computeSourceAdjustment,
-  getEvidenceCardsForDomain,
-  getSourceStatus,
-} from "@/utils/sourceCredibility";
+import { computeSourceCredibility } from "@/utils/sourceCredibility";
 import { computeOverallVerdict } from "@/utils/verdict";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import {
@@ -67,26 +55,21 @@ import {
   ArrowLeft,
   BarChart2,
   BookOpen,
-  ChevronDown,
   ChevronUp,
-  Clock,
   ExternalLink,
   FileQuestion,
   Flag,
-  Globe,
   Loader2,
   LogIn,
   Pencil,
   Pin,
-  Scale,
   Shield,
   ShieldCheck,
-  ShieldX,
   Users,
   Vote,
 } from "lucide-react";
 import { motion } from "motion/react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
 const ADMIN_PASSWORD = "lunasimbaliamsammy123!";
@@ -153,248 +136,144 @@ function useSourceReportCount(sourceId: bigint) {
 // ── Sub-components ────────────────────────────────────────────────────────────
 
 /** Tries Clearbit logo → Google favicon → Globe icon */
-function CredibilityBoostInline({
-  sourceType,
-  domain,
-  upvotes,
-  downvotes,
+function CredibilityBadge({
+  credibility,
 }: {
-  sourceType: string;
-  domain: string;
-  upvotes: number;
-  downvotes: number;
+  credibility: ReturnType<typeof computeSourceCredibility>;
 }) {
-  const total = upvotes + downvotes;
-  const ratio = total > 0 ? upvotes / total : 0;
-  const cards = getEvidenceCardsForDomain(domain);
-  const { dynamicBonus, ceilingLabel, hasTrackRecord, isPenalty } =
-    computeDynamicSourceBoost(sourceType, ratio, cards);
-  const status = getSourceStatus(upvotes, downvotes);
-
-  if (status === "pending") {
+  if (credibility.status === "insufficient") {
     return (
-      <span className="text-xs font-body text-muted-foreground">
-        {ceilingLabel} potential boost
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-body font-medium border bg-muted text-muted-foreground border-border">
+        Insufficient Data
       </span>
     );
   }
-  if (status === "contested") {
-    return (
-      <span className="text-xs font-body text-slate-500">
-        No credibility adjustment
-      </span>
-    );
-  }
-  if (status === "not-trusted") {
-    return (
-      <span className="text-xs font-body text-red-500 font-semibold">
-        {hasTrackRecord
-          ? dynamicBonus
-          : `-${ceilingLabel.replace("up to +", "up to ")}`}{" "}
-        credibility penalty
-      </span>
-    );
-  }
+  const colorMap: Record<string, string> = {
+    "High Credibility":
+      "bg-emerald-500/15 text-emerald-700 border-emerald-500/30",
+    Mixed: "bg-amber-500/15 text-amber-700 border-amber-400/30",
+    "Low Credibility": "bg-red-500/15 text-red-700 border-red-400/30",
+  };
   return (
     <span
-      className={`text-xs font-body font-semibold ${isPenalty ? "text-red-500" : "text-primary"}`}
+      className={cn(
+        "inline-flex items-center px-2 py-0.5 rounded text-xs font-body font-medium border",
+        colorMap[credibility.label],
+      )}
     >
-      {hasTrackRecord ? dynamicBonus : ceilingLabel} credibility boost
+      {credibility.label}
     </span>
   );
 }
 
-function CredibilityBoostSection({
-  sourceType,
-  domain,
-  upvotes,
-  downvotes,
+function EvidencePerformanceSection({
+  credibility,
 }: {
-  sourceType: string;
-  domain: string;
-  upvotes: number;
-  downvotes: number;
+  credibility: ReturnType<typeof computeSourceCredibility>;
 }) {
-  const total = upvotes + downvotes;
-  const ratio = total > 0 ? upvotes / total : 0;
-  const cards = getEvidenceCardsForDomain(domain);
-  const {
-    dynamicBonus,
-    ceilingLabel,
-    ratioScore,
-    trackRecordScore,
-    hasTrackRecord,
-    ceiling,
-    isPenalty,
-  } = computeDynamicSourceBoost(sourceType, ratio, cards);
-  const status = getSourceStatus(upvotes, downvotes);
-
-  // Pending and Contested show a simplified neutral section
-  if (status === "pending") {
-    return (
-      <section>
-        <div className="flex items-center gap-2 mb-3">
-          <div className="w-1 h-5 bg-muted-foreground rounded-full" />
-          <h2 className="font-display text-lg font-bold text-foreground">
-            Credibility Adjustment
-          </h2>
-        </div>
-        <div className="p-4 bg-card border border-border rounded-sm text-sm font-body text-muted-foreground">
-          No credibility adjustment yet — this source is pending review (needs
-          25+ votes).
-        </div>
-      </section>
-    );
-  }
-  if (status === "contested") {
-    return (
-      <section>
-        <div className="flex items-center gap-2 mb-3">
-          <div className="w-1 h-5 bg-slate-400 rounded-full" />
-          <h2 className="font-display text-lg font-bold text-foreground">
-            Credibility Adjustment
-          </h2>
-        </div>
-        <div className="p-4 bg-card border border-slate-300 rounded-sm text-sm font-body text-muted-foreground">
-          No credibility adjustment — community is divided on this source
-          (40–60% approval). Evidence citing this source receives no boost or
-          penalty.
-        </div>
-      </section>
-    );
-  }
-
-  const bonusDisplay = hasTrackRecord
-    ? dynamicBonus
-    : isPenalty
-      ? `-${ceilingLabel.replace("up to +", "up to ")}`
-      : ceilingLabel;
-  const bonusDesc = hasTrackRecord
-    ? "Based on community approval + evidence track record"
-    : "Based on community approval (track record pending)";
-  const ceilingStr =
-    ceiling % 1 === 0 ? ceiling.toFixed(0) : ceiling.toFixed(1);
-  const ratioDisplay = Math.round(ratio * 100);
-  const ratioScoreDisplay = Math.round(ratioScore * 100);
-  const trackDisplay =
-    trackRecordScore !== null ? Math.round(trackRecordScore * 100) : null;
-  const cardCount = cards.length;
-
   return (
     <section>
       <div className="flex items-center gap-2 mb-3">
-        <div
-          className={`w-1 h-5 rounded-full ${isPenalty ? "bg-red-500" : "bg-primary"}`}
-        />
+        <div className="w-1 h-5 bg-primary rounded-full" />
         <h2 className="font-display text-lg font-bold text-foreground">
-          {isPenalty ? "Credibility Penalty" : "Credibility Boost"}
+          Evidence Performance
         </h2>
       </div>
-      <div className="p-4 bg-card border border-border rounded-sm space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm font-body text-foreground font-semibold">
-              <span className="text-xl font-display text-primary">
-                {bonusDisplay}
-              </span>{" "}
-              <span className="text-xs text-muted-foreground font-normal">
-                {hasTrackRecord ? `of +${ceilingStr}% ceiling` : "max ceiling"}
-              </span>
-            </p>
-            <p className="text-xs text-muted-foreground font-body mt-0.5">
-              {bonusDesc}
-            </p>
-          </div>
-          <div className="text-right">
-            <p className="text-[10px] font-body text-muted-foreground">
-              Max ceiling
-            </p>
-            <p className="text-sm font-mono font-semibold text-foreground">
-              +{ceilingStr}%
-            </p>
-          </div>
-        </div>
-
-        <div className="space-y-3">
+      {credibility.status === "insufficient" ? (
+        <div className="p-4 bg-card border border-border rounded-sm space-y-3">
+          <p className="text-sm font-body text-muted-foreground">
+            Not enough data yet. This source needs at least{" "}
+            <span className="font-semibold text-foreground">5 citations</span>{" "}
+            in evidence before a credibility score can be calculated.
+          </p>
           <div className="space-y-1">
             <div className="flex items-center justify-between text-xs font-body">
-              <span className="text-muted-foreground">Community approval</span>
-              <span className="font-semibold text-foreground">
-                {ratioScoreDisplay}%
+              <span className="text-muted-foreground">Citations so far</span>
+              <span className="font-mono text-foreground">
+                {credibility.citations} / 5
               </span>
             </div>
             <div className="h-1.5 rounded-full bg-muted overflow-hidden">
               <div
-                className="h-full bg-primary rounded-full transition-all duration-500"
-                style={{ width: `${ratioScoreDisplay}%` }}
+                className="h-full bg-amber-400 rounded-full transition-all duration-500"
+                style={{ width: `${(credibility.citations / 5) * 100}%` }}
               />
             </div>
-            <p className="text-[10px] text-muted-foreground font-body">
-              {ratioDisplay}% upvote ratio · scales from 60% to 100% approval
-            </p>
-          </div>
-
-          <div className="space-y-1">
-            <div className="flex items-center justify-between text-xs font-body">
-              <span className="text-muted-foreground">
-                Evidence track record
-              </span>
-              {hasTrackRecord && trackDisplay !== null ? (
-                <span className="font-semibold text-foreground">
-                  {trackDisplay}%
-                </span>
-              ) : (
-                <span className="text-muted-foreground/60 italic text-[10px]">
-                  Not enough data yet
-                </span>
-              )}
-            </div>
-            {hasTrackRecord && trackDisplay !== null ? (
-              <div className="h-1.5 rounded-full bg-muted overflow-hidden">
-                <div
-                  className="h-full bg-emerald-500 rounded-full transition-all duration-500"
-                  style={{ width: `${trackDisplay}%` }}
-                />
-              </div>
-            ) : (
-              <div className="h-1.5 rounded-full bg-muted/60" />
-            )}
-            <p className="text-[10px] text-muted-foreground font-body">
-              {hasTrackRecord
-                ? `${cardCount} evidence cards citing this source`
-                : `${cardCount}/5 evidence cards needed for track record`}
-            </p>
           </div>
         </div>
+      ) : (
+        <div className="p-4 bg-card border border-border rounded-sm space-y-4">
+          {/* Score */}
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-body font-semibold text-foreground">
+                Credibility Score
+              </p>
+              <p className="text-xs font-body text-muted-foreground mt-0.5">
+                Based on quality-cleared evidence performance
+              </p>
+            </div>
+            <div className="text-right">
+              <p className="text-2xl font-bold font-mono text-foreground">
+                {Math.round(credibility.score)}
+                <span className="text-sm font-body text-muted-foreground">
+                  /100
+                </span>
+              </p>
+              <CredibilityBadge credibility={credibility} />
+            </div>
+          </div>
 
-        <p className="text-[10px] text-muted-foreground font-body border-t border-border pt-3">
-          Score updates as evidence citing this source accumulates.
-          {!hasTrackRecord && " Track record activates after 5 evidence cards."}
-        </p>
-      </div>
+          <div className="h-2 rounded-full bg-muted overflow-hidden">
+            <div
+              className={cn(
+                "h-full rounded-full transition-all duration-700",
+                credibility.label === "High Credibility"
+                  ? "bg-emerald-500"
+                  : credibility.label === "Mixed"
+                    ? "bg-amber-400"
+                    : "bg-red-400",
+              )}
+              style={{ width: `${Math.round(credibility.score)}%` }}
+            />
+          </div>
+
+          {/* Breakdown */}
+          <div className="grid grid-cols-2 gap-3 pt-1">
+            <div className="p-3 bg-secondary rounded-sm">
+              <p className="text-[10px] font-body text-muted-foreground uppercase tracking-wider mb-1">
+                Quality-cleared
+              </p>
+              <p className="text-lg font-bold font-mono text-foreground">
+                {credibility.qualityCleared}
+                <span className="text-xs text-muted-foreground font-body">
+                  /{credibility.totalCitations}
+                </span>
+              </p>
+              <p className="text-[10px] font-body text-muted-foreground mt-0.5">
+                {Math.round(credibility.passRate)}% pass rate
+              </p>
+            </div>
+            <div className="p-3 bg-secondary rounded-sm">
+              <p className="text-[10px] font-body text-muted-foreground uppercase tracking-wider mb-1">
+                Avg net score
+              </p>
+              <p className="text-lg font-bold font-mono text-foreground">
+                +{credibility.avgNetScore.toFixed(1)}
+              </p>
+              <p className="text-[10px] font-body text-muted-foreground mt-0.5">
+                quality-cleared only
+              </p>
+            </div>
+          </div>
+
+          <p className="text-[10px] text-muted-foreground font-body border-t border-border pt-3">
+            Only evidence with net score &ge;+3 counts. Score = avg net score
+            (60%) + pass rate (40%). Updates as evidence accumulates.
+          </p>
+        </div>
+      )}
     </section>
-  );
-}
-
-function SourceLogo({ domain }: { domain: string }) {
-  const [step, setStep] = useState<0 | 1 | 2>(0);
-
-  if (step === 2) {
-    return <Globe className="h-6 w-6 text-muted-foreground flex-shrink-0" />;
-  }
-
-  const src =
-    step === 0
-      ? `https://logo.clearbit.com/${domain}`
-      : `https://www.google.com/s2/favicons?domain=${domain}&sz=64`;
-
-  return (
-    <img
-      src={src}
-      alt={domain}
-      className="w-10 h-10 rounded object-contain flex-shrink-0"
-      onError={() => setStep((s) => (s < 2 ? ((s + 1) as 0 | 1 | 2) : 2))}
-    />
   );
 }
 
@@ -424,91 +303,6 @@ function ClaimVerdictBadge({ claimId }: { claimId: bigint }) {
     >
       {style.label}
     </span>
-  );
-}
-
-function VotePanel({
-  source,
-  sessionId,
-}: {
-  source: TrustedSourceInfo;
-  sessionId: string | null;
-}) {
-  const { checkVoteAction } = useSessionGate();
-  const voteOnSource = useVoteOnSource();
-  const { data: sessionVote } = useSessionVoteForSource(source.id, sessionId);
-
-  const upvotes = Number(source.upvotes);
-  const downvotes = Number(source.downvotes);
-  const netScore = upvotes - downvotes;
-
-  async function handleVote(direction: "up" | "down") {
-    if (!sessionId) return;
-    if (!checkVoteAction()) return;
-    try {
-      await voteOnSource.mutateAsync({
-        sourceId: source.id,
-        sessionId,
-        direction,
-      });
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to vote");
-    }
-  }
-
-  const hasUp = sessionVote === "up";
-  const hasDown = sessionVote === "down";
-
-  return (
-    <div className="flex items-center gap-3">
-      <button
-        type="button"
-        data-ocid="source_detail.toggle"
-        onClick={() => handleVote("up")}
-        disabled={voteOnSource.isPending}
-        className={cn(
-          "flex items-center gap-1.5 px-4 py-2 rounded-md text-sm font-body font-medium border transition-all",
-          hasUp
-            ? "bg-primary/10 border-primary text-primary"
-            : "bg-secondary border-border text-muted-foreground hover:border-primary/60 hover:text-primary hover:bg-primary/5",
-        )}
-      >
-        <ChevronUp className="h-4 w-4" />
-        Upvote
-      </button>
-      <div className="text-center">
-        <span
-          className={cn(
-            "text-2xl font-bold font-mono block",
-            netScore > 0
-              ? "text-primary"
-              : netScore < 0
-                ? "text-destructive"
-                : "text-muted-foreground",
-          )}
-        >
-          {netScore > 0 ? `+${netScore}` : netScore}
-        </span>
-        <span className="text-[10px] text-muted-foreground font-body uppercase tracking-wider">
-          Net Score
-        </span>
-      </div>
-      <button
-        type="button"
-        data-ocid="source_detail.toggle"
-        onClick={() => handleVote("down")}
-        disabled={voteOnSource.isPending}
-        className={cn(
-          "flex items-center gap-1.5 px-4 py-2 rounded-md text-sm font-body font-medium border transition-all",
-          hasDown
-            ? "bg-destructive/10 border-destructive text-destructive"
-            : "bg-secondary border-border text-muted-foreground hover:border-destructive/60 hover:text-destructive hover:bg-destructive/5",
-        )}
-      >
-        <ChevronDown className="h-4 w-4" />
-        Downvote
-      </button>
-    </div>
   );
 }
 
@@ -1253,23 +1047,25 @@ export function SourceDetailPage({
     (s) => s.domain.toLowerCase() === domain.toLowerCase(),
   );
 
-  const upvotes = source ? Number(source.upvotes) : 0;
-  const downvotes = source ? Number(source.downvotes) : 0;
-  const totalVotes = upvotes + downvotes;
-  const upvoteRatio = totalVotes > 0 ? upvotes / totalVotes : 0;
-  const upvotePct = Math.round(upvoteRatio * 100);
-  const votesProgress = Math.min(100, (totalVotes / 25) * 100);
-  const approvalProgress = Math.min(100, upvotePct);
-  const needsMoreVotes = totalVotes < 25;
-
-  // Contested indicator
-  const sourceStatus = source
-    ? getSourceStatus(Number(source.upvotes), Number(source.downvotes))
-    : "pending";
-  const isNarrowlyTrusted =
-    sourceStatus === "trusted" && upvoteRatio >= 0.6 && upvoteRatio < 0.65;
-  const isContested = sourceStatus === "contested";
-  const isNotTrusted = sourceStatus === "not-trusted";
+  // Evidence-based credibility
+  const allEvidence = useAllEvidenceForAllClaims();
+  const evidenceIds = useMemo(
+    () => allEvidence.map((e) => e.id),
+    [allEvidence],
+  );
+  const { data: tallies } = useAllEvidenceTallies(evidenceIds);
+  const allEvidenceWithScores = useMemo(
+    () =>
+      allEvidence.map((e) => ({
+        ...e,
+        netScore: tallies?.[e.id.toString()] ?? 0,
+      })),
+    [allEvidence, tallies],
+  );
+  const credibility = useMemo(
+    () => computeSourceCredibility(domain, allEvidenceWithScores),
+    [domain, allEvidenceWithScores],
+  );
 
   // Suggested date from nanosecond timestamp
 
@@ -1380,21 +1176,21 @@ export function SourceDetailPage({
             {/* ── Source Header ─────────────────────────────────── */}
             <div
               className={cn(
-                "p-5 bg-card border rounded-sm",
-                sourceStatus === "trusted"
-                  ? "border-emerald-500/30 shadow-sm shadow-emerald-500/5"
-                  : sourceStatus === "not-trusted"
-                    ? "border-red-400/30"
-                    : sourceStatus === "contested"
-                      ? "border-slate-400/30"
-                      : "border-border",
+                "p-5 bg-card border-l-4 border rounded-sm",
+                credibility.status === "scored" &&
+                  credibility.label === "High Credibility"
+                  ? "border-l-green-500 border-emerald-500/30 shadow-sm shadow-emerald-500/5"
+                  : credibility.status === "scored" &&
+                      credibility.label === "Low Credibility"
+                    ? "border-l-red-500 border-red-400/30"
+                    : "border-l-amber-400 border-border",
               )}
             >
-              {/* Domain name + trust badge row */}
-              <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
-                <div>
+              {/* Row 1: Favicon + domain + status badge */}
+              <div className="flex items-start gap-3 flex-wrap mb-4">
+                <SourceLogo domain={source.domain} size="lg" />
+                <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-3 flex-wrap mb-1.5">
-                    <SourceLogo domain={source.domain} />
                     <a
                       href={`https://${source.domain}`}
                       target="_blank"
@@ -1404,68 +1200,7 @@ export function SourceDetailPage({
                       {source.domain}
                       <ExternalLink className="h-4 w-4 opacity-50" />
                     </a>
-                    {sourceStatus === "trusted" ? (
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <span className="inline-flex items-center cursor-default text-emerald-600">
-                            <ShieldCheck className="h-3.5 w-3.5" />
-                          </span>
-                        </TooltipTrigger>
-                        <TooltipContent
-                          side="top"
-                          className="text-xs max-w-[220px]"
-                        >
-                          Trusted source — verified by the community with 60%+
-                          approval
-                        </TooltipContent>
-                      </Tooltip>
-                    ) : sourceStatus === "contested" ? (
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <span className="inline-flex items-center cursor-default text-slate-500">
-                            <Scale className="h-3.5 w-3.5" />
-                          </span>
-                        </TooltipTrigger>
-                        <TooltipContent
-                          side="top"
-                          className="text-xs max-w-[240px]"
-                        >
-                          Contested — community is divided on this source&apos;s
-                          credibility. Needs clear 60%+ approval to become
-                          trusted
-                        </TooltipContent>
-                      </Tooltip>
-                    ) : sourceStatus === "not-trusted" ? (
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <span className="inline-flex items-center cursor-default text-red-500">
-                            <ShieldX className="h-3.5 w-3.5" />
-                          </span>
-                        </TooltipTrigger>
-                        <TooltipContent
-                          side="top"
-                          className="text-xs max-w-[220px]"
-                        >
-                          Not Trusted — community voted this source as
-                          unreliable (less than 40% approval)
-                        </TooltipContent>
-                      </Tooltip>
-                    ) : (
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <span className="inline-flex items-center cursor-default text-amber-600">
-                            <Clock className="h-3.5 w-3.5" />
-                          </span>
-                        </TooltipTrigger>
-                        <TooltipContent
-                          side="top"
-                          className="text-xs max-w-[240px]"
-                        >
-                          Pending Review — not yet trusted. Needs 25 votes with
-                          at least 60% approval to become trusted
-                        </TooltipContent>
-                      </Tooltip>
-                    )}
+                    <CredibilityBadge credibility={credibility} />
                     {source.adminOverride && (
                       <span className="inline-flex items-center px-2 py-1 rounded text-xs font-body bg-violet-500/15 text-violet-600 border border-violet-500/30">
                         Admin Approved
@@ -1482,282 +1217,251 @@ export function SourceDetailPage({
                       </span>
                     )}
                   </div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span
-                      className={cn(
-                        "inline-flex items-center px-2 py-0.5 rounded-sm text-xs font-body font-medium border",
-                        getSourceTypeBadgeClasses(source.sourceType),
-                      )}
-                    >
-                      {getSourceTypeLabel(source.sourceType)}
-                    </span>
-                    <CredibilityBoostInline
-                      sourceType={source.sourceType}
-                      domain={source.domain}
-                      upvotes={upvotes}
-                      downvotes={downvotes}
-                    />
-                  </div>
+                  <span
+                    className={cn(
+                      "inline-flex items-center px-2 py-0.5 rounded-sm text-xs font-body font-medium border",
+                      getSourceTypeBadgeClasses(source.sourceType),
+                    )}
+                  >
+                    {getSourceTypeLabel(source.sourceType)}
+                  </span>
                 </div>
+              </div>
 
-                <div className="flex items-center gap-1.5 flex-wrap text-xs text-muted-foreground font-body">
-                  <span>Suggested by</span>
-                  <span>{source.suggestedByUsername || "unknown"}</span>
-                </div>
-
-                {/* Admin override note */}
-                {source.adminOverrideNote?.trim() && (
-                  <div className="flex items-start gap-2 mt-2 px-3 py-2 rounded-sm bg-violet-50 border border-violet-200 text-violet-700">
-                    <Shield className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" />
-                    <p className="text-xs font-body">
-                      <span className="font-semibold">Admin note:</span>{" "}
-                      {source.adminOverrideNote}
-                    </p>
-                  </div>
+              {/* Row 2: Stat row — credibility score + citation count */}
+              <div className="flex items-center gap-6 mb-4 pt-3 border-t border-border">
+                {credibility.status === "scored" ? (
+                  <>
+                    <div>
+                      <p className="text-xs font-body text-muted-foreground mb-0.5">
+                        Credibility Score
+                      </p>
+                      <p className="text-2xl font-bold font-mono text-foreground leading-none">
+                        {Math.round(credibility.score)}
+                        <span className="text-sm font-body text-muted-foreground font-normal">
+                          /100
+                        </span>
+                      </p>
+                    </div>
+                    <div className="w-px h-8 bg-border" />
+                    <div>
+                      <p className="text-xs font-body text-muted-foreground mb-0.5">
+                        Evidence Citations
+                      </p>
+                      <p className="text-2xl font-bold font-mono text-foreground leading-none">
+                        {credibility.totalCitations}
+                        <span className="text-sm font-body text-muted-foreground font-normal ml-1">
+                          citation{credibility.totalCitations !== 1 ? "s" : ""}
+                        </span>
+                      </p>
+                    </div>
+                    <div className="w-px h-8 bg-border" />
+                    <div>
+                      <p className="text-xs font-body text-muted-foreground mb-0.5">
+                        Pass Rate
+                      </p>
+                      <p className="text-2xl font-bold font-mono text-foreground leading-none">
+                        {Math.round(credibility.passRate)}
+                        <span className="text-sm font-body text-muted-foreground font-normal">
+                          %
+                        </span>
+                      </p>
+                    </div>
+                  </>
+                ) : (
+                  <p className="text-sm font-body text-muted-foreground italic">
+                    Insufficient data — needs {5 - credibility.citations} more
+                    citation
+                    {5 - credibility.citations !== 1 ? "s" : ""} for a score
+                  </p>
                 )}
               </div>
 
-              {/* Narrowly trusted / Contested / Not Trusted indicator */}
-              {isNarrowlyTrusted && (
-                <div
-                  data-ocid="source_detail.card"
-                  className="flex items-center gap-2 px-3 py-2 mb-4 rounded-sm bg-amber-50 border border-amber-200 text-amber-700"
-                >
-                  <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0" />
-                  <p className="text-xs font-body">
-                    <span className="font-semibold">Narrowly trusted</span> —
-                    community opinions are divided.
-                  </p>
-                </div>
-              )}
-              {isContested && (
-                <div
-                  data-ocid="source_detail.card"
-                  className="flex items-center gap-2 px-3 py-2 mb-4 rounded-sm bg-slate-50 border border-slate-200 text-slate-700"
-                >
-                  <Scale className="h-3.5 w-3.5 flex-shrink-0" />
-                  <p className="text-xs font-body">
-                    <span className="font-semibold">Contested</span> — the
-                    community is divided on this source&apos;s credibility
-                    (40–60% approval). A clear 60%+ majority is needed to become
-                    trusted.
-                  </p>
-                </div>
-              )}
-              {isNotTrusted && (
-                <div
-                  data-ocid="source_detail.card"
-                  className="flex items-center gap-2 px-3 py-2 mb-4 rounded-sm bg-red-50 border border-red-200 text-red-700"
-                >
-                  <ShieldX className="h-3.5 w-3.5 flex-shrink-0" />
-                  <p className="text-xs font-body">
-                    <span className="font-semibold">Not Trusted</span> — the
-                    community has voted this source as unreliable (less than 40%
-                    approval). Evidence citing this source receives a
-                    credibility penalty.
-                  </p>
+              {/* Full-width credibility bar */}
+              {credibility.status === "scored" && (
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-body font-semibold text-foreground">
+                      Source Credibility
+                    </p>
+                    <p className="text-xs font-body text-muted-foreground">
+                      {Math.round(credibility.score)}/100
+                    </p>
+                  </div>
+                  <div className="h-2.5 rounded-full bg-muted overflow-hidden">
+                    <div
+                      className={cn(
+                        "h-full rounded-full transition-all duration-700",
+                        credibility.label === "High Credibility"
+                          ? "bg-emerald-500"
+                          : credibility.label === "Mixed"
+                            ? "bg-amber-400"
+                            : "bg-red-400",
+                      )}
+                      style={{ width: `${Math.round(credibility.score)}%` }}
+                    />
+                  </div>
                 </div>
               )}
 
-              {/* Progress bars */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-body text-muted-foreground">
-                      Votes toward threshold
-                    </span>
-                    <span className="text-xs font-mono text-muted-foreground">
-                      {totalVotes} / 25
-                    </span>
-                  </div>
-                  <Progress
-                    value={votesProgress}
-                    className={cn(
-                      "h-2",
-                      needsMoreVotes
-                        ? "[&>div]:bg-amber-400"
-                        : "[&>div]:bg-emerald-500",
-                    )}
-                  />
+              {/* Admin override note */}
+              {source.adminOverrideNote?.trim() && (
+                <div className="flex items-start gap-2 mt-4 px-3 py-2 rounded-sm bg-violet-50 border border-violet-200 text-violet-700">
+                  <Shield className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" />
+                  <p className="text-xs font-body">
+                    <span className="font-semibold">Admin note:</span>{" "}
+                    {source.adminOverrideNote}
+                  </p>
                 </div>
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-body text-muted-foreground">
-                      Upvote ratio
-                    </span>
-                    <span className="text-xs font-mono text-muted-foreground">
-                      {upvotePct}% / 60% needed
-                    </span>
-                  </div>
-                  <Progress
-                    value={approvalProgress}
-                    className={cn(
-                      "h-2",
-                      upvotePct >= 60
-                        ? "[&>div]:bg-emerald-500"
-                        : "[&>div]:bg-muted-foreground/40",
-                    )}
-                  />
-                </div>
-              </div>
-
-              {/* Voting panel — open to all users */}
-              <div className="flex items-center justify-center pt-1">
-                <VotePanel source={source} sessionId={sessionId} />
-              </div>
+              )}
             </div>
 
-            {/* ── Credibility Boost ────────────────────────────── */}
-            <CredibilityBoostSection
-              sourceType={source.sourceType}
-              domain={source.domain}
-              upvotes={upvotes}
-              downvotes={downvotes}
-            />
-
-            {/* ── About Blurb ──────────────────────────────────── */}
-            {wikiLoading ? (
-              <section>
-                <div className="flex items-center gap-2 mb-3">
-                  <div className="w-1 h-5 bg-primary rounded-full" />
-                  <h2 className="font-display text-lg font-bold text-foreground">
-                    About
-                  </h2>
-                </div>
+            {/* ── About Blurb + Evidence Performance (combined container) ── */}
+            <section className="space-y-4">
+              {/* About blurb — directly beneath domain header */}
+              {wikiLoading ? (
                 <Skeleton className="h-16 w-full rounded-sm" />
-              </section>
-            ) : displayedBlurb ? (
-              <section>
-                <div className="flex items-center justify-between gap-2 mb-3">
-                  <div className="flex items-center gap-2">
+              ) : displayedBlurb ? (
+                <div>
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <div className="flex items-center gap-2">
+                      <div className="w-1 h-5 bg-primary rounded-full" />
+                      <h2 className="font-display text-base font-semibold text-foreground">
+                        About
+                      </h2>
+                    </div>
+                    {canEditBlurb && !wikiBlurb && !editingBlurb && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 text-xs text-muted-foreground gap-1"
+                        onClick={startEditBlurb}
+                        data-ocid="source_detail.edit_button"
+                      >
+                        <Pencil className="h-3 w-3" />
+                        Edit
+                      </Button>
+                    )}
+                  </div>
+                  {editingBlurb ? (
+                    <div className="space-y-2">
+                      <Textarea
+                        value={blurbDraft}
+                        onChange={(e) =>
+                          setBlurbDraft(e.target.value.slice(0, 500))
+                        }
+                        placeholder="Add a description for this source..."
+                        className="text-sm font-body resize-none min-h-[96px]"
+                        data-ocid="source_detail.textarea"
+                      />
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-muted-foreground font-body">
+                          {blurbDraft.length}/500
+                        </span>
+                        <div className="flex gap-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 text-xs"
+                            onClick={() => setEditingBlurb(false)}
+                            data-ocid="source_detail.cancel_button"
+                          >
+                            Cancel
+                          </Button>
+                          <Button
+                            size="sm"
+                            className="h-7 text-xs"
+                            onClick={saveBlurb}
+                            data-ocid="source_detail.save_button"
+                          >
+                            Save
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-sm font-body text-muted-foreground leading-relaxed">
+                      {displayedBlurb}
+                    </p>
+                  )}
+                </div>
+              ) : canEditBlurb ? (
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
                     <div className="w-1 h-5 bg-primary rounded-full" />
-                    <h2 className="font-display text-lg font-bold text-foreground">
+                    <h2 className="font-display text-base font-semibold text-foreground">
                       About
                     </h2>
                   </div>
-                  {canEditBlurb && !wikiBlurb && !editingBlurb && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 text-xs text-muted-foreground gap-1"
+                  {editingBlurb ? (
+                    <div className="space-y-2">
+                      <Textarea
+                        value={blurbDraft}
+                        onChange={(e) =>
+                          setBlurbDraft(e.target.value.slice(0, 500))
+                        }
+                        placeholder="Add a description for this source..."
+                        className="text-sm font-body resize-none min-h-[96px]"
+                        data-ocid="source_detail.textarea"
+                      />
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-muted-foreground font-body">
+                          {blurbDraft.length}/500
+                        </span>
+                        <div className="flex gap-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 text-xs"
+                            onClick={() => setEditingBlurb(false)}
+                            data-ocid="source_detail.cancel_button"
+                          >
+                            Cancel
+                          </Button>
+                          <Button
+                            size="sm"
+                            className="h-7 text-xs"
+                            onClick={saveBlurb}
+                            data-ocid="source_detail.save_button"
+                          >
+                            Save
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
                       onClick={startEditBlurb}
+                      className="w-full flex gap-3 p-3 bg-secondary border border-dashed border-border rounded-sm text-left hover:bg-muted/50 transition-colors"
                       data-ocid="source_detail.edit_button"
                     >
-                      <Pencil className="h-3 w-3" />
-                      Edit
-                    </Button>
+                      <BookOpen className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+                      <p className="text-sm font-body text-muted-foreground leading-relaxed">
+                        Add a description for this source...
+                      </p>
+                    </button>
                   )}
                 </div>
-                {editingBlurb ? (
-                  <div className="space-y-2">
-                    <Textarea
-                      value={blurbDraft}
-                      onChange={(e) =>
-                        setBlurbDraft(e.target.value.slice(0, 500))
-                      }
-                      placeholder="Add a description for this source..."
-                      className="text-sm font-body resize-none min-h-[96px]"
-                      data-ocid="source_detail.textarea"
-                    />
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs text-muted-foreground font-body">
-                        {blurbDraft.length}/500
-                      </span>
-                      <div className="flex gap-2">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 text-xs"
-                          onClick={() => setEditingBlurb(false)}
-                          data-ocid="source_detail.cancel_button"
-                        >
-                          Cancel
-                        </Button>
-                        <Button
-                          size="sm"
-                          className="h-7 text-xs"
-                          onClick={saveBlurb}
-                          data-ocid="source_detail.save_button"
-                        >
-                          Save
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex gap-3 p-4 bg-secondary border border-border rounded-sm">
-                    <BookOpen className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
-                    <p className="text-sm font-body text-foreground leading-relaxed">
-                      {displayedBlurb}
-                    </p>
-                  </div>
-                )}
-              </section>
-            ) : canEditBlurb ? (
-              <section>
+              ) : null}
+
+              {/* Evidence Performance — directly beneath About */}
+              <div>
                 <div className="flex items-center gap-2 mb-3">
                   <div className="w-1 h-5 bg-primary rounded-full" />
-                  <h2 className="font-display text-lg font-bold text-foreground">
-                    About
+                  <h2 className="font-display text-base font-semibold text-foreground">
+                    Evidence Performance
                   </h2>
                 </div>
-                {editingBlurb ? (
-                  <div className="space-y-2">
-                    <Textarea
-                      value={blurbDraft}
-                      onChange={(e) =>
-                        setBlurbDraft(e.target.value.slice(0, 500))
-                      }
-                      placeholder="Add a description for this source..."
-                      className="text-sm font-body resize-none min-h-[96px]"
-                      data-ocid="source_detail.textarea"
-                    />
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs text-muted-foreground font-body">
-                        {blurbDraft.length}/500
-                      </span>
-                      <div className="flex gap-2">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 text-xs"
-                          onClick={() => setEditingBlurb(false)}
-                          data-ocid="source_detail.cancel_button"
-                        >
-                          Cancel
-                        </Button>
-                        <Button
-                          size="sm"
-                          className="h-7 text-xs"
-                          onClick={saveBlurb}
-                          data-ocid="source_detail.save_button"
-                        >
-                          Save
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={startEditBlurb}
-                    className="w-full flex gap-3 p-4 bg-secondary border border-dashed border-border rounded-sm text-left hover:bg-muted/50 transition-colors"
-                    data-ocid="source_detail.edit_button"
-                  >
-                    <BookOpen className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
-                    <p className="text-sm font-body text-muted-foreground leading-relaxed">
-                      Add a description for this source...
-                    </p>
-                  </button>
-                )}
-              </section>
-            ) : null}
+                <EvidencePerformanceSection credibility={credibility} />
+              </div>
+            </section>
 
             {/* ── Claims Citing This Source ─────────────────────── */}
             <section>
               <div className="flex items-center gap-2 mb-4">
                 <div className="w-1 h-5 bg-primary rounded-full" />
-                <h2 className="font-display text-lg font-bold text-foreground">
+                <h2 className="font-display text-base font-semibold text-foreground">
                   Claims Citing This Source
                 </h2>
               </div>
@@ -1768,7 +1472,7 @@ export function SourceDetailPage({
             <section>
               <div className="flex items-center gap-2 mb-4">
                 <div className="w-1 h-5 bg-primary rounded-full" />
-                <h2 className="font-display text-lg font-bold text-foreground">
+                <h2 className="font-display text-base font-semibold text-foreground">
                   Evidence Quality
                 </h2>
                 <span className="text-xs font-body text-muted-foreground">
@@ -1782,7 +1486,7 @@ export function SourceDetailPage({
             <section>
               <div className="flex items-center gap-2 mb-4">
                 <div className="w-1 h-5 bg-primary rounded-full" />
-                <h2 className="font-display text-lg font-bold text-foreground">
+                <h2 className="font-display text-base font-semibold text-foreground">
                   Discussion
                 </h2>
               </div>

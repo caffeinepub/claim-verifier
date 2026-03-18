@@ -15,6 +15,8 @@ import MixinStorage "blob-storage/Mixin";
 import AccessControl "authorization/access-control";
 import MixinAuthorization "authorization/MixinAuthorization";
 
+
+
 actor {
   include MixinStorage();
 
@@ -200,6 +202,113 @@ actor {
   // Trusted source thresholds
   let SOURCE_MIN_VOTES : Nat = 25;
   let SOURCE_MIN_UPVOTE_PCT : Nat = 60;
+
+  // ADMIN API
+  public query ({ caller }) func adminGetAllUsers(password : Text) : async [UserProfile] {
+    if (password != ADMIN_PASSWORD) {
+      Runtime.trap("Unauthorized: Only admins can view all users");
+    };
+    userProfiles.values().toArray();
+  };
+
+  public shared ({ caller }) func adminDeleteUser(username : Text, password : Text) : async { #ok; #err : Text } {
+    if (password != ADMIN_PASSWORD) {
+      Runtime.trap("Unauthorized: Only admins can delete users");
+    };
+
+    let normalizedUsername = username.trim(#char ' ');
+    // Find the principal for this username
+    let principalOpt = usernames.get(normalizedUsername);
+
+    // Remove from userProfiles and usernames
+    userProfiles := userProfiles.filter(func(p, _profile) { not (?p == principalOpt) });
+    usernames := usernames.filter(func(uname, _) { uname != normalizedUsername });
+
+    // Remove from reputationEvents
+    switch (principalOpt) {
+      case (null) {};
+      case (?principal) {
+        reputationEvents.remove(principal);
+      };
+    };
+
+    // Remove all claims by this user
+    claimsArray := claimsArray.filter(func(c : Claim) : Bool { c.authorUsername != normalizedUsername });
+
+    // Remove all evidences by this user
+    evidencesArray := evidencesArray.filter(func(e : Evidence) : Bool { e.authorUsername != normalizedUsername });
+
+    // Remove all votes by this user
+    votesArray := votesArray.filter(
+      func(v : Vote) : Bool {
+        // Check if any claim by this user matches the claimId
+        claimsArray.find(func(c : Claim) : Bool { c.authorUsername == normalizedUsername and c.id == v.claimId }) == null
+      }
+    );
+
+    // Remove all replies by this user
+    repliesArray := repliesArray.filter(func(r : Reply) : Bool { r.authorUsername != normalizedUsername });
+
+    // Remove all source comments by this user
+    sourceCommentsArray := sourceCommentsArray.filter(func(c : SourceComment) : Bool { c.authorUsername != normalizedUsername });
+
+    // Remove all user votes by this user
+    userVotesArray := userVotesArray.filter(func(v : UserVote) : Bool { v.authorUsername != normalizedUsername });
+
+    #ok;
+  };
+
+  public shared ({ caller }) func adminDeleteVote(claimId : Nat, sessionId : Text, password : Text) : async { #ok; #err : Text } {
+    if (password != ADMIN_PASSWORD) {
+      Runtime.trap("Unauthorized: Only admins can delete votes");
+    };
+
+    // Remove from votesArray
+    votesArray := votesArray.filter(func(v : Vote) : Bool { not (v.claimId == claimId and v.sessionId == sessionId) });
+
+    // Remove from userVotesArray
+    userVotesArray := userVotesArray.filter(func(v : UserVote) : Bool { not (v.claimId == claimId and v.sessionId == sessionId) });
+
+    #ok;
+  };
+
+  public shared ({ caller }) func adminDeleteSourceComment(commentId : Nat, password : Text) : async { #ok; #err : Text } {
+    if (password != ADMIN_PASSWORD) {
+      Runtime.trap("Unauthorized: Only admins can delete source comments");
+    };
+
+    // Remove from sourceCommentsArray
+    sourceCommentsArray := sourceCommentsArray.filter(func(c : SourceComment) : Bool { c.id != commentId });
+
+    // Remove all sourceCommentLikes for this comment
+    sourceCommentLikesArray := sourceCommentLikesArray.filter(func(l : SourceCommentLike) : Bool { l.commentId != commentId });
+
+    #ok;
+  };
+
+  public query ({ caller }) func adminGetVotesForClaim(claimId : Nat, password : Text) : async [Vote] {
+    if (password != ADMIN_PASSWORD) {
+      Runtime.trap("Unauthorized: Only admins can view votes for claims");
+    };
+    votesArray.filter(func(v : Vote) : Bool { v.claimId == claimId });
+  };
+
+  public query ({ caller }) func adminGetAllClaims(password : Text) : async [Claim] {
+    if (password != ADMIN_PASSWORD) {
+      Runtime.trap("Unauthorized: Only admins can view all claims");
+    };
+    claimsArray;
+  };
+
+  public query ({ caller }) func adminGetAllSources(password : Text) : async [TrustedSource] {
+    if (password != ADMIN_PASSWORD) {
+      Runtime.trap("Unauthorized: Only admins can view all sources");
+    };
+    trustedSourcesArray;
+  };
+
+  // ... rest of the existing code ...
+  // All existing stable vars and functions should be preserved as is
 
   // Record vote by username (additive function)
   // Authorization: Caller must own the username they're voting as
@@ -832,14 +941,14 @@ actor {
   };
 
   public query ({ caller }) func getHiddenClaims(password : Text) : async [Claim] {
-    if (not AccessControl.isAdmin(accessControlState, caller)) {
+    if (password != ADMIN_PASSWORD) {
       Runtime.trap("Unauthorized: Only admins can view hidden claims");
     };
     claimsArray.filter(func(c : Claim) : Bool { isHidden(c.id, "claim") });
   };
 
   public query ({ caller }) func getHiddenEvidence(password : Text) : async [Evidence] {
-    if (not AccessControl.isAdmin(accessControlState, caller)) {
+    if (password != ADMIN_PASSWORD) {
       Runtime.trap("Unauthorized: Only admins can view hidden evidence");
     };
     evidencesArray.filter(func(e : Evidence) : Bool { isHidden(e.id, "evidence") });
@@ -849,7 +958,7 @@ actor {
     #ok;
     #err : Text;
   } {
-    if (not AccessControl.isAdmin(accessControlState, caller)) {
+    if (password != ADMIN_PASSWORD) {
       Runtime.trap("Unauthorized: Only admins can restore claims");
     };
     reportsArray := reportsArray.filter(func(r : Report) : Bool {
@@ -862,7 +971,7 @@ actor {
     #ok;
     #err : Text;
   } {
-    if (not AccessControl.isAdmin(accessControlState, caller)) {
+    if (password != ADMIN_PASSWORD) {
       Runtime.trap("Unauthorized: Only admins can restore evidence");
     };
     reportsArray := reportsArray.filter(func(r : Report) : Bool {
@@ -875,7 +984,7 @@ actor {
     #ok;
     #err : Text;
   } {
-    if (not AccessControl.isAdmin(accessControlState, caller)) {
+    if (password != ADMIN_PASSWORD) {
       Runtime.trap("Unauthorized: Only admins can delete claims");
     };
     let evidenceIds = evidencesArray
@@ -900,7 +1009,7 @@ actor {
     #ok;
     #err : Text;
   } {
-    if (not AccessControl.isAdmin(accessControlState, caller)) {
+    if (password != ADMIN_PASSWORD) {
       Runtime.trap("Unauthorized: Only admins can delete evidence");
     };
     evidencesArray := evidencesArray.filter(func(e : Evidence) : Bool { e.id != id });
@@ -1043,7 +1152,7 @@ actor {
   };
 
   public query ({ caller }) func getHiddenReplies(password : Text) : async [Reply] {
-    if (not AccessControl.isAdmin(accessControlState, caller)) {
+    if (password != ADMIN_PASSWORD) {
       Runtime.trap("Unauthorized: Only admins can view hidden replies");
     };
     repliesArray.filter(func(r : Reply) : Bool { isHidden(r.id, "reply") });
@@ -1053,7 +1162,7 @@ actor {
     #ok;
     #err : Text;
   } {
-    if (not AccessControl.isAdmin(accessControlState, caller)) {
+    if (password != ADMIN_PASSWORD) {
       Runtime.trap("Unauthorized: Only admins can restore replies");
     };
     reportsArray := reportsArray.filter(func(r : Report) : Bool {
@@ -1066,7 +1175,7 @@ actor {
     #ok;
     #err : Text;
   } {
-    if (not AccessControl.isAdmin(accessControlState, caller)) {
+    if (password != ADMIN_PASSWORD) {
       Runtime.trap("Unauthorized: Only admins can delete replies");
     };
     repliesArray := repliesArray.filter(func(r : Reply) : Bool { r.id != id });
@@ -1273,7 +1382,7 @@ actor {
     #ok;
     #err : Text;
   } {
-    if (not AccessControl.isAdmin(accessControlState, caller)) {
+    if (password != ADMIN_PASSWORD) {
       Runtime.trap("Unauthorized: Only admins can remove sources");
     };
     trustedSourcesArray := trustedSourcesArray.filter(func(s : TrustedSource) : Bool { s.id != sourceId });
@@ -1285,7 +1394,7 @@ actor {
     #ok;
     #err : Text;
   } {
-    if (not AccessControl.isAdmin(accessControlState, caller)) {
+    if (password != ADMIN_PASSWORD) {
       Runtime.trap("Unauthorized: Only admins can override sources");
     };
     trustedSourcesArray := trustedSourcesArray.map(func(s : TrustedSource) : TrustedSource {
@@ -1310,7 +1419,7 @@ actor {
     #ok;
     #err : Text;
   } {
-    if (not AccessControl.isAdmin(accessControlState, caller)) {
+    if (password != ADMIN_PASSWORD) {
       Runtime.trap("Unauthorized: Only admins can set pinned comments");
     };
     trustedSourcesArray := trustedSourcesArray.map(func(s : TrustedSource) : TrustedSource {
@@ -1335,7 +1444,7 @@ actor {
     #ok : Text;
     #err : Text;
   } {
-    if (not AccessControl.isAdmin(accessControlState, caller)) {
+    if (password != ADMIN_PASSWORD) {
       Runtime.trap("Unauthorized: Only admins can fetch about blurbs");
     };
     switch (trustedSourcesArray.find(func(s : TrustedSource) : Bool { s.id == sourceId })) {
@@ -1631,23 +1740,23 @@ actor {
   } {
     let normalizedUsername = username.trim(#char ' ');
     let principalOpt = usernames.get(normalizedUsername);
-    
+
     // Count claims by this username
     let claims = claimsArray.filter(func(c : Claim) : Bool { c.authorUsername == normalizedUsername and not isHidden(c.id, "claim") });
     let claimCount = claims.size();
-    
+
     // Count evidence by this username
     let evidence = evidencesArray.filter(func(e : Evidence) : Bool { e.authorUsername == normalizedUsername and not isHidden(e.id, "evidence") });
     let evidenceCount = evidence.size();
-    
+
     // Count replies by this username
     let replies = repliesArray.filter(func(r : Reply) : Bool { r.authorUsername == normalizedUsername });
     let replyCount = replies.size();
-    
+
     // Count source comments by this username
     let sourceComments = sourceCommentsArray.filter(func(c : SourceComment) : Bool { c.authorUsername == normalizedUsername });
     let commentCount = replyCount + sourceComments.size();
-    
+
     // Calculate activity points from reputation events
     var activityPoints : Int = 0;
     switch (principalOpt) {
@@ -1663,7 +1772,7 @@ actor {
       };
       case (null) {};
     };
-    
+
     // Calculate trust score: percentage of evidence that was upvoted (net positive)
     var positiveEvidence : Nat = 0;
     if (evidenceCount > 0) {
@@ -1679,8 +1788,7 @@ actor {
       let trustScore = (positiveEvidence * 100) / evidenceCount;
       return { claimCount; evidenceCount; commentCount; replyCount; activityPoints; trustScore };
     };
-    
+
     { claimCount; evidenceCount; commentCount; replyCount; activityPoints; trustScore = 0 };
   };
 };
-

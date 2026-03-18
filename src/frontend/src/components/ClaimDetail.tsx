@@ -22,6 +22,7 @@ import {
   useClaimById,
   useEnhancedVoteTally,
   useEvidenceForClaim,
+  useProfileByUsername,
   useSessionVote,
   useSubmitEvidence,
   useSubmitVote,
@@ -90,6 +91,7 @@ import {
   saveEdit,
   useAccountPermissions,
 } from "@/hooks/useAccountPermissions";
+import { useActor } from "@/hooks/useActor";
 import { useReportContent } from "@/hooks/useQueries";
 import { useAddReputationEvent } from "@/hooks/useQueries";
 import { useSessionGate } from "@/hooks/useSessionGate";
@@ -289,6 +291,40 @@ function EvidenceTextDisplay({
   );
 }
 
+// ── Claim detail meta row (timestamp · avatar username) ──────────────────────
+function ClaimDetailMeta({
+  username,
+  timestamp,
+}: {
+  username: string | undefined | null;
+  timestamp: bigint;
+}) {
+  const trimmed = username?.trim() ?? "";
+  const { data: profile } = useProfileByUsername(trimmed || null);
+
+  const timeNode = (
+    <span className="text-xs text-muted-foreground font-body">
+      {formatRelativeTime(timestamp)}
+    </span>
+  );
+
+  if (!trimmed) {
+    return <div className="flex items-center gap-1.5">{timeNode}</div>;
+  }
+
+  return (
+    <div className="flex items-center gap-1.5">
+      {timeNode}
+      <span className="text-xs text-muted-foreground">·</span>
+      <UserProfileCard username={trimmed} isVerified={!!profile}>
+        <span className="text-xs text-muted-foreground font-body cursor-pointer hover:underline">
+          {trimmed}
+        </span>
+      </UserProfileCard>
+    </div>
+  );
+}
+
 export function ClaimDetail({
   claimId,
   sessionId,
@@ -298,6 +334,9 @@ export function ClaimDetail({
   const [evidenceText, setEvidenceText] = useState("");
   const [hotTooltipOpen, setHotTooltipOpen] = useState(false);
   const [evidenceImageUrls, setEvidenceImageUrls] = useState<string[]>([]);
+  const [isEvidenceImageUploading, setIsEvidenceImageUploading] =
+    useState(false);
+  const [evidenceUploaderKey, setEvidenceUploaderKey] = useState(0);
   const [evidenceUrls, setEvidenceUrls] = useState<string[]>([]);
   const [sortOption, setSortOption] = useState<SortOption>("most_upvotes");
   const [evidenceSearch, setEvidenceSearch] = useState("");
@@ -379,6 +418,7 @@ export function ClaimDetail({
   const addRepEvent = useAddReputationEvent();
   const submitEvidence = useSubmitEvidence();
   const reportContent = useReportContent();
+  const { actor } = useActor();
   const { checkAction, checkVoteAction } = useSessionGate();
 
   const hasVoted = !!sessionVote;
@@ -478,8 +518,42 @@ export function ClaimDetail({
         });
       }
       toast.success("Evidence submitted");
+
+      // Auto-index sources from submitted URLs
+      const submittedUrls = evidenceUrls.filter((u) => u.trim());
+      if (submittedUrls.length > 0 && sessionId) {
+        const autoUsername = verifiedUsername ?? getOrInitUsername();
+        const uniqueDomains = [
+          ...new Set(
+            submittedUrls
+              .map((url) => {
+                try {
+                  return new URL(url).hostname
+                    .replace(/^www\./i, "")
+                    .toLowerCase();
+                } catch {
+                  return url
+                    .replace(/^https?:\/\//i, "")
+                    .replace(/^www\./i, "")
+                    .split("/")[0]
+                    .toLowerCase();
+                }
+              })
+              .filter(Boolean),
+          ),
+        ];
+        // Fire-and-forget; ignore "already exists" errors silently
+        for (const d of uniqueDomains) {
+          actor
+            ?.suggestTrustedSource(d, "general", sessionId, autoUsername)
+            .catch(() => {});
+        }
+      }
+
       setEvidenceText("");
       setEvidenceImageUrls([]);
+      setIsEvidenceImageUploading(false);
+      setEvidenceUploaderKey((k) => k + 1);
       setEvidenceUrls([]);
       setEvidenceType("Unverified");
     } catch (err) {
@@ -583,16 +657,16 @@ export function ClaimDetail({
         <article className="space-y-6">
           {/* Header */}
           <header>
-            <div className="flex items-center gap-2 mb-3 flex-wrap">
+            {/* Single-row: category badge left, timestamp · username right */}
+            <div className="flex items-center gap-2 mb-3">
               <CategoryBadge category={claim.category} />
-              <span className="text-xs text-muted-foreground font-body">
-                {formatRelativeTime(claim.timestamp)}
-              </span>
-              <span className="text-muted-foreground text-xs">·</span>
-              <span className="text-xs text-muted-foreground font-body flex items-center gap-1">
-                <AuthorDisplay username={claim.authorUsername} />
-              </span>
+              <ClaimDetailMeta
+                username={claim.authorUsername}
+                timestamp={claim.timestamp}
+              />
             </div>
+
+            {/* Title */}
             <div className="mb-4">
               <h1 className="font-display text-3xl font-bold leading-tight text-foreground">
                 {claim.title}
@@ -620,6 +694,7 @@ export function ClaimDetail({
                 )}
               </h1>
             </div>
+
             <p className="font-body text-base text-muted-foreground leading-relaxed">
               {claim.description}
             </p>
@@ -832,11 +907,21 @@ export function ClaimDetail({
                     Attach images (optional)
                   </p>
                   {canUploadImages ? (
-                    <ImageUploader
-                      onUploaded={setEvidenceImageUrls}
-                      maxFiles={5}
-                      ocidPrefix="evidence.image"
-                    />
+                    <>
+                      <ImageUploader
+                        key={evidenceUploaderKey}
+                        onUploaded={setEvidenceImageUrls}
+                        onUploadingChange={setIsEvidenceImageUploading}
+                        maxFiles={5}
+                        ocidPrefix="evidence.image"
+                      />
+                      {isEvidenceImageUploading && (
+                        <p className="text-xs text-muted-foreground font-body flex items-center gap-1.5">
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                          Uploading images, please wait...
+                        </p>
+                      )}
+                    </>
                   ) : (
                     <p className="flex items-center gap-1.5 text-xs text-muted-foreground font-body">
                       <LogIn className="h-3 w-3 flex-shrink-0" />
@@ -933,6 +1018,7 @@ export function ClaimDetail({
                     disabled={
                       submitEvidence.isPending ||
                       evidenceCooldownLeft > 0 ||
+                      isEvidenceImageUploading ||
                       !evidenceText.trim()
                     }
                     size="sm"

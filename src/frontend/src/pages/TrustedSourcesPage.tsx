@@ -1,71 +1,31 @@
-import { UserAvatar } from "@/components/UserAvatar";
-import {
-  UserProfileCard,
-  isVerifiedUsername,
-} from "@/components/UserProfileCard";
-import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
+import type { Evidence } from "@/backend.d";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Progress } from "@/components/ui/progress";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useInternetIdentity } from "@/hooks/useInternetIdentity";
 import {
   type TrustedSourceInfo,
-  useAddReputationEvent,
-  useSuggestTrustedSource,
+  useAllEvidenceForAllClaims,
+  useAllEvidenceTallies,
   useTrustedSources,
 } from "@/hooks/useQueries";
-import { useSessionGate } from "@/hooks/useSessionGate";
-import {
-  appendUserSource,
-  getActivePrincipalId,
-  useVerifiedAccount,
-} from "@/hooks/useVerifiedAccount";
 import { cn } from "@/lib/utils";
+import { computeSourceCredibility } from "@/utils/sourceCredibility";
 import {
-  computeDynamicSourceBoost,
-  getEvidenceCardsForDomain,
-  getSourceStatus,
-} from "@/utils/sourceCredibility";
-import {
-  CheckCircle2,
-  Clock,
+  BarChart2,
   ExternalLink,
   Globe,
-  Loader2,
-  Plus,
-  Scale,
+  Info,
   Search,
   Shield,
-  ShieldCheck,
-  ShieldX,
-  Users,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { useEffect, useRef, useState } from "react";
-import { toast } from "sonner";
+import { useMemo, useState } from "react";
 
 const SOURCE_TYPES = [
   { value: "peer-reviewed", label: "Peer-Reviewed Study", bonus: "+5%" },
@@ -114,17 +74,8 @@ export function getSourceTypeBadgeClasses(type: string): string {
   }
 }
 
-function stripDomain(input: string): string {
-  return input
-    .trim()
-    .replace(/^https?:\/\//i, "")
-    .replace(/^www\./i, "")
-    .split("/")[0]
-    .toLowerCase();
-}
-
 /** Tries Clearbit logo → Google favicon → Globe icon */
-function SourceLogo({
+export function SourceLogo({
   domain,
   size = "sm",
 }: {
@@ -132,12 +83,16 @@ function SourceLogo({
   size?: "sm" | "lg";
 }) {
   const [step, setStep] = useState<0 | 1 | 2>(0);
-  const sizeClass = size === "lg" ? "w-10 h-10" : "w-8 h-8";
-  const iconSize = size === "lg" ? "h-5 w-5" : "h-4 w-4";
+  const sizeClass = size === "lg" ? "w-10 h-10" : "w-10 h-10";
+  const iconSize = size === "lg" ? "h-5 w-5" : "h-5 w-5";
 
   if (step === 2) {
     return (
-      <Globe className={cn(iconSize, "text-muted-foreground flex-shrink-0")} />
+      <span
+        className={`${sizeClass} flex items-center justify-center rounded-lg bg-muted p-1 flex-shrink-0`}
+      >
+        <Globe className={`${iconSize} text-muted-foreground`} />
+      </span>
     );
   }
 
@@ -147,87 +102,51 @@ function SourceLogo({
       : `https://www.google.com/s2/favicons?domain=${domain}&sz=64`;
 
   return (
-    <img
-      src={src}
-      alt={domain}
-      className={cn(sizeClass, "rounded object-contain flex-shrink-0")}
-      onError={() => setStep((s) => (s < 2 ? ((s + 1) as 0 | 1 | 2) : 2))}
-    />
-  );
-}
-
-function DynamicBonusLabel({
-  sourceType,
-  domain,
-  upvotes,
-  downvotes,
-}: {
-  sourceType: string;
-  domain: string;
-  upvotes: number;
-  downvotes: number;
-}) {
-  const total = upvotes + downvotes;
-  const ratio = total > 0 ? upvotes / total : 0;
-  const cards = getEvidenceCardsForDomain(domain);
-  const { dynamicBonus, ceilingLabel, hasTrackRecord, isPenalty } =
-    computeDynamicSourceBoost(sourceType, ratio, cards);
-  const status = getSourceStatus(upvotes, downvotes);
-
-  if (status === "pending") {
-    return (
-      <span className="text-[10px] font-body text-muted-foreground">
-        {ceilingLabel} potential boost
-      </span>
-    );
-  }
-  if (status === "contested") {
-    return (
-      <span className="text-[10px] font-body text-muted-foreground">
-        No credibility adjustment
-      </span>
-    );
-  }
-  if (status === "not-trusted") {
-    return (
-      <span className="text-[10px] font-body text-red-500">
-        {hasTrackRecord
-          ? dynamicBonus
-          : `-${ceilingLabel.replace("up to +", "up to ")}`}{" "}
-        credibility penalty
-      </span>
-    );
-  }
-  return (
-    <span
-      className={`text-[10px] font-body ${isPenalty ? "text-red-500" : "text-muted-foreground"}`}
-    >
-      {hasTrackRecord ? dynamicBonus : ceilingLabel} credibility bonus
+    <span className={`${sizeClass} flex-shrink-0 rounded-lg bg-muted p-1`}>
+      <img
+        src={src}
+        alt={domain}
+        loading="lazy"
+        className="w-full h-full object-contain rounded"
+        onError={() => setStep((s) => (s < 2 ? ((s + 1) as 0 | 1 | 2) : 2))}
+      />
     </span>
   );
 }
 
+// ── Source Card ─────────────────────────────────────────────────────────────
+
 function SourceCard({
   source,
   index,
+  allEvidenceWithScores,
   onSourceClick,
 }: {
   source: TrustedSourceInfo;
   index: number;
-  sessionId: string | null;
+  allEvidenceWithScores: { urls?: string[]; netScore: number }[];
   onSourceClick?: (domain: string) => void;
 }) {
-  const upvotes = Number(source.upvotes);
-  const downvotes = Number(source.downvotes);
-  const totalVotes = upvotes + downvotes;
-  const upvotePct =
-    totalVotes > 0 ? Math.round((upvotes / totalVotes) * 100) : 0;
-  const votesProgress = Math.min(100, (totalVotes / 25) * 100);
-  const approvalProgress = Math.min(100, upvotePct);
+  const credibility = useMemo(
+    () => computeSourceCredibility(source.domain, allEvidenceWithScores),
+    [source.domain, allEvidenceWithScores],
+  );
 
-  const needsMoreVotes = totalVotes < 25;
-  const needsMoreApproval = upvotePct < 60;
-  const isClose = !source.isTrusted && !needsMoreVotes && needsMoreApproval;
+  const borderColorClass =
+    credibility.status === "scored" && credibility.label === "High Credibility"
+      ? "border-l-green-500"
+      : credibility.status === "scored" &&
+          credibility.label === "Low Credibility"
+        ? "border-l-red-500"
+        : "border-l-amber-400";
+
+  const scoreColor =
+    credibility.status === "scored" && credibility.label === "High Credibility"
+      ? "bg-emerald-500"
+      : credibility.status === "scored" &&
+          credibility.label === "Low Credibility"
+        ? "bg-red-400"
+        : "bg-amber-400";
 
   return (
     <motion.div
@@ -237,28 +156,20 @@ function SourceCard({
       transition={{ delay: index * 0.04 }}
       onClick={() => onSourceClick?.(source.domain)}
       className={cn(
-        "p-4 bg-card border rounded-sm transition-all cursor-pointer",
-        (() => {
-          const st = getSourceStatus(
-            Number(source.upvotes),
-            Number(source.downvotes),
-          );
-          if (st === "trusted")
-            return "border-emerald-500/30 shadow-sm shadow-emerald-500/10 hover:border-emerald-500/60 hover:shadow-emerald-500/20";
-          if (st === "not-trusted")
-            return "border-red-400/30 hover:border-red-400/60 hover:shadow-sm";
-          if (st === "contested")
-            return "border-slate-400/40 hover:border-slate-500/50 hover:shadow-sm";
-          return "border-border hover:border-primary/40 hover:shadow-sm";
-        })(),
-        onSourceClick && "hover:bg-secondary/40",
+        "p-5 bg-card border border-l-4 rounded-sm transition-all cursor-pointer hover:shadow-md",
+        borderColorClass,
+        credibility.status === "scored" &&
+          credibility.label === "High Credibility"
+          ? "border-emerald-500/20 hover:border-emerald-500/40"
+          : credibility.status === "scored" &&
+              credibility.label === "Low Credibility"
+            ? "border-red-400/20 hover:border-red-400/40"
+            : "border-border hover:border-primary/30",
       )}
     >
-      {/* Header row */}
+      {/* Top area: logo + domain */}
       <div className="flex items-start gap-3 mb-3">
-        <div className="flex-shrink-0 mt-0.5">
-          <SourceLogo domain={source.domain} size="sm" />
-        </div>
+        <SourceLogo domain={source.domain} size="sm" />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap mb-1">
             <a
@@ -266,506 +177,125 @@ function SourceCard({
               target="_blank"
               rel="noopener noreferrer"
               onClick={(e) => e.stopPropagation()}
-              className="text-sm font-bold font-body text-foreground hover:text-primary transition-colors flex items-center gap-1"
+              className="text-base font-bold font-body text-foreground hover:text-primary transition-colors flex items-center gap-1"
             >
               {source.domain}
               <ExternalLink className="h-3 w-3 opacity-60" />
             </a>
-            {(() => {
-              const st = getSourceStatus(
-                Number(source.upvotes),
-                Number(source.downvotes),
-              );
-              if (st === "trusted")
-                return (
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <span className="inline-flex items-center cursor-default text-emerald-600">
-                          <ShieldCheck className="h-3 w-3" />
-                        </span>
-                      </TooltipTrigger>
-                      <TooltipContent
-                        side="top"
-                        className="text-xs max-w-[220px]"
-                      >
-                        Trusted source — verified by the community with 60%+
-                        approval
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                );
-              if (st === "contested")
-                return (
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <span className="inline-flex items-center cursor-default text-slate-500">
-                          <Scale className="h-3 w-3" />
-                        </span>
-                      </TooltipTrigger>
-                      <TooltipContent
-                        side="top"
-                        className="text-xs max-w-[240px]"
-                      >
-                        Contested — community is divided on this source&apos;s
-                        credibility. Needs clear 60%+ approval to become trusted
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                );
-              if (st === "not-trusted")
-                return (
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <span className="inline-flex items-center cursor-default text-red-500">
-                          <ShieldX className="h-3 w-3" />
-                        </span>
-                      </TooltipTrigger>
-                      <TooltipContent
-                        side="top"
-                        className="text-xs max-w-[220px]"
-                      >
-                        Not Trusted — community voted this source as unreliable
-                        (less than 40% approval)
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                );
-              // pending
-              return (
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span className="inline-flex items-center cursor-default text-amber-500">
-                        <Clock className="h-3 w-3" />
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent
-                      side="top"
-                      className="text-xs max-w-[240px]"
-                    >
-                      Pending Review — not yet trusted. Needs 25 votes with at
-                      least 60% approval to become trusted
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              );
-            })()}
             {source.adminOverride && (
               <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-body bg-violet-500/15 text-violet-600 border border-violet-500/30">
                 Admin Approved
               </span>
             )}
           </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <span
-              className={cn(
-                "inline-flex items-center px-2 py-0.5 rounded-sm text-[10px] font-body font-medium border",
-                getSourceTypeBadgeClasses(source.sourceType),
-              )}
-            >
-              {getSourceTypeLabel(source.sourceType)}
-            </span>
-            <DynamicBonusLabel
-              sourceType={source.sourceType}
-              domain={source.domain}
-              upvotes={Number(source.upvotes)}
-              downvotes={Number(source.downvotes)}
-            />
-          </div>
+          <span
+            className={cn(
+              "inline-flex items-center px-2 py-0.5 rounded-sm text-[10px] font-body font-medium border",
+              getSourceTypeBadgeClasses(source.sourceType),
+            )}
+          >
+            {getSourceTypeLabel(source.sourceType)}
+          </span>
         </div>
       </div>
 
-      {/* Progress toward trust */}
-      {getSourceStatus(Number(source.upvotes), Number(source.downvotes)) !==
-        "trusted" && (
+      <Separator className="mb-3" />
+
+      {/* Stats area */}
+      {credibility.status === "insufficient" ? (
+        <div>
+          <p className="text-sm font-body text-muted-foreground italic">
+            Insufficient data — needs {5 - credibility.citations} more citation
+            {5 - credibility.citations !== 1 ? "s" : ""}
+          </p>
+          <div className="mt-2 h-1.5 rounded-full bg-muted overflow-hidden">
+            <div
+              className="h-full bg-amber-400 rounded-full transition-all duration-500"
+              style={{ width: `${(credibility.citations / 5) * 100}%` }}
+            />
+          </div>
+          <p className="text-[10px] font-body text-muted-foreground mt-1">
+            {credibility.citations} / 5 citations
+          </p>
+        </div>
+      ) : (
         <div className="space-y-2">
-          <div className="space-y-1">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-body text-muted-foreground">
-                Votes toward threshold
-              </span>
-              <span className="text-[10px] font-mono text-muted-foreground">
-                {totalVotes}/25
-              </span>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-body text-muted-foreground">
+                Credibility
+              </p>
+              <p className="text-lg font-bold font-mono text-foreground leading-tight">
+                {Math.round(credibility.score)}
+                <span className="text-xs font-body text-muted-foreground font-normal">
+                  /100
+                </span>
+              </p>
             </div>
-            <Progress
-              value={votesProgress}
+            <div className="text-right">
+              <p className="text-xs font-body text-muted-foreground">
+                Citations
+              </p>
+              <p className="text-lg font-bold font-mono text-foreground leading-tight">
+                {credibility.totalCitations}
+              </p>
+            </div>
+          </div>
+          <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+            <div
               className={cn(
-                "h-1.5",
-                needsMoreVotes
-                  ? "[&>div]:bg-amber-400"
-                  : "[&>div]:bg-emerald-500",
+                "h-full rounded-full transition-all duration-700",
+                scoreColor,
               )}
+              style={{ width: `${Math.round(credibility.score)}%` }}
             />
           </div>
-          <div className="space-y-1">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-body text-muted-foreground">
-                Upvote ratio
-              </span>
-              <span className="text-[10px] font-mono text-muted-foreground">
-                {upvotePct}% / 60% needed
-              </span>
-            </div>
-            <Progress
-              value={approvalProgress}
-              className={cn(
-                "h-1.5",
-                isClose
-                  ? "[&>div]:bg-amber-400"
-                  : upvotePct >= 60
-                    ? "[&>div]:bg-emerald-500"
-                    : "[&>div]:bg-muted-foreground/40",
-              )}
-            />
-          </div>
+          <p className="text-[10px] font-body text-muted-foreground">
+            Cited in {credibility.totalCitations} piece
+            {credibility.totalCitations !== 1 ? "s" : ""} of evidence
+          </p>
         </div>
       )}
-
-      {/* Submitter + vote count */}
-      <div className="flex items-center gap-3 mt-2 pt-2 border-t border-border">
-        <span className="text-[10px] font-body text-muted-foreground flex items-center gap-1">
-          <Users className="h-2.5 w-2.5" />
-          {totalVotes} {totalVotes === 1 ? "vote" : "votes"}
-        </span>
-        <span className="text-[10px] font-body text-muted-foreground flex items-center gap-1">
-          Suggested by <span>{source.suggestedByUsername || "unknown"}</span>
-        </span>
-      </div>
     </motion.div>
   );
 }
 
-type WikiFetchStatus = "idle" | "checking" | "found" | "not-found";
-
-function SuggestSourceDialog({ sessionId }: { sessionId: string | null }) {
-  const [open, setOpen] = useState(false);
-  const addRepEvent = useAddReputationEvent();
-  const { identity } = useInternetIdentity();
-  const [domain, setDomain] = useState("");
-  const [sourceType, setSourceType] = useState("");
-  const [aboutBlurb, setAboutBlurb] = useState("");
-  const [wikiStatus, setWikiStatus] = useState<WikiFetchStatus>("idle");
-  const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const { checkAction } = useSessionGate();
-  const suggestSource = useSuggestTrustedSource();
-  const { username: verifiedUsername } = useVerifiedAccount();
-
-  // Debounced Wikipedia fetch when domain changes
-  useEffect(() => {
-    if (debounceTimer.current) clearTimeout(debounceTimer.current);
-
-    const cleaned = stripDomain(domain);
-    if (cleaned.length < 4) {
-      setWikiStatus("idle");
-      return;
-    }
-
-    setWikiStatus("checking");
-
-    debounceTimer.current = setTimeout(async () => {
-      try {
-        const res = await fetch(
-          `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(cleaned)}`,
-        );
-        if (!res.ok) {
-          setWikiStatus("not-found");
-          return;
-        }
-        const data = await res.json();
-        const hasContent =
-          (data.extract && data.extract.trim().length > 0) ||
-          (data.description && data.description.trim().length > 0);
-        setWikiStatus(hasContent ? "found" : "not-found");
-      } catch {
-        setWikiStatus("not-found");
-      }
-    }, 500);
-
-    return () => {
-      if (debounceTimer.current) clearTimeout(debounceTimer.current);
-    };
-  }, [domain]);
-
-  function resetForm() {
-    setDomain("");
-    setSourceType("");
-    setAboutBlurb("");
-    setWikiStatus("idle");
-  }
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!sessionId || !domain.trim() || !sourceType) return;
-    if (!checkAction()) return;
-    const cleanDomain = stripDomain(domain);
-    if (!cleanDomain) {
-      toast.error("Please enter a valid domain");
-      return;
-    }
-    try {
-      const username =
-        verifiedUsername ??
-        localStorage.getItem("claim_verifier_username") ??
-        "anonymous";
-      await suggestSource.mutateAsync({
-        domain: cleanDomain,
-        sourceType,
-        sessionId,
-        username,
-      });
-      const pid = getActivePrincipalId();
-      if (pid) {
-        const ts = new Date().toISOString();
-        appendUserSource(pid, {
-          domain: cleanDomain,
-          sourceType,
-          timestamp: ts,
-        });
-      }
-      const principal = identity?.getPrincipal();
-      if (principal) {
-        addRepEvent.mutate({
-          principal,
-          action: "source_suggested",
-          points: 1n,
-        });
-      }
-      toast.success(`"${cleanDomain}" submitted for community review`);
-      setOpen(false);
-      resetForm();
-    } catch (err) {
-      const msg =
-        err instanceof Error ? err.message : "Failed to suggest source";
-      toast.error(msg);
-    }
-  }
-
-  const showAboutField = wikiStatus === "not-found";
-
-  return (
-    <Dialog
-      open={open}
-      onOpenChange={(v) => {
-        setOpen(v);
-        if (!v) resetForm();
-      }}
-    >
-      <DialogTrigger asChild>
-        <Button
-          data-ocid="sources.open_modal_button"
-          onClick={() => {
-            if (!checkAction()) return;
-            setOpen(true);
-          }}
-          size="sm"
-          className="font-body gap-2 bg-primary text-primary-foreground hover:bg-primary/90"
-        >
-          <Plus className="h-4 w-4" />
-          Suggest Source
-        </Button>
-      </DialogTrigger>
-      <DialogContent data-ocid="sources.dialog" className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle className="font-display">
-            Suggest a Trusted Source
-          </DialogTitle>
-        </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4 py-2">
-          <div className="space-y-1.5">
-            <Label htmlFor="source-domain" className="font-body text-sm">
-              Domain
-            </Label>
-            <Input
-              id="source-domain"
-              data-ocid="sources.input"
-              placeholder="e.g. reuters.com or https://www.nature.com"
-              value={domain}
-              onChange={(e) => setDomain(e.target.value)}
-              className="font-body bg-secondary border-border"
-              autoFocus
-            />
-            {/* Wiki fetch status indicator */}
-            <AnimatePresence mode="wait">
-              {wikiStatus === "checking" && (
-                <motion.p
-                  key="checking"
-                  initial={{ opacity: 0, y: -4 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -4 }}
-                  transition={{ duration: 0.15 }}
-                  className="flex items-center gap-1.5 text-[11px] text-muted-foreground font-body"
-                >
-                  <Loader2 className="h-3 w-3 animate-spin" />
-                  Checking for About info...
-                </motion.p>
-              )}
-              {wikiStatus === "found" && (
-                <motion.p
-                  key="found"
-                  initial={{ opacity: 0, y: -4 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -4 }}
-                  transition={{ duration: 0.15 }}
-                  className="flex items-center gap-1.5 text-[11px] text-emerald-600 font-body"
-                >
-                  <CheckCircle2 className="h-3 w-3" />
-                  About info found automatically
-                </motion.p>
-              )}
-              {wikiStatus === "idle" && (
-                <motion.p
-                  key="hint"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 0.15 }}
-                  className="text-[10px] text-muted-foreground font-body"
-                >
-                  Protocol and www are stripped automatically.
-                </motion.p>
-              )}
-            </AnimatePresence>
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="source-type" className="font-body text-sm">
-              Source Type
-            </Label>
-            <Select value={sourceType} onValueChange={setSourceType}>
-              <SelectTrigger
-                id="source-type"
-                data-ocid="sources.select"
-                className="font-body bg-secondary border-border"
-              >
-                <SelectValue placeholder="Select a type…" />
-              </SelectTrigger>
-              <SelectContent>
-                {SOURCE_TYPES.map((t) => (
-                  <SelectItem
-                    key={t.value}
-                    value={t.value}
-                    className="font-body"
-                  >
-                    <span>{t.label}</span>
-                    <span className="ml-2 text-muted-foreground text-xs">
-                      {t.bonus}
-                    </span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* About field — only shown when wiki auto-fetch fails */}
-          <AnimatePresence>
-            {showAboutField && (
-              <motion.div
-                key="about-field"
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: "auto" }}
-                exit={{ opacity: 0, height: 0 }}
-                transition={{ duration: 0.2 }}
-                className="overflow-hidden"
-              >
-                <div className="space-y-1.5 pt-0.5">
-                  <Label htmlFor="source-about" className="text-sm font-body">
-                    About this source{" "}
-                    <span className="text-muted-foreground">(optional)</span>
-                  </Label>
-                  <Textarea
-                    id="source-about"
-                    data-ocid="sources.textarea"
-                    placeholder="Briefly describe this source (e.g. its focus, credibility, ownership)..."
-                    value={aboutBlurb}
-                    onChange={(e) =>
-                      setAboutBlurb(e.target.value.slice(0, 500))
-                    }
-                    className="font-body text-sm resize-none"
-                    rows={3}
-                  />
-                  <p className="text-xs text-muted-foreground text-right">
-                    {aboutBlurb.length}/500
-                  </p>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              data-ocid="sources.cancel_button"
-              onClick={() => {
-                setOpen(false);
-                resetForm();
-              }}
-              className="font-body"
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              data-ocid="sources.submit_button"
-              disabled={
-                suggestSource.isPending || !domain.trim() || !sourceType
-              }
-              className="font-body bg-primary text-primary-foreground hover:bg-primary/90"
-            >
-              {suggestSource.isPending ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : null}
-              Submit
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
-}
+// ── Main Page ────────────────────────────────────────────────────────────────
 
 export function TrustedSourcesPage({
-  sessionId,
   onSourceClick,
 }: {
-  sessionId: string | null;
+  sessionId?: string | null;
   onSourceClick?: (domain: string) => void;
 }) {
   const { data: sources, isLoading, error } = useTrustedSources();
   const [searchQuery, setSearchQuery] = useState("");
 
-  const allSources = sources ?? [];
-  const filteredTrusted = allSources
-    .filter(
-      (s) =>
-        getSourceStatus(Number(s.upvotes), Number(s.downvotes)) === "trusted",
-    )
-    .filter((s) => s.domain.toLowerCase().includes(searchQuery.toLowerCase()));
-  const filteredNonTrusted = allSources
-    .filter(
-      (s) =>
-        getSourceStatus(Number(s.upvotes), Number(s.downvotes)) !== "trusted",
-    )
-    .filter((s) => s.domain.toLowerCase().includes(searchQuery.toLowerCase()));
-  // Keep backward compat names
-  const filteredPending = filteredNonTrusted;
-
-  const trustedSources = allSources.filter(
-    (s) =>
-      getSourceStatus(Number(s.upvotes), Number(s.downvotes)) === "trusted",
+  // Load all evidence for credibility computation
+  const allEvidence = useAllEvidenceForAllClaims();
+  const evidenceIds = useMemo(
+    () => allEvidence.map((e: Evidence) => e.id),
+    [allEvidence],
   );
-  const pendingSources = allSources.filter(
-    (s) =>
-      getSourceStatus(Number(s.upvotes), Number(s.downvotes)) !== "trusted",
+  const { data: tallies } = useAllEvidenceTallies(evidenceIds);
+
+  // Combine evidence with net scores
+  const allEvidenceWithScores = useMemo(
+    () =>
+      allEvidence.map((e: Evidence) => ({
+        ...e,
+        netScore: tallies?.[e.id.toString()] ?? 0,
+      })),
+    [allEvidence, tallies],
+  );
+
+  const allSources = sources ?? [];
+  const filteredSources = allSources.filter((s) =>
+    s.domain.toLowerCase().includes(searchQuery.toLowerCase()),
   );
 
   const hasNoSearchResults =
-    searchQuery.trim() !== "" &&
-    filteredTrusted.length === 0 &&
-    filteredPending.length === 0;
+    searchQuery.trim() !== "" && filteredSources.length === 0;
 
   return (
     <motion.div
@@ -776,37 +306,36 @@ export function TrustedSourcesPage({
       transition={{ duration: 0.2 }}
     >
       {/* Page header */}
-      <div className="mb-8">
-        <div className="flex items-center justify-between flex-wrap gap-3">
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <div className="w-1 h-6 bg-primary rounded-full" />
-              <h2 className="font-display text-2xl font-bold text-foreground">
-                Trusted Sources
-              </h2>
-            </div>
-            <p className="text-sm text-muted-foreground font-body ml-3">
-              Community-verified sources that boost evidence quality. Sources
-              need 25 votes with 60% approval to become trusted.
-            </p>
-          </div>
-          <SuggestSourceDialog sessionId={sessionId} />
+      <div className="mb-6">
+        <div className="flex items-center gap-2 mb-1">
+          <div className="w-1 h-6 bg-primary rounded-full" />
+          <h2 className="font-display text-2xl font-bold text-foreground">
+            Source Index
+          </h2>
         </div>
+        <p className="text-sm text-muted-foreground font-body ml-3">
+          Sources are automatically indexed when cited in claims or evidence.
+          Credibility scores are calculated from how well evidence citing each
+          source performs in the community.
+        </p>
       </div>
 
-      {/* Stats summary */}
-      {!isLoading && sources && sources.length > 0 && (
-        <p className="mb-4 text-sm font-body text-muted-foreground leading-relaxed">
-          There are{" "}
-          <span className="font-semibold text-primary tabular-nums">
-            {trustedSources.length} trusted
+      {/* Explainer card */}
+      <div className="flex items-start gap-3 p-3 mb-6 bg-secondary border border-border rounded-sm">
+        <Info className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
+        <p className="text-xs font-body text-muted-foreground leading-relaxed">
+          <span className="font-semibold text-foreground">
+            How credibility is calculated:
           </span>{" "}
-          and {pendingSources.length} pending sources.
+          Only evidence with a community net score of +3 or higher counts toward
+          a source&apos;s credibility. Scores are normalized so that average
+          quality and pass rate are weighted equally. A source needs at least 5
+          citations before receiving a score.
         </p>
-      )}
+      </div>
 
       {/* Search bar */}
-      {!isLoading && sources && sources.length > 0 && (
+      {!isLoading && allSources.length > 0 && (
         <div className="relative mb-6">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
           <Input
@@ -828,11 +357,17 @@ export function TrustedSourcesPage({
           {[1, 2, 3, 4].map((i) => (
             <div
               key={i}
-              className="p-4 bg-card border border-border rounded-sm space-y-3"
+              className="p-5 bg-card border border-l-4 border-l-muted border-border rounded-sm space-y-3"
             >
-              <Skeleton className="h-5 w-1/2" />
-              <Skeleton className="h-4 w-1/3" />
-              <Skeleton className="h-2 w-full rounded-full" />
+              <div className="flex items-start gap-3">
+                <Skeleton className="w-10 h-10 rounded-lg" />
+                <div className="flex-1 space-y-2">
+                  <Skeleton className="h-5 w-1/2" />
+                  <Skeleton className="h-4 w-1/3" />
+                </div>
+              </div>
+              <Skeleton className="h-px w-full" />
+              <Skeleton className="h-4 w-full" />
               <Skeleton className="h-2 w-full rounded-full" />
             </div>
           ))}
@@ -853,63 +388,32 @@ export function TrustedSourcesPage({
           <Search className="h-8 w-8 mx-auto mb-3 opacity-25" />
           <p className="font-body text-sm">No sources match your search.</p>
         </div>
-      ) : sources && sources.length > 0 ? (
-        <div className="space-y-8">
-          {filteredTrusted.length > 0 && (
-            <section>
-              <h3 className="font-display text-base font-semibold text-foreground mb-3 flex items-center gap-2">
-                <ShieldCheck className="h-4 w-4 text-emerald-500" />
-                Trusted Sources
-              </h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <AnimatePresence>
-                  {filteredTrusted.map((s, i) => (
-                    <SourceCard
-                      key={s.id.toString()}
-                      source={s}
-                      index={i + 1}
-                      sessionId={sessionId}
-                      onSourceClick={onSourceClick}
-                    />
-                  ))}
-                </AnimatePresence>
-              </div>
-            </section>
-          )}
-
-          {filteredPending.length > 0 && (
-            <section>
-              <h3 className="font-display text-base font-semibold text-foreground mb-3 flex items-center gap-2">
-                <Shield className="h-4 w-4 text-muted-foreground" />
-                Pending Community Review
-              </h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <AnimatePresence>
-                  {filteredPending.map((s, i) => (
-                    <SourceCard
-                      key={s.id.toString()}
-                      source={s}
-                      index={i + 1}
-                      sessionId={sessionId}
-                      onSourceClick={onSourceClick}
-                    />
-                  ))}
-                </AnimatePresence>
-              </div>
-            </section>
-          )}
+      ) : allSources.length > 0 ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <AnimatePresence>
+            {filteredSources.map((s, i) => (
+              <SourceCard
+                key={s.id.toString()}
+                source={s}
+                index={i + 1}
+                allEvidenceWithScores={allEvidenceWithScores}
+                onSourceClick={onSourceClick}
+              />
+            ))}
+          </AnimatePresence>
         </div>
       ) : (
         <div
           data-ocid="sources.empty_state"
           className="text-center py-20 text-muted-foreground"
         >
-          <Shield className="h-12 w-12 mx-auto mb-4 opacity-20" />
+          <BarChart2 className="h-12 w-12 mx-auto mb-4 opacity-20" />
           <p className="font-display text-xl font-semibold mb-1">
-            No sources yet
+            No sources indexed yet
           </p>
           <p className="text-sm font-body">
-            Be the first to suggest a trusted source for the community.
+            Sources will appear here automatically as users cite URLs in their
+            claims and evidence.
           </p>
         </div>
       )}

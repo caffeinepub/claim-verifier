@@ -1,5 +1,10 @@
 import type { Principal } from "@icp-sdk/core/principal";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useMutation,
+  useQuery,
+  useQueryClient,
+  useQueries as useReactQueries,
+} from "@tanstack/react-query";
 import type {
   Claim,
   Evidence,
@@ -10,6 +15,12 @@ import type {
   UserProfile,
 } from "../backend.d";
 import { useActor } from "./useActor";
+
+// ── Adaptive polling ─────────────────────────────────────────────────────
+function getPollingInterval(baseMs: number): number {
+  const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
+  return isMobile ? Math.round(baseMs * 0.6) : baseMs;
+}
 
 // ── Session ──────────────────────────────────────────────────────────────────
 
@@ -111,6 +122,8 @@ export function useAllClaims() {
       return actor.getAllClaims();
     },
     enabled: !!actor && !isFetching,
+    refetchInterval: getPollingInterval(30_000),
+    refetchIntervalInBackground: false,
   });
 }
 
@@ -136,6 +149,8 @@ export function useClaimById(id: bigint | null) {
       return actor.getClaimById(id);
     },
     enabled: !!actor && !isFetching && id !== null,
+    refetchInterval: getPollingInterval(15_000),
+    refetchIntervalInBackground: false,
   });
 }
 
@@ -183,7 +198,44 @@ export function useCreateClaim() {
       }
       return result;
     },
-    onSuccess: () => {
+    onMutate: async (variables) => {
+      await queryClient.cancelQueries({ queryKey: ["claims", "all"] });
+      const previous = queryClient.getQueryData<Claim[]>(["claims", "all"]);
+      const tempClaim = {
+        id: BigInt("0"),
+        _tempId: `temp-${Date.now()}`,
+        title: variables.title,
+        description: variables.description,
+        category: variables.category,
+        sessionId: variables.sessionId,
+        authorUsername: variables.authorUsername,
+        imageUrls: variables.imageUrls ?? [],
+        urls: variables.urls ?? [],
+        ogThumbnailUrl: "",
+        timestamp: BigInt(Date.now()) * 1_000_000n,
+        slug: variables.title
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/(^-|-$)/g, ""),
+        isHidden: false,
+        editedAt: [],
+      } as unknown as Claim;
+      queryClient.setQueryData<Claim[]>(
+        ["claims", "all"],
+        [tempClaim, ...(previous ?? [])],
+      );
+      return { previous };
+    },
+    onError: (
+      _err,
+      _variables,
+      context: { previous?: Claim[] } | undefined,
+    ) => {
+      if (context?.previous !== undefined) {
+        queryClient.setQueryData(["claims", "all"], context.previous);
+      }
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["claims"] });
     },
   });
@@ -204,6 +256,8 @@ export function useVoteTally(claimId: bigint | null) {
       return actor.getVoteTally(claimId);
     },
     enabled: !!actor && !isFetching && claimId !== null,
+    refetchInterval: getPollingInterval(15_000),
+    refetchIntervalInBackground: false,
   });
 }
 
@@ -226,6 +280,8 @@ export function useEnhancedVoteTally(claimId: bigint | null) {
       return actor.getEnhancedVoteTally(claimId);
     },
     enabled: !!actor && !isFetching && claimId !== null,
+    refetchInterval: getPollingInterval(15_000),
+    refetchIntervalInBackground: false,
   });
 }
 
@@ -278,7 +334,77 @@ export function useSubmitVote() {
         }
       }
     },
-    onSuccess: (_data, variables) => {
+    onMutate: async (variables) => {
+      const tallyKey = ["tally", variables.claimId.toString()];
+      const enhancedKey = ["enhanced-tally", variables.claimId.toString()];
+      await queryClient.cancelQueries({ queryKey: tallyKey });
+      await queryClient.cancelQueries({ queryKey: enhancedKey });
+
+      const previousTally = queryClient.getQueryData<{
+        trueCount: bigint;
+        falseCount: bigint;
+        unverifiedCount: bigint;
+      }>(tallyKey);
+      const previousEnhanced = queryClient.getQueryData<{
+        trueFromEvidence: bigint;
+        unverifiedFromEvidence: bigint;
+        falseDirect: bigint;
+        trueCount: bigint;
+        unverifiedDirect: bigint;
+        falseFromEvidence: bigint;
+        trueDirect: bigint;
+        falseCount: bigint;
+        unverifiedCount: bigint;
+      }>(enhancedKey);
+
+      if (previousTally) {
+        const updated = { ...previousTally };
+        if (variables.verdict === "True")
+          updated.trueCount = previousTally.trueCount + 1n;
+        else if (variables.verdict === "False")
+          updated.falseCount = previousTally.falseCount + 1n;
+        else updated.unverifiedCount = previousTally.unverifiedCount + 1n;
+        queryClient.setQueryData(tallyKey, updated);
+      }
+
+      if (previousEnhanced) {
+        const updated = { ...previousEnhanced };
+        if (variables.verdict === "True") {
+          updated.trueCount = previousEnhanced.trueCount + 1n;
+          updated.trueDirect = previousEnhanced.trueDirect + 1n;
+        } else if (variables.verdict === "False") {
+          updated.falseCount = previousEnhanced.falseCount + 1n;
+          updated.falseDirect = previousEnhanced.falseDirect + 1n;
+        } else {
+          updated.unverifiedCount = previousEnhanced.unverifiedCount + 1n;
+          updated.unverifiedDirect = previousEnhanced.unverifiedDirect + 1n;
+        }
+        queryClient.setQueryData(enhancedKey, updated);
+      }
+
+      return { previousTally, previousEnhanced };
+    },
+    onError: (
+      _err,
+      variables,
+      context:
+        | { previousTally?: unknown; previousEnhanced?: unknown }
+        | undefined,
+    ) => {
+      if (context?.previousTally !== undefined) {
+        queryClient.setQueryData(
+          ["tally", variables.claimId.toString()],
+          context.previousTally,
+        );
+      }
+      if (context?.previousEnhanced !== undefined) {
+        queryClient.setQueryData(
+          ["enhanced-tally", variables.claimId.toString()],
+          context.previousEnhanced,
+        );
+      }
+    },
+    onSettled: (_data, _err, variables) => {
       queryClient.invalidateQueries({
         queryKey: ["tally", variables.claimId.toString()],
       });
@@ -316,6 +442,8 @@ export function useEvidenceForClaim(claimId: bigint | null) {
       return actor.getEvidenceForClaim(claimId);
     },
     enabled: !!actor && !isFetching && claimId !== null,
+    refetchInterval: getPollingInterval(15_000),
+    refetchIntervalInBackground: false,
   });
 }
 
@@ -356,7 +484,44 @@ export function useSubmitEvidence() {
       }
       return result;
     },
-    onSuccess: (_data, variables) => {
+    onMutate: async (variables) => {
+      const evidenceKey = ["evidence", variables.claimId.toString()];
+      await queryClient.cancelQueries({ queryKey: evidenceKey });
+      const previous = queryClient.getQueryData<Evidence[]>(evidenceKey);
+      const tempEvidence = {
+        id: BigInt(`${Date.now()}`),
+        claimId: variables.claimId,
+        sessionId: variables.sessionId,
+        authorUsername: variables.authorUsername,
+        text: variables.text,
+        imageUrls: variables.imageUrls ?? [],
+        urls: variables.urls ?? [],
+        evidenceType: variables.evidenceType,
+        timestamp: BigInt(Date.now()) * 1_000_000n,
+        upvotes: 0n,
+        downvotes: 0n,
+        isHidden: false,
+        editedAt: [],
+      } as unknown as Evidence;
+      queryClient.setQueryData<Evidence[]>(evidenceKey, [
+        ...(previous ?? []),
+        tempEvidence,
+      ]);
+      return { previous };
+    },
+    onError: (
+      _err,
+      variables,
+      context: { previous?: Evidence[] } | undefined,
+    ) => {
+      if (context?.previous !== undefined) {
+        queryClient.setQueryData(
+          ["evidence", variables.claimId.toString()],
+          context.previous,
+        );
+      }
+    },
+    onSettled: (_data, _err, variables) => {
       queryClient.invalidateQueries({
         queryKey: ["evidence", variables.claimId.toString()],
       });
@@ -376,6 +541,8 @@ export function useEvidenceVoteTally(evidenceId: bigint | null) {
       return actor.getEvidenceVoteTally(evidenceId);
     },
     enabled: !!actor && !isFetching && evidenceId !== null,
+    refetchInterval: getPollingInterval(15_000),
+    refetchIntervalInBackground: false,
   });
 }
 
@@ -432,7 +599,44 @@ export function useVoteEvidence() {
       if (!actor) throw new Error("No actor");
       return actor.voteEvidence(evidenceId, sessionId, direction);
     },
-    onSuccess: (_data, variables) => {
+    onMutate: async (variables) => {
+      if (variables.claimId == null) return {};
+      const evidenceKey = ["evidence", variables.claimId.toString()];
+      await queryClient.cancelQueries({ queryKey: evidenceKey });
+      const previous = queryClient.getQueryData<Evidence[]>(evidenceKey);
+      if (previous) {
+        queryClient.setQueryData<Evidence[]>(
+          evidenceKey,
+          previous.map((ev) => {
+            if (ev.id !== variables.evidenceId) return ev;
+            const updated = { ...ev } as Evidence & {
+              upvotes: bigint;
+              downvotes: bigint;
+            };
+            if (variables.direction === "up") {
+              updated.upvotes = ((ev as any).upvotes ?? 0n) + 1n;
+            } else {
+              updated.downvotes = ((ev as any).downvotes ?? 0n) + 1n;
+            }
+            return updated;
+          }),
+        );
+      }
+      return { previous };
+    },
+    onError: (
+      _err,
+      variables,
+      context: { previous?: Evidence[] } | undefined,
+    ) => {
+      if (context?.previous !== undefined && variables.claimId != null) {
+        queryClient.setQueryData(
+          ["evidence", variables.claimId.toString()],
+          context.previous,
+        );
+      }
+    },
+    onSettled: (_data, _err, variables) => {
       queryClient.invalidateQueries({
         queryKey: ["evidence-tally", variables.evidenceId.toString()],
       });
@@ -486,6 +690,8 @@ export function useReplies(evidenceId: bigint | null) {
       return actor.getReplies(evidenceId);
     },
     enabled: !!actor && !isFetching && evidenceId !== null,
+    refetchInterval: getPollingInterval(15_000),
+    refetchIntervalInBackground: false,
   });
 }
 
@@ -520,7 +726,37 @@ export function useAddReply() {
       }
       return result;
     },
-    onSuccess: (_data, variables) => {
+    onMutate: async (variables) => {
+      const repliesKey = ["replies", variables.evidenceId.toString()];
+      await queryClient.cancelQueries({ queryKey: repliesKey });
+      const previous = queryClient.getQueryData<Reply[]>(repliesKey);
+      const tempReply = {
+        id: BigInt(`${Date.now()}`),
+        evidenceId: variables.evidenceId,
+        parentReplyId: variables.parentReplyId,
+        text: variables.text,
+        authorUsername: variables.authorUsername,
+        sessionId: variables.sessionId,
+        timestamp: BigInt(Date.now()) * 1_000_000n,
+        likeCount: 0n,
+        isHidden: false,
+        editedAt: [],
+      } as unknown as Reply;
+      queryClient.setQueryData<Reply[]>(repliesKey, [
+        ...(previous ?? []),
+        tempReply,
+      ]);
+      return { previous };
+    },
+    onError: (_err, variables, context: { previous?: Reply[] } | undefined) => {
+      if (context?.previous !== undefined) {
+        queryClient.setQueryData(
+          ["replies", variables.evidenceId.toString()],
+          context.previous,
+        );
+      }
+    },
+    onSettled: (_data, _err, variables) => {
       queryClient.invalidateQueries({
         queryKey: ["replies", variables.evidenceId.toString()],
       });
@@ -541,11 +777,62 @@ export function useVoteReply() {
       replyId: bigint;
       sessionId: string;
       direction: string;
+      evidenceId?: bigint;
     }) => {
       if (!actor) throw new Error("No actor");
       return actor.voteReply(replyId, sessionId, direction);
     },
-    onSuccess: (_data, variables) => {
+    onMutate: async (variables: {
+      replyId: bigint;
+      sessionId: string;
+      direction: string;
+      evidenceId?: bigint;
+    }) => {
+      if (variables.evidenceId == null) return {};
+      const repliesKey = ["replies", variables.evidenceId.toString()];
+      await queryClient.cancelQueries({ queryKey: repliesKey });
+      const previous = queryClient.getQueryData<Reply[]>(repliesKey);
+      if (previous) {
+        queryClient.setQueryData<Reply[]>(
+          repliesKey,
+          previous.map((r) => {
+            if (r.id !== variables.replyId) return r;
+            return {
+              ...r,
+              likeCount: ((r as any).likeCount ?? 0n) + 1n,
+            } as Reply;
+          }),
+        );
+      }
+      return { previous };
+    },
+    onError: (
+      _err,
+      variables: {
+        replyId: bigint;
+        sessionId: string;
+        direction: string;
+        evidenceId?: bigint;
+      },
+      context: { previous?: Reply[] } | undefined,
+    ) => {
+      if (context?.previous !== undefined && variables.evidenceId != null) {
+        queryClient.setQueryData(
+          ["replies", variables.evidenceId.toString()],
+          context.previous,
+        );
+      }
+    },
+    onSettled: (
+      _data: unknown,
+      _err: unknown,
+      variables: {
+        replyId: bigint;
+        sessionId: string;
+        direction: string;
+        evidenceId?: bigint;
+      },
+    ) => {
       queryClient.invalidateQueries({
         queryKey: ["reply-tally", variables.replyId.toString()],
       });
@@ -875,6 +1162,8 @@ export function useTrustedSources() {
     },
     enabled: !!actor && !isFetching,
     staleTime: 30_000,
+    refetchInterval: getPollingInterval(30_000),
+    refetchIntervalInBackground: false,
   });
 }
 
@@ -921,7 +1210,41 @@ export function useSuggestTrustedSource() {
       }
       return result;
     },
-    onSuccess: () => {
+    onMutate: async (variables) => {
+      const sourcesKey = ["trusted-sources"];
+      await queryClient.cancelQueries({ queryKey: sourcesKey });
+      const previous =
+        queryClient.getQueryData<TrustedSourceInfo[]>(sourcesKey);
+      const tempSource: TrustedSourceInfo = {
+        id: BigInt(Date.now()),
+        domain: variables.domain,
+        sourceType: variables.sourceType,
+        upvotes: 0n,
+        downvotes: 0n,
+        isTrusted: false,
+        adminOverride: false,
+        adminOverrideNote: "",
+        aboutBlurb: "",
+        pinnedAdminComment: "",
+        timestamp: BigInt(Date.now()) * 1_000_000n,
+        suggestedByUsername: variables.username,
+      };
+      queryClient.setQueryData<TrustedSourceInfo[]>(sourcesKey, [
+        ...(previous ?? []),
+        tempSource,
+      ]);
+      return { previous };
+    },
+    onError: (
+      _err,
+      _variables,
+      context: { previous?: TrustedSourceInfo[] } | undefined,
+    ) => {
+      if (context?.previous !== undefined) {
+        queryClient.setQueryData(["trusted-sources"], context.previous);
+      }
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["trusted-sources"] });
     },
   });
@@ -1086,6 +1409,8 @@ export function useSourceComments(sourceId: bigint | null) {
       return actor.getSourceComments(sourceId);
     },
     enabled: !!actor && !isFetching && sourceId !== null,
+    refetchInterval: getPollingInterval(15_000),
+    refetchIntervalInBackground: false,
   });
 }
 
@@ -1120,7 +1445,42 @@ export function useAddSourceComment() {
       }
       return result;
     },
-    onSuccess: (_data, variables) => {
+    onMutate: async (variables) => {
+      const commentsKey = ["source-comments", variables.sourceId.toString()];
+      await queryClient.cancelQueries({ queryKey: commentsKey });
+      const previous = queryClient.getQueryData<SourceComment[]>(commentsKey);
+      const tempComment = {
+        id: BigInt(Date.now()),
+        sourceId: variables.sourceId,
+        parentCommentId: variables.parentCommentId,
+        text: variables.text,
+        authorUsername: variables.authorUsername,
+        sessionId: variables.sessionId,
+        timestamp: BigInt(Date.now()) * 1_000_000n,
+        likeCount: 0n,
+        isHidden: false,
+        editedAt: [],
+        imageUrls: [],
+      } as unknown as SourceComment;
+      queryClient.setQueryData<SourceComment[]>(commentsKey, [
+        ...(previous ?? []),
+        tempComment,
+      ]);
+      return { previous };
+    },
+    onError: (
+      _err,
+      variables,
+      context: { previous?: SourceComment[] } | undefined,
+    ) => {
+      if (context?.previous !== undefined) {
+        queryClient.setQueryData(
+          ["source-comments", variables.sourceId.toString()],
+          context.previous,
+        );
+      }
+    },
+    onSettled: (_data, _err, variables) => {
       queryClient.invalidateQueries({
         queryKey: ["source-comments", variables.sourceId.toString()],
       });
@@ -1364,4 +1724,26 @@ export function useAddReputationEvent() {
       });
     },
   });
+}
+
+// ── All Evidence For All Claims (for source credibility computation) ─────────
+export function useAllEvidenceForAllClaims() {
+  const { actor, isFetching } = useActor();
+  const { data: allClaims } = useAllClaims();
+
+  const evidenceQueries = useReactQueries({
+    queries: (allClaims ?? []).map((claim: Claim) => ({
+      queryKey: ["evidence", claim.id.toString()],
+      queryFn: async () => {
+        if (!actor) return [] as Evidence[];
+        return actor.getEvidenceForClaim(claim.id);
+      },
+      enabled: !!actor && !isFetching,
+      staleTime: 30_000,
+    })),
+  });
+
+  return (evidenceQueries as { data?: Evidence[] }[]).flatMap(
+    (q) => q.data ?? [],
+  );
 }

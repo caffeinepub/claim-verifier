@@ -186,13 +186,15 @@ export function ClaimCard({
                 : "bg-muted-foreground/20";
 
   // Meter fill % (true % for positive verdicts, false % for false verdict)
-  // When votes exist but no verdict yet, show a neutral partial bar based on true votes
+  // When there are not enough votes for a verdict, show progress toward the 5-vote threshold
   const meterFill =
     totalVotes === 0
       ? 0
-      : verdict === "DEBUNKED" || verdict === "Leaning FALSE"
-        ? falsePercent
-        : truePercent;
+      : !hasEnoughVotes
+        ? Math.min(100, Math.round((totalVotes / 5) * 100))
+        : verdict === "DEBUNKED" || verdict === "Leaning FALSE"
+          ? falsePercent
+          : truePercent;
 
   const borderClass = verdict ? verdictBorderClass[verdict] : "border-l-border";
 
@@ -222,6 +224,8 @@ export function ClaimCard({
           <AuthorDisplay
             username={claim.authorUsername}
             className="flex items-center gap-1"
+            usernameClassName="font-normal text-muted-foreground"
+            showAvatar={false}
           />
         </div>
 
@@ -307,6 +311,7 @@ export function ClaimCard({
             src={thumbnailSrc}
             alt=""
             aria-hidden="true"
+            loading="lazy"
             className="absolute inset-0 w-full h-full object-cover blur-xl scale-110 brightness-50 saturate-150"
             onError={(e) => {
               (e.currentTarget as HTMLImageElement).style.display = "none";
@@ -317,6 +322,7 @@ export function ClaimCard({
             src={thumbnailSrc}
             alt=""
             aria-hidden="true"
+            loading="lazy"
             className="relative z-10 w-full object-contain"
             style={{ minHeight: 180, maxHeight: 400 }}
             onError={(e) => {
@@ -357,8 +363,8 @@ export function ClaimCard({
               );
             })()}
 
-          {/* Compact vote breakdown — only when tally exists */}
-          {tally && (
+          {/* Compact vote breakdown — only when there are enough votes for a verdict */}
+          {tally && totalVotes > 0 && (
             <VerdictBar
               trueCount={tally.trueCount}
               falseCount={tally.falseCount}
@@ -391,14 +397,27 @@ export function ClaimCard({
                   : ""}
               </span>
             </div>
-            <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
-              <motion.div
-                initial={{ width: 0 }}
-                animate={{ width: `${meterFill}%` }}
-                transition={{ duration: 0.6, ease: "easeOut" }}
-                className={cn("h-full rounded-full", meterBarColor)}
-              />
-            </div>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden cursor-default">
+                    <motion.div
+                      initial={{ width: 0 }}
+                      animate={{ width: `${meterFill}%` }}
+                      transition={{ duration: 0.6, ease: "easeOut" }}
+                      className={cn("h-full rounded-full", meterBarColor)}
+                    />
+                  </div>
+                </TooltipTrigger>
+                {!hasEnoughVotes && totalVotes > 0 && (
+                  <TooltipContent side="bottom">
+                    <p className="text-xs">
+                      {totalVotes} of 5 votes needed for a verdict
+                    </p>
+                  </TooltipContent>
+                )}
+              </Tooltip>
+            </TooltipProvider>
           </div>
         </div>
       )}

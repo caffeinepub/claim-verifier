@@ -224,3 +224,93 @@ export function getEvidenceCardsForDomain(
       netScore: e.netScore ?? 0,
     }));
 }
+
+// ── Evidence-Performance Credibility System ───────────────────────────────────
+
+export type CredibilityStatus = "insufficient" | "scored";
+
+export type CredibilityResult =
+  | { status: "insufficient"; citations: number }
+  | {
+      status: "scored";
+      score: number;
+      passRate: number;
+      avgNetScore: number;
+      qualityCleared: number;
+      totalCitations: number;
+      label: "High Credibility" | "Mixed" | "Low Credibility";
+    };
+
+/**
+ * Compute evidence-performance-based credibility for a source domain.
+ * Uses RAW (unboosted) evidence net scores.
+ *
+ * @param domain - The source domain (e.g. "reuters.com")
+ * @param evidenceItems - All evidence with their raw net scores and URLs
+ * @param qualityGate - Minimum net score to count as quality-cleared (default +3)
+ */
+export function computeSourceCredibility(
+  domain: string,
+  evidenceItems: { urls?: string[]; netScore: number }[],
+  qualityGate = 3,
+): CredibilityResult {
+  const normalizedDomain = domain.toLowerCase().replace(/^www\./, "");
+
+  // Filter evidence that cites this domain
+  const citingEvidence = evidenceItems.filter((e) => {
+    const urls: string[] = e.urls ?? [];
+    return urls.some((url) => {
+      try {
+        const hostname = new URL(url).hostname
+          .toLowerCase()
+          .replace(/^www\./, "");
+        return (
+          hostname === normalizedDomain ||
+          hostname.endsWith(`.${normalizedDomain}`)
+        );
+      } catch {
+        return url.toLowerCase().includes(normalizedDomain);
+      }
+    });
+  });
+
+  const totalCitations = citingEvidence.length;
+
+  if (totalCitations < 5) {
+    return { status: "insufficient", citations: totalCitations };
+  }
+
+  const qualityCleared = citingEvidence.filter(
+    (e) => e.netScore >= qualityGate,
+  );
+  const passRate = (qualityCleared.length / totalCitations) * 100;
+
+  const avgNetScore =
+    qualityCleared.length > 0
+      ? qualityCleared.reduce((sum, e) => sum + e.netScore, 0) /
+        qualityCleared.length
+      : 0;
+
+  // Normalize avgNetScore: cap at +10 for max score = 100
+  const normalizedAvgNet = Math.min((avgNetScore / 10) * 100, 100);
+
+  // Composite: 60% avg net score + 40% pass rate
+  const compositeScore = normalizedAvgNet * 0.6 + passRate * 0.4;
+
+  const label =
+    compositeScore >= 70
+      ? ("High Credibility" as const)
+      : compositeScore >= 40
+        ? ("Mixed" as const)
+        : ("Low Credibility" as const);
+
+  return {
+    status: "scored",
+    score: compositeScore,
+    passRate,
+    avgNetScore,
+    qualityCleared: qualityCleared.length,
+    totalCitations,
+    label,
+  };
+}

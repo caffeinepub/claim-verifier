@@ -288,6 +288,9 @@ export function UserProfileCard({
 interface AuthorDisplayProps {
   username: string | undefined | null;
   className?: string;
+  /** Override classes applied to the inner username text span. Defaults to font-semibold text-foreground. */
+  usernameClassName?: string;
+  showAvatar?: boolean;
 }
 
 /**
@@ -296,19 +299,23 @@ interface AuthorDisplayProps {
  * - Verified username (has a backend profile) → avatar + username + profile popover/nav
  * - Anonymous username (no backend profile) → plain username text only
  */
-export function AuthorDisplay({ username, className }: AuthorDisplayProps) {
+export function AuthorDisplay({
+  username,
+  className,
+  usernameClassName,
+  showAvatar = true,
+}: AuthorDisplayProps) {
   const trimmed = username?.trim() ?? "";
   const { data: profile, isLoading } = useProfileByUsername(trimmed || null);
 
+  const innerTextClass = cn(
+    "text-xs font-semibold text-foreground font-body",
+    usernameClassName,
+  );
+
   if (!trimmed) return null;
   if (isLoading) {
-    return (
-      <span
-        className={cn("text-xs text-muted-foreground font-body", className)}
-      >
-        {trimmed}
-      </span>
-    );
+    return <span className={cn(innerTextClass, className)}>{trimmed}</span>;
   }
 
   if (profile) {
@@ -318,22 +325,18 @@ export function AuthorDisplay({ username, className }: AuthorDisplayProps) {
         <span
           className={cn("inline-flex items-center gap-1 font-body", className)}
         >
-          <img
-            src={avatarSrc}
-            alt={trimmed}
-            className="w-6 h-6 rounded-full object-cover flex-shrink-0"
-          />
-          <span className="text-xs font-semibold text-foreground">
-            {trimmed}
-          </span>
+          {showAvatar && (
+            <img
+              src={avatarSrc}
+              alt={trimmed}
+              className="w-6 h-6 rounded-full object-cover flex-shrink-0"
+            />
+          )}
+          <span className={innerTextClass}>{trimmed}</span>
         </span>
       </UserProfileCard>
     );
   }
 
-  return (
-    <span className={cn("text-xs text-muted-foreground font-body", className)}>
-      {trimmed}
-    </span>
-  );
+  return <span className={cn(innerTextClass, className)}>{trimmed}</span>;
 }

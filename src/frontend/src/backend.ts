@@ -89,14 +89,6 @@ export class ExternalBlob {
         return this;
     }
 }
-export interface PrivacySettings {
-    showVotes: boolean;
-    showClaims: boolean;
-    showReputation: boolean;
-    showSources: boolean;
-    showEvidence: boolean;
-    showComments: boolean;
-}
 export interface Claim {
     id: bigint;
     title: string;
@@ -108,6 +100,10 @@ export interface Claim {
     timestamp: bigint;
     category: string;
     sessionId: string;
+}
+export interface _CaffeineStorageRefillResult {
+    success?: boolean;
+    topped_up_amount?: bigint;
 }
 export interface Reply {
     id: bigint;
@@ -138,6 +134,15 @@ export interface SourceComment {
     timestamp: bigint;
     sessionId: string;
 }
+export interface ReputationEvent {
+    action: string;
+    timestamp: bigint;
+    points: bigint;
+}
+export interface _CaffeineStorageCreateCertificateResult {
+    method: string;
+    blob_hash: string;
+}
 export interface Evidence {
     id: bigint;
     authorUsername: string;
@@ -149,14 +154,29 @@ export interface Evidence {
     sessionId: string;
     evidenceType: string;
 }
-export interface ReputationEvent {
-    action: string;
+export interface TrustedSource {
+    id: bigint;
+    adminOverrideNote: string;
+    aboutBlurb: string;
+    domain: string;
+    sourceType: string;
+    adminOverride: boolean;
     timestamp: bigint;
-    points: bigint;
+    pinnedAdminComment: string;
+    suggestedByUsername: string;
 }
-export interface _CaffeineStorageCreateCertificateResult {
-    method: string;
-    blob_hash: string;
+export interface Vote {
+    claimId: bigint;
+    verdict: string;
+    sessionId: string;
+}
+export interface PrivacySettings {
+    showVotes: boolean;
+    showClaims: boolean;
+    showReputation: boolean;
+    showSources: boolean;
+    showEvidence: boolean;
+    showComments: boolean;
 }
 export interface UserProfile {
     bio: string;
@@ -166,10 +186,6 @@ export interface UserProfile {
     avatarUrl: string;
     usernameLastChanged: bigint;
     lastActive: bigint;
-}
-export interface _CaffeineStorageRefillResult {
-    success?: boolean;
-    topped_up_amount?: bigint;
 }
 export enum UserRole {
     admin = "admin",
@@ -220,6 +236,27 @@ export interface backendInterface {
         __kind__: "err";
         err: string;
     }>;
+    adminDeleteSourceComment(commentId: bigint, password: string): Promise<{
+        __kind__: "ok";
+        ok: null;
+    } | {
+        __kind__: "err";
+        err: string;
+    }>;
+    adminDeleteUser(username: string, password: string): Promise<{
+        __kind__: "ok";
+        ok: null;
+    } | {
+        __kind__: "err";
+        err: string;
+    }>;
+    adminDeleteVote(claimId: bigint, sessionId: string, password: string): Promise<{
+        __kind__: "ok";
+        ok: null;
+    } | {
+        __kind__: "err";
+        err: string;
+    }>;
     adminFetchAboutBlurb(sourceId: bigint, password: string): Promise<{
         __kind__: "ok";
         ok: string;
@@ -227,6 +264,10 @@ export interface backendInterface {
         __kind__: "err";
         err: string;
     }>;
+    adminGetAllClaims(password: string): Promise<Array<Claim>>;
+    adminGetAllSources(password: string): Promise<Array<TrustedSource>>;
+    adminGetAllUsers(password: string): Promise<Array<UserProfile>>;
+    adminGetVotesForClaim(claimId: bigint, password: string): Promise<Array<Vote>>;
     adminOverrideSource(sourceId: bigint, approved: boolean, note: string, password: string): Promise<{
         __kind__: "ok";
         ok: null;
@@ -629,6 +670,66 @@ export class Backend implements backendInterface {
             return from_candid_variant_n8(this._uploadFile, this._downloadFile, result);
         }
     }
+    async adminDeleteSourceComment(arg0: bigint, arg1: string): Promise<{
+        __kind__: "ok";
+        ok: null;
+    } | {
+        __kind__: "err";
+        err: string;
+    }> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.adminDeleteSourceComment(arg0, arg1);
+                return from_candid_variant_n8(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.adminDeleteSourceComment(arg0, arg1);
+            return from_candid_variant_n8(this._uploadFile, this._downloadFile, result);
+        }
+    }
+    async adminDeleteUser(arg0: string, arg1: string): Promise<{
+        __kind__: "ok";
+        ok: null;
+    } | {
+        __kind__: "err";
+        err: string;
+    }> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.adminDeleteUser(arg0, arg1);
+                return from_candid_variant_n8(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.adminDeleteUser(arg0, arg1);
+            return from_candid_variant_n8(this._uploadFile, this._downloadFile, result);
+        }
+    }
+    async adminDeleteVote(arg0: bigint, arg1: string, arg2: string): Promise<{
+        __kind__: "ok";
+        ok: null;
+    } | {
+        __kind__: "err";
+        err: string;
+    }> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.adminDeleteVote(arg0, arg1, arg2);
+                return from_candid_variant_n8(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.adminDeleteVote(arg0, arg1, arg2);
+            return from_candid_variant_n8(this._uploadFile, this._downloadFile, result);
+        }
+    }
     async adminFetchAboutBlurb(arg0: bigint, arg1: string): Promise<{
         __kind__: "ok";
         ok: string;
@@ -647,6 +748,62 @@ export class Backend implements backendInterface {
         } else {
             const result = await this.actor.adminFetchAboutBlurb(arg0, arg1);
             return from_candid_variant_n9(this._uploadFile, this._downloadFile, result);
+        }
+    }
+    async adminGetAllClaims(arg0: string): Promise<Array<Claim>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.adminGetAllClaims(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.adminGetAllClaims(arg0);
+            return result;
+        }
+    }
+    async adminGetAllSources(arg0: string): Promise<Array<TrustedSource>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.adminGetAllSources(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.adminGetAllSources(arg0);
+            return result;
+        }
+    }
+    async adminGetAllUsers(arg0: string): Promise<Array<UserProfile>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.adminGetAllUsers(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.adminGetAllUsers(arg0);
+            return result;
+        }
+    }
+    async adminGetVotesForClaim(arg0: bigint, arg1: string): Promise<Array<Vote>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.adminGetVotesForClaim(arg0, arg1);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.adminGetVotesForClaim(arg0, arg1);
+            return result;
         }
     }
     async adminOverrideSource(arg0: bigint, arg1: boolean, arg2: string, arg3: string): Promise<{

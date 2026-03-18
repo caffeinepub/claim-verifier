@@ -15,12 +15,59 @@ interface FileState {
 
 interface ImageUploaderProps {
   onUploaded: (urls: string[]) => void;
+  onUploadingChange?: (isUploading: boolean) => void;
   maxFiles?: number;
   ocidPrefix?: string;
 }
 
+async function compressImage(file: File): Promise<File> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const objectUrl = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      const MAX_WIDTH = 1920;
+      let { width, height } = img;
+      if (width > MAX_WIDTH) {
+        height = Math.round((height * MAX_WIDTH) / width);
+        width = MAX_WIDTH;
+      }
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        reject(new Error("No canvas context"));
+        return;
+      }
+      ctx.drawImage(img, 0, 0, width, height);
+      canvas.toBlob(
+        (blob) => {
+          if (!blob) {
+            reject(new Error("Compression failed"));
+            return;
+          }
+          resolve(
+            new File([blob], file.name.replace(/\.[^.]+$/, ".jpg"), {
+              type: "image/jpeg",
+            }),
+          );
+        },
+        "image/jpeg",
+        0.82,
+      );
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error("Image load failed"));
+    };
+    img.src = objectUrl;
+  });
+}
+
 export function ImageUploader({
   onUploaded,
+  onUploadingChange,
   maxFiles = 5,
   ocidPrefix = "image",
 }: ImageUploaderProps) {
@@ -36,8 +83,21 @@ export function ImageUploader({
         return;
       }
 
+      onUploadingChange?.(true);
       try {
-        const arrayBuffer = await fileState.file.arrayBuffer();
+        // Compress image before uploading if it's an image type
+        let uploadFile = fileState.file;
+        if (fileState.file.type.startsWith("image/")) {
+          try {
+            const compressed = await compressImage(fileState.file);
+            if (compressed.size < fileState.file.size) {
+              uploadFile = compressed;
+            }
+          } catch {
+            // If compression fails, use the original file
+          }
+        }
+        const arrayBuffer = await uploadFile.arrayBuffer();
         const bytes = new Uint8Array(arrayBuffer);
 
         const { hash } = await storageClient.putFile(bytes, (pct) => {
@@ -57,17 +117,29 @@ export function ImageUploader({
             .filter((f) => f.uploadedUrl !== null)
             .map((f) => f.uploadedUrl as string);
           onUploaded(completedUrls);
+          // Notify if all uploads are settled
+          const allSettled = updated.every(
+            (f) => f.progress === 100 || f.progress === -1,
+          );
+          if (allSettled) onUploadingChange?.(false);
           return updated;
         });
       } catch (err) {
         console.error("Image upload failed:", err);
         toast.error(`Failed to upload ${fileState.file.name}. Skipping.`);
-        setFiles((prev) =>
-          prev.map((f, i) => (i === index ? { ...f, progress: -1 } : f)),
-        );
+        setFiles((prev) => {
+          const updated = prev.map((f, i) =>
+            i === index ? { ...f, progress: -1 } : f,
+          );
+          const allSettled = updated.every(
+            (f) => f.progress === 100 || f.progress === -1,
+          );
+          if (allSettled) onUploadingChange?.(false);
+          return updated;
+        });
       }
     },
-    [storageClient, onUploaded],
+    [storageClient, onUploaded, onUploadingChange],
   );
 
   const handleFiles = useCallback(

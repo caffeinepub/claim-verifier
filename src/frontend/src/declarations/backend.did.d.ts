@@ -64,6 +64,17 @@ export interface SourceComment {
   'timestamp' : bigint,
   'sessionId' : string,
 }
+export interface TrustedSource {
+  'id' : bigint,
+  'adminOverrideNote' : string,
+  'aboutBlurb' : string,
+  'domain' : string,
+  'sourceType' : string,
+  'adminOverride' : boolean,
+  'timestamp' : bigint,
+  'pinnedAdminComment' : string,
+  'suggestedByUsername' : string,
+}
 export interface UserProfile {
   'bio' : string,
   'privacySettings' : PrivacySettings,
@@ -82,6 +93,11 @@ export interface UserVote {
   'claimId' : bigint,
   'verdict' : string,
   'timestamp' : bigint,
+  'sessionId' : string,
+}
+export interface Vote {
+  'claimId' : bigint,
+  'verdict' : string,
   'sessionId' : string,
 }
 export interface _CaffeineStorageCreateCertificateResult {
@@ -138,11 +154,30 @@ export interface _SERVICE {
     { 'ok' : null } |
       { 'err' : string }
   >,
+  'adminDeleteSourceComment' : ActorMethod<
+    [bigint, string],
+    { 'ok' : null } |
+      { 'err' : string }
+  >,
+  'adminDeleteUser' : ActorMethod<
+    [string, string],
+    { 'ok' : null } |
+      { 'err' : string }
+  >,
+  'adminDeleteVote' : ActorMethod<
+    [bigint, string, string],
+    { 'ok' : null } |
+      { 'err' : string }
+  >,
   'adminFetchAboutBlurb' : ActorMethod<
     [bigint, string],
     { 'ok' : string } |
       { 'err' : string }
   >,
+  'adminGetAllClaims' : ActorMethod<[string], Array<Claim>>,
+  'adminGetAllSources' : ActorMethod<[string], Array<TrustedSource>>,
+  'adminGetAllUsers' : ActorMethod<[string], Array<UserProfile>>,
+  'adminGetVotesForClaim' : ActorMethod<[bigint, string], Array<Vote>>,
   'adminOverrideSource' : ActorMethod<
     [bigint, boolean, string, string],
     { 'ok' : null } |

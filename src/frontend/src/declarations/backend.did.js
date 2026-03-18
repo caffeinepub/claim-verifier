@@ -19,19 +19,6 @@ export const _CaffeineStorageRefillResult = IDL.Record({
   'success' : IDL.Opt(IDL.Bool),
   'topped_up_amount' : IDL.Opt(IDL.Nat),
 });
-export const UserRole = IDL.Variant({
-  'admin' : IDL.Null,
-  'user' : IDL.Null,
-  'guest' : IDL.Null,
-});
-export const PrivacySettings = IDL.Record({
-  'showVotes' : IDL.Bool,
-  'showClaims' : IDL.Bool,
-  'showReputation' : IDL.Bool,
-  'showSources' : IDL.Bool,
-  'showEvidence' : IDL.Bool,
-  'showComments' : IDL.Bool,
-});
 export const Claim = IDL.Record({
   'id' : IDL.Nat,
   'title' : IDL.Text,
@@ -44,6 +31,25 @@ export const Claim = IDL.Record({
   'category' : IDL.Text,
   'sessionId' : IDL.Text,
 });
+export const TrustedSource = IDL.Record({
+  'id' : IDL.Nat,
+  'adminOverrideNote' : IDL.Text,
+  'aboutBlurb' : IDL.Text,
+  'domain' : IDL.Text,
+  'sourceType' : IDL.Text,
+  'adminOverride' : IDL.Bool,
+  'timestamp' : IDL.Int,
+  'pinnedAdminComment' : IDL.Text,
+  'suggestedByUsername' : IDL.Text,
+});
+export const PrivacySettings = IDL.Record({
+  'showVotes' : IDL.Bool,
+  'showClaims' : IDL.Bool,
+  'showReputation' : IDL.Bool,
+  'showSources' : IDL.Bool,
+  'showEvidence' : IDL.Bool,
+  'showComments' : IDL.Bool,
+});
 export const UserProfile = IDL.Record({
   'bio' : IDL.Text,
   'privacySettings' : PrivacySettings,
@@ -52,6 +58,16 @@ export const UserProfile = IDL.Record({
   'avatarUrl' : IDL.Text,
   'usernameLastChanged' : IDL.Int,
   'lastActive' : IDL.Int,
+});
+export const Vote = IDL.Record({
+  'claimId' : IDL.Nat,
+  'verdict' : IDL.Text,
+  'sessionId' : IDL.Text,
+});
+export const UserRole = IDL.Variant({
+  'admin' : IDL.Null,
+  'user' : IDL.Null,
+  'guest' : IDL.Null,
 });
 export const Evidence = IDL.Record({
   'id' : IDL.Nat,
@@ -150,10 +166,37 @@ export const idlService = IDL.Service({
       [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
       [],
     ),
+  'adminDeleteSourceComment' : IDL.Func(
+      [IDL.Nat, IDL.Text],
+      [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
+      [],
+    ),
+  'adminDeleteUser' : IDL.Func(
+      [IDL.Text, IDL.Text],
+      [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
+      [],
+    ),
+  'adminDeleteVote' : IDL.Func(
+      [IDL.Nat, IDL.Text, IDL.Text],
+      [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
+      [],
+    ),
   'adminFetchAboutBlurb' : IDL.Func(
       [IDL.Nat, IDL.Text],
       [IDL.Variant({ 'ok' : IDL.Text, 'err' : IDL.Text })],
       [],
+    ),
+  'adminGetAllClaims' : IDL.Func([IDL.Text], [IDL.Vec(Claim)], ['query']),
+  'adminGetAllSources' : IDL.Func(
+      [IDL.Text],
+      [IDL.Vec(TrustedSource)],
+      ['query'],
+    ),
+  'adminGetAllUsers' : IDL.Func([IDL.Text], [IDL.Vec(UserProfile)], ['query']),
+  'adminGetVotesForClaim' : IDL.Func(
+      [IDL.Nat, IDL.Text],
+      [IDL.Vec(Vote)],
+      ['query'],
     ),
   'adminOverrideSource' : IDL.Func(
       [IDL.Nat, IDL.Bool, IDL.Text, IDL.Text],
@@ -434,19 +477,6 @@ export const idlFactory = ({ IDL }) => {
     'success' : IDL.Opt(IDL.Bool),
     'topped_up_amount' : IDL.Opt(IDL.Nat),
   });
-  const UserRole = IDL.Variant({
-    'admin' : IDL.Null,
-    'user' : IDL.Null,
-    'guest' : IDL.Null,
-  });
-  const PrivacySettings = IDL.Record({
-    'showVotes' : IDL.Bool,
-    'showClaims' : IDL.Bool,
-    'showReputation' : IDL.Bool,
-    'showSources' : IDL.Bool,
-    'showEvidence' : IDL.Bool,
-    'showComments' : IDL.Bool,
-  });
   const Claim = IDL.Record({
     'id' : IDL.Nat,
     'title' : IDL.Text,
@@ -459,6 +489,25 @@ export const idlFactory = ({ IDL }) => {
     'category' : IDL.Text,
     'sessionId' : IDL.Text,
   });
+  const TrustedSource = IDL.Record({
+    'id' : IDL.Nat,
+    'adminOverrideNote' : IDL.Text,
+    'aboutBlurb' : IDL.Text,
+    'domain' : IDL.Text,
+    'sourceType' : IDL.Text,
+    'adminOverride' : IDL.Bool,
+    'timestamp' : IDL.Int,
+    'pinnedAdminComment' : IDL.Text,
+    'suggestedByUsername' : IDL.Text,
+  });
+  const PrivacySettings = IDL.Record({
+    'showVotes' : IDL.Bool,
+    'showClaims' : IDL.Bool,
+    'showReputation' : IDL.Bool,
+    'showSources' : IDL.Bool,
+    'showEvidence' : IDL.Bool,
+    'showComments' : IDL.Bool,
+  });
   const UserProfile = IDL.Record({
     'bio' : IDL.Text,
     'privacySettings' : PrivacySettings,
@@ -467,6 +516,16 @@ export const idlFactory = ({ IDL }) => {
     'avatarUrl' : IDL.Text,
     'usernameLastChanged' : IDL.Int,
     'lastActive' : IDL.Int,
+  });
+  const Vote = IDL.Record({
+    'claimId' : IDL.Nat,
+    'verdict' : IDL.Text,
+    'sessionId' : IDL.Text,
+  });
+  const UserRole = IDL.Variant({
+    'admin' : IDL.Null,
+    'user' : IDL.Null,
+    'guest' : IDL.Null,
   });
   const Evidence = IDL.Record({
     'id' : IDL.Nat,
@@ -565,10 +624,41 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
         [],
       ),
+    'adminDeleteSourceComment' : IDL.Func(
+        [IDL.Nat, IDL.Text],
+        [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
+        [],
+      ),
+    'adminDeleteUser' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
+        [],
+      ),
+    'adminDeleteVote' : IDL.Func(
+        [IDL.Nat, IDL.Text, IDL.Text],
+        [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
+        [],
+      ),
     'adminFetchAboutBlurb' : IDL.Func(
         [IDL.Nat, IDL.Text],
         [IDL.Variant({ 'ok' : IDL.Text, 'err' : IDL.Text })],
         [],
+      ),
+    'adminGetAllClaims' : IDL.Func([IDL.Text], [IDL.Vec(Claim)], ['query']),
+    'adminGetAllSources' : IDL.Func(
+        [IDL.Text],
+        [IDL.Vec(TrustedSource)],
+        ['query'],
+      ),
+    'adminGetAllUsers' : IDL.Func(
+        [IDL.Text],
+        [IDL.Vec(UserProfile)],
+        ['query'],
+      ),
+    'adminGetVotesForClaim' : IDL.Func(
+        [IDL.Nat, IDL.Text],
+        [IDL.Vec(Vote)],
+        ['query'],
       ),
     'adminOverrideSource' : IDL.Func(
         [IDL.Nat, IDL.Bool, IDL.Text, IDL.Text],

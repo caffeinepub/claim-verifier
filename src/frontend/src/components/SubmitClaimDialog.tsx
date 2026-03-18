@@ -71,6 +71,7 @@ export function SubmitClaimDialog({
   const [category, setCategory] = useState("");
   const [claimImageUrls, setClaimImageUrls] = useState<string[]>([]);
   const [claimUrls, setClaimUrls] = useState<string[]>([]);
+  const [isImageUploading, setIsImageUploading] = useState(false);
   const [cooldownSecondsLeft, setCooldownSecondsLeft] = useState(0);
 
   const createClaim = useCreateClaim();
@@ -102,6 +103,7 @@ export function SubmitClaimDialog({
     setCategory("");
     setClaimImageUrls([]);
     setClaimUrls([]);
+    setIsImageUploading(false);
     // Don't reset cooldown — it persists across dialog open/close
   }
 
@@ -258,11 +260,20 @@ export function SubmitClaimDialog({
                 </span>
               </Label>
               {canUploadImages ? (
-                <ImageUploader
-                  onUploaded={setClaimImageUrls}
-                  maxFiles={5}
-                  ocidPrefix="submit_claim.image"
-                />
+                <>
+                  <ImageUploader
+                    onUploaded={setClaimImageUrls}
+                    onUploadingChange={setIsImageUploading}
+                    maxFiles={5}
+                    ocidPrefix="submit_claim.image"
+                  />
+                  {isImageUploading && (
+                    <p className="text-xs text-muted-foreground font-body flex items-center gap-1.5">
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      Uploading images, please wait...
+                    </p>
+                  )}
+                </>
               ) : (
                 <p className="flex items-center gap-1.5 text-xs text-muted-foreground font-body">
                   <LogIn className="h-3 w-3 flex-shrink-0" />
@@ -322,6 +333,7 @@ export function SubmitClaimDialog({
               disabled={
                 createClaim.isPending ||
                 isCoolingDown ||
+                isImageUploading ||
                 !title.trim() ||
                 !description.trim() ||
                 !category

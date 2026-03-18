@@ -110,6 +110,8 @@ function CommentForm({
 }: CommentFormProps) {
   const [text, setText] = useState("");
   const [imageUrls, setImageUrls] = useState<string[]>([]);
+  const [isImageUploading, setIsImageUploading] = useState(false);
+  const [uploaderKey, setUploaderKey] = useState(0);
   const [urls, setUrls] = useState<string[]>([]);
   const [showLinks, setShowLinks] = useState(false);
   const [cooldownLeft, setCooldownLeft] = useState(0);
@@ -150,6 +152,8 @@ function CommentForm({
       });
       setText("");
       setImageUrls([]);
+      setIsImageUploading(false);
+      setUploaderKey((k) => k + 1);
       setUrls([]);
       setShowLinks(false);
       onSuccess?.();
@@ -178,24 +182,18 @@ function CommentForm({
       />
       {/* Image uploader */}
       <ImageUploader
+        key={uploaderKey}
         onUploaded={setImageUrls}
+        onUploadingChange={setIsImageUploading}
         maxFiles={3}
         ocidPrefix={`${ocidPrefix}.image`}
       />
-      {/* Uploaded image previews in comment body */}
-      {imageUrls.length > 0 && (
-        <div className="flex flex-wrap gap-1.5">
-          {imageUrls.map((url) => (
-            <img
-              key={url}
-              src={url}
-              alt="Attachment"
-              className="h-16 w-16 object-cover rounded border border-border"
-            />
-          ))}
-        </div>
+      {isImageUploading && (
+        <p className="text-xs text-muted-foreground font-body flex items-center gap-1.5">
+          <Loader2 className="h-3 w-3 animate-spin" />
+          Uploading images, please wait...
+        </p>
       )}
-      {/* Link input toggle */}
       <div>
         <button
           type="button"
@@ -248,7 +246,12 @@ function CommentForm({
             type="submit"
             size="sm"
             data-ocid={`${ocidPrefix}.submit_button`}
-            disabled={addComment.isPending || cooldownLeft > 0 || !text.trim()}
+            disabled={
+              addComment.isPending ||
+              cooldownLeft > 0 ||
+              isImageUploading ||
+              !text.trim()
+            }
             className="h-7 px-2.5 font-body text-xs bg-primary text-primary-foreground gap-1"
           >
             {addComment.isPending ? (

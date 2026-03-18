@@ -1,6 +1,5 @@
-import { AdminPanel } from "@/components/AdminPanel";
 import { ClaimCard } from "@/components/ClaimCard";
-import { ClaimDetail } from "@/components/ClaimDetail";
+import { OfflineBanner } from "@/components/OfflineBanner";
 import { SubmitClaimDialog } from "@/components/SubmitClaimDialog";
 import { UserAvatar } from "@/components/UserAvatar";
 import { VerifiedBadge } from "@/components/VerifiedBadge";
@@ -27,10 +26,6 @@ import { useActor } from "@/hooks/useActor";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
 import { useAllClaims, useSessionId, useUsername } from "@/hooks/useQueries";
 import { useVerifiedAccount } from "@/hooks/useVerifiedAccount";
-import { ProfilePage } from "@/pages/ProfilePage";
-import { SettingsPage } from "@/pages/SettingsPage";
-import { SourceDetailPage } from "@/pages/SourceDetailPage";
-import { TrustedSourcesPage } from "@/pages/TrustedSourcesPage";
 import { findClaimBySlug, getClaimSlug } from "@/utils/slug";
 import {
   BookOpen,
@@ -61,7 +56,37 @@ import {
   XCircle,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { useEffect, useRef, useState } from "react";
+import React, { Suspense, useEffect, useRef, useState } from "react";
+
+// Route-based code splitting
+const ClaimDetail = React.lazy(() =>
+  import("@/components/ClaimDetail").then((m) => ({ default: m.ClaimDetail })),
+);
+const ProfilePage = React.lazy(() =>
+  import("@/pages/ProfilePage").then((m) => ({ default: m.ProfilePage })),
+);
+const SettingsPage = React.lazy(() =>
+  import("@/pages/SettingsPage").then((m) => ({ default: m.SettingsPage })),
+);
+const SourceDetailPage = React.lazy(() =>
+  import("@/pages/SourceDetailPage").then((m) => ({
+    default: m.SourceDetailPage,
+  })),
+);
+const TrustedSourcesPage = React.lazy(() =>
+  import("@/pages/TrustedSourcesPage").then((m) => ({
+    default: m.TrustedSourcesPage,
+  })),
+);
+const AdminPage = React.lazy(() =>
+  import("@/pages/AdminPage").then((m) => ({ default: m.AdminPage })),
+);
+
+const PageFallback = (
+  <div className="flex items-center justify-center py-20">
+    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+  </div>
+);
 
 const CATEGORIES: { label: string; icon: LucideIcon }[] = [
   { label: "All", icon: Layers },
@@ -78,87 +103,34 @@ const CATEGORIES: { label: string; icon: LucideIcon }[] = [
   { label: "General", icon: Globe },
 ];
 
-const SEED_CLAIMS_VISIBLE_EMPTY = [
-  {
-    id: 1n,
-    title: "Scientists confirm CRISPR gene therapy cures sickle cell disease",
-    description:
-      "A peer-reviewed study in The Lancet reports that 28 of 29 patients treated with CRISPR-based gene therapy showed complete remission of sickle cell disease symptoms after a 12-month follow-up.",
-    category: "Science",
-    timestamp: BigInt(Date.now() - 3600000) * 1_000_000n,
-    sessionId: "seed",
-    authorUsername: "",
-    imageUrls: [],
-    urls: [],
-    ogThumbnailUrl: "",
-  },
-  {
-    id: 2n,
-    title: "The Great Wall of China is visible from space with the naked eye",
-    description:
-      "A commonly repeated claim suggesting that the Great Wall of China is the only man-made structure visible from the Moon or low Earth orbit without optical aids.",
-    category: "Science",
-    timestamp: BigInt(Date.now() - 86400000) * 1_000_000n,
-    sessionId: "seed",
-    authorUsername: "",
-    imageUrls: [],
-    urls: [],
-    ogThumbnailUrl: "",
-  },
-  {
-    id: 3n,
-    title: "Coffee consumption linked to reduced risk of Type 2 diabetes",
-    description:
-      "A meta-analysis published in Diabetologia found that drinking 3\u20134 cups of coffee per day is associated with a 25% lower risk of developing Type 2 diabetes compared to non-coffee drinkers.",
-    category: "Health",
-    timestamp: BigInt(Date.now() - 172800000) * 1_000_000n,
-    sessionId: "seed",
-    authorUsername: "",
-    imageUrls: [],
-    urls: [],
-    ogThumbnailUrl: "",
-  },
-  {
-    id: 4n,
-    title: "Quantum computers have rendered current encryption obsolete",
-    description:
-      "Some news outlets claim that recent quantum computing advances mean that RSA and AES encryption are no longer secure for protecting sensitive data.",
-    category: "Technology",
-    timestamp: BigInt(Date.now() - 259200000) * 1_000_000n,
-    sessionId: "seed",
-    authorUsername: "",
-    imageUrls: [],
-    urls: [],
-    ogThumbnailUrl: "",
-  },
-  {
-    id: 5n,
-    title:
-      "Voter turnout in the 2024 US Presidential election reached a 50-year high",
-    description:
-      "Reports circulating on social media claim that the 2024 US Presidential election saw the highest voter participation rate since 1972, exceeding 65% of eligible voters.",
-    category: "Politics",
-    timestamp: BigInt(Date.now() - 432000000) * 1_000_000n,
-    sessionId: "seed",
-    authorUsername: "",
-    imageUrls: [],
-    urls: [],
-    ogThumbnailUrl: "",
-  },
-];
+const PAGE_SIZE = 20;
 
 export default function App() {
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedClaimId, setSelectedClaimId] = useState<bigint | null>(null);
   const [isSubmitOpen, setIsSubmitOpen] = useState(false);
-  const [isAdminOpen, setIsAdminOpen] = useState(false);
   const [showSources, setShowSources] = useState(false);
   const [showSourceDomain, setShowSourceDomain] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
+  const [showAdmin, setShowAdmin] = useState(false);
   const [showProfileUsername, setShowProfileUsername] = useState<string | null>(
     null,
   );
+
+  // Infinite scroll
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+
+  // New claims banner
+  const seenClaimIdsRef = useRef<Set<string>>(new Set());
+  const [newClaimsCount, setNewClaimsCount] = useState(0);
+
+  // Pull-to-refresh
+  const [isPulling, setIsPulling] = useState(false);
+  const [pullDistance, setPullDistance] = useState(0);
+  const touchStartYRef = useRef(0);
+  const pullContainerRef = useRef<HTMLDivElement | null>(null);
 
   const { data: sessionId, isLoading: sessionLoading } = useSessionId();
   const {
@@ -228,7 +200,11 @@ export default function App() {
     setUsernameAvailable(null);
   }
 
-  const { data: claims, isLoading: claimsLoading } = useAllClaims();
+  const {
+    data: claims,
+    isLoading: claimsLoading,
+    refetch: refetchClaims,
+  } = useAllClaims();
   const anonUsername = useUsername();
 
   // Open Graph / document title meta
@@ -249,6 +225,10 @@ export default function App() {
   // On mount: check if URL matches /source/:domain or /claim/<slug> and navigate
   useEffect(() => {
     const profileMatch = window.location.pathname.match(/^\/profile\/(.+)$/);
+    if (window.location.pathname === "/admin") {
+      setShowAdmin(true);
+      return;
+    }
     if (profileMatch) {
       setShowProfileUsername(decodeURIComponent(profileMatch[1]));
       return;
@@ -276,6 +256,10 @@ export default function App() {
   useEffect(() => {
     function handlePopState() {
       const profileMatch = window.location.pathname.match(/^\/profile\/(.+)$/);
+      if (window.location.pathname === "/admin") {
+        setShowAdmin(true);
+        return;
+      }
       if (profileMatch) {
         setShowProfileUsername(decodeURIComponent(profileMatch[1]));
         setSelectedClaimId(null);
@@ -336,6 +320,7 @@ export default function App() {
     setShowSourceDomain(null);
     setShowProfileUsername(null);
     setShowSettings(false);
+    setShowAdmin(false);
     window.history.pushState({}, "", "/");
   }
 
@@ -353,9 +338,17 @@ export default function App() {
     setShowSourceDomain(null);
     window.history.pushState({}, "", "/");
   }
+  function openAdmin() {
+    setShowAdmin(true);
+    setSelectedClaimId(null);
+    setShowSources(false);
+    setShowSourceDomain(null);
+    setShowProfileUsername(null);
+    setShowSettings(false);
+    window.history.pushState({}, "", "/admin");
+  }
 
-  const allClaims =
-    claims && claims.length > 0 ? claims : SEED_CLAIMS_VISIBLE_EMPTY;
+  const allClaims = claims ?? [];
 
   const displayClaims = allClaims
     .filter((claim) => {
@@ -370,6 +363,107 @@ export default function App() {
     .slice()
     .sort((a, b) => Number(b.timestamp - a.timestamp));
 
+  // Paginated slice for infinite scroll
+  const visibleClaims = displayClaims.slice(0, visibleCount);
+  const hasMore = visibleCount < displayClaims.length;
+
+  // Reset visible count when filters change (track previous values)
+  const prevCategoryRef = useRef(selectedCategory);
+  const prevSearchRef = useRef(searchQuery);
+  if (
+    prevCategoryRef.current !== selectedCategory ||
+    prevSearchRef.current !== searchQuery
+  ) {
+    prevCategoryRef.current = selectedCategory;
+    prevSearchRef.current = searchQuery;
+    if (visibleCount !== PAGE_SIZE) {
+      setVisibleCount(PAGE_SIZE);
+    }
+  }
+
+  // Infinite scroll: IntersectionObserver on sentinel
+  useEffect(() => {
+    if (!sentinelRef.current || !hasMore) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          setVisibleCount((prev) => prev + PAGE_SIZE);
+        }
+      },
+      { rootMargin: "200px" },
+    );
+    observer.observe(sentinelRef.current);
+    return () => observer.disconnect();
+  }, [hasMore]);
+
+  // New claims banner: track seen IDs
+  const isOnMainList =
+    selectedClaimId === null &&
+    !showSources &&
+    showSourceDomain === null &&
+    showProfileUsername === null &&
+    !showSettings;
+
+  useEffect(() => {
+    if (!isOnMainList) return;
+    if (!claims || claims.length === 0) return;
+    const currentIds = new Set(claims.map((c) => c.id.toString()));
+    if (seenClaimIdsRef.current.size === 0) {
+      // Initialize on first load
+      seenClaimIdsRef.current = currentIds;
+      return;
+    }
+    let newCount = 0;
+    for (const id of currentIds) {
+      if (!seenClaimIdsRef.current.has(id)) newCount++;
+    }
+    if (newCount > 0) {
+      if (window.scrollY > 100) {
+        setNewClaimsCount(newCount);
+      } else {
+        // User is at top, silently accept
+        seenClaimIdsRef.current = currentIds;
+      }
+    }
+  }, [claims, isOnMainList]);
+
+  function dismissNewClaimsBanner() {
+    seenClaimIdsRef.current = new Set(
+      (claims ?? []).map((c) => c.id.toString()),
+    );
+    setNewClaimsCount(0);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  // Reset banner when leaving / returning to main list
+  useEffect(() => {
+    if (isOnMainList) {
+      setNewClaimsCount(0);
+    }
+  }, [isOnMainList]);
+
+  // Pull-to-refresh handlers (touch only)
+  function handleTouchStart(e: React.TouchEvent) {
+    touchStartYRef.current = e.touches[0].clientY;
+  }
+
+  function handleTouchMove(e: React.TouchEvent) {
+    if (window.scrollY !== 0) return;
+    const delta = e.touches[0].clientY - touchStartYRef.current;
+    if (delta > 0) {
+      setPullDistance(Math.min(delta, 120));
+      setIsPulling(delta > 80);
+    }
+  }
+
+  async function handleTouchEnd() {
+    if (isPulling) {
+      await refetchClaims();
+    }
+    setPullDistance(0);
+    setIsPulling(false);
+  }
+
   const showDetail = selectedClaimId !== null;
   const isOnSourceDetail =
     showSourceDomain !== null &&
@@ -383,12 +477,38 @@ export default function App() {
   const isOnProfile = showProfileUsername !== null && selectedClaimId === null;
   const isOnSettings =
     showSettings && selectedClaimId === null && showProfileUsername === null;
+  const isOnAdmin = showAdmin;
 
   const isFirstTimeSetup = !username;
 
   return (
     <div className="min-h-screen bg-background noise-bg flex flex-col">
       <Toaster theme="dark" />
+
+      {/* New claims sticky banner */}
+      <AnimatePresence>
+        {newClaimsCount > 0 && isOnMainList && (
+          <motion.div
+            initial={{ y: -48, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: -48, opacity: 0 }}
+            transition={{ type: "spring", stiffness: 300, damping: 30 }}
+            className="fixed top-[73px] left-0 right-0 z-30 flex justify-center pointer-events-none"
+          >
+            <button
+              type="button"
+              onClick={dismissNewClaimsBanner}
+              className="pointer-events-auto flex items-center gap-2 px-4 py-2 rounded-full shadow-lg bg-primary text-primary-foreground text-sm font-body font-medium cursor-pointer hover:bg-primary/90 transition-colors"
+            >
+              <span>↑</span>
+              <span>
+                {newClaimsCount} new claim{newClaimsCount !== 1 ? "s" : ""} —
+                tap to load
+              </span>
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Masthead Header */}
       <header className="border-b border-border sticky top-0 z-40 bg-background">
@@ -539,177 +659,214 @@ export default function App() {
 
       {/* Main content */}
       <main className="flex-1 max-w-5xl mx-auto px-4 py-8 w-full">
-        <AnimatePresence mode="wait">
-          {isOnSettings && principalId ? (
-            <SettingsPage
-              key="settings"
-              onBack={goBack}
-              onChangeUsername={() => {
-                setShowSettings(false);
-                setUsernameInput(username ?? "");
-                setUsernameError(null);
-                setUsernameAvailable(null);
-                setUsernameDialogOpen(true);
-              }}
-            />
-          ) : isOnProfile && showProfileUsername ? (
-            <ProfilePage
-              key={`profile-${showProfileUsername}`}
-              username={showProfileUsername}
-              onBack={goBack}
-            />
-          ) : showDetail && selectedClaimId !== null && sessionId ? (
-            <ClaimDetail
-              key="detail"
-              claimId={selectedClaimId}
-              sessionId={sessionId}
-              allClaims={claims ?? []}
-              onBack={goBack}
-            />
-          ) : isOnSourceDetail && showSourceDomain ? (
-            <SourceDetailPage
-              key={`source-detail-${showSourceDomain}`}
-              domain={showSourceDomain}
-              sessionId={sessionId ?? null}
-              onBack={goBackToSources}
-              onClaimClick={(claim) => openClaim(claim.id)}
-            />
-          ) : isOnSources ? (
-            <TrustedSourcesPage
-              key="sources"
-              sessionId={sessionId ?? null}
-              onSourceClick={openSourceDetail}
-            />
-          ) : (
-            <motion.div
-              key="list"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.2 }}
-            >
-              {/* Page header */}
-              <div className="mb-8">
-                <div className="flex items-center gap-2 mb-1">
-                  <div className="w-1 h-6 bg-primary rounded-full" />
-                  <h2 className="font-display text-2xl font-bold text-foreground">
-                    Claims Under Review
-                  </h2>
+        <Suspense fallback={PageFallback}>
+          <AnimatePresence mode="wait">
+            {isOnAdmin ? (
+              <AdminPage key="admin" onClose={goBack} />
+            ) : isOnSettings && principalId ? (
+              <SettingsPage
+                key="settings"
+                onBack={goBack}
+                onChangeUsername={() => {
+                  setShowSettings(false);
+                  setUsernameInput(username ?? "");
+                  setUsernameError(null);
+                  setUsernameAvailable(null);
+                  setUsernameDialogOpen(true);
+                }}
+              />
+            ) : isOnProfile && showProfileUsername ? (
+              <ProfilePage
+                key={`profile-${showProfileUsername}`}
+                username={showProfileUsername}
+                onBack={goBack}
+              />
+            ) : showDetail && selectedClaimId !== null && sessionId ? (
+              <ClaimDetail
+                key="detail"
+                claimId={selectedClaimId}
+                sessionId={sessionId}
+                allClaims={claims ?? []}
+                onBack={goBack}
+              />
+            ) : isOnSourceDetail && showSourceDomain ? (
+              <SourceDetailPage
+                key={`source-detail-${showSourceDomain}`}
+                domain={showSourceDomain}
+                sessionId={sessionId ?? null}
+                onBack={goBackToSources}
+                onClaimClick={(claim) => openClaim(claim.id)}
+              />
+            ) : isOnSources ? (
+              <TrustedSourcesPage
+                key="sources"
+                sessionId={sessionId ?? null}
+                onSourceClick={openSourceDetail}
+              />
+            ) : (
+              <motion.div
+                key="list"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.2 }}
+              >
+                {/* Page header */}
+                <div className="mb-8">
+                  <div className="flex items-center gap-2 mb-1">
+                    <div className="w-1 h-6 bg-primary rounded-full" />
+                    <h2 className="font-display text-2xl font-bold text-foreground">
+                      Claims Under Review
+                    </h2>
+                  </div>
+                  <p className="text-sm text-muted-foreground font-body ml-3">
+                    Browse and weigh in on community-submitted claims. Every
+                    vote counts.
+                  </p>
                 </div>
-                <p className="text-sm text-muted-foreground font-body ml-3">
-                  Browse and weigh in on community-submitted claims. Every vote
-                  counts.
-                </p>
-              </div>
 
-              {/* Filters row */}
-              <div className="flex flex-col sm:flex-row gap-3 mb-6">
-                <div className="relative flex-1">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Search claims…"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-9 bg-secondary border-border font-body"
-                    data-ocid="claims.search_input"
-                  />
+                {/* Filters row */}
+                <div className="flex flex-col sm:flex-row gap-3 mb-6">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Search claims…"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="pl-9 bg-secondary border-border font-body"
+                      data-ocid="claims.search_input"
+                    />
+                  </div>
                 </div>
-              </div>
 
-              {/* Category icon grid */}
-              <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-12 gap-2 mb-6">
-                {CATEGORIES.map(({ label, icon: CatIcon }) => {
-                  const isActive = selectedCategory === label;
-                  return (
-                    <button
-                      key={label}
-                      type="button"
-                      data-ocid="category.tab"
-                      onClick={() => setSelectedCategory(label)}
-                      className={[
-                        "flex flex-col items-center justify-center gap-1.5 rounded-lg border py-2.5 px-1 transition-all duration-150 cursor-pointer",
-                        isActive
-                          ? "bg-primary text-primary-foreground border-primary shadow-sm"
-                          : "bg-secondary text-muted-foreground border-border hover:border-primary/40 hover:text-foreground hover:bg-secondary/80",
-                      ].join(" ")}
-                    >
-                      <CatIcon className="w-5 h-5 flex-shrink-0" />
-                      <span className="text-[10px] font-body font-medium leading-none text-center">
-                        {label}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
+                {/* Category icon grid */}
+                <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-12 gap-2 mb-6">
+                  {CATEGORIES.map(({ label, icon: CatIcon }) => {
+                    const isActive = selectedCategory === label;
+                    return (
+                      <button
+                        key={label}
+                        type="button"
+                        data-ocid="category.tab"
+                        onClick={() => setSelectedCategory(label)}
+                        className={[
+                          "flex flex-col items-center justify-center gap-1.5 rounded-lg border py-2.5 px-1 transition-all duration-150 cursor-pointer",
+                          isActive
+                            ? "bg-primary text-primary-foreground border-primary shadow-sm"
+                            : "bg-secondary text-muted-foreground border-border hover:border-primary/40 hover:text-foreground hover:bg-secondary/80",
+                        ].join(" ")}
+                      >
+                        <CatIcon className="w-5 h-5 flex-shrink-0" />
+                        <span className="text-[10px] font-body font-medium leading-none text-center">
+                          {label}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
 
-              {/* Claims grid */}
-              {claimsLoading ? (
+                {/* Pull-to-refresh indicator */}
+                {pullDistance > 0 && (
+                  <div
+                    className="flex justify-center items-center transition-all"
+                    style={{ height: Math.min(pullDistance * 0.5, 48) }}
+                  >
+                    <Loader2
+                      className={`h-5 w-5 text-primary transition-opacity ${
+                        isPulling ? "opacity-100 animate-spin" : "opacity-40"
+                      }`}
+                    />
+                  </div>
+                )}
+
+                {/* Claims grid */}
                 <div
-                  data-ocid="claims.loading_state"
-                  className="grid grid-cols-1 gap-4"
+                  ref={pullContainerRef}
+                  onTouchStart={handleTouchStart}
+                  onTouchMove={handleTouchMove}
+                  onTouchEnd={handleTouchEnd}
                 >
-                  {[1, 2, 3, 4].map((i) => (
+                  {claimsLoading ? (
                     <div
-                      key={i}
-                      className="p-5 bg-card border border-border rounded-sm space-y-3"
+                      data-ocid="claims.loading_state"
+                      className="grid grid-cols-1 gap-4"
                     >
-                      <div className="flex gap-2">
-                        <Skeleton className="h-5 w-20" />
-                        <Skeleton className="h-5 w-16" />
-                      </div>
-                      <Skeleton className="h-6 w-3/4" />
-                      <Skeleton className="h-4 w-full" />
-                      <Skeleton className="h-4 w-2/3" />
-                      <div className="flex gap-4 pt-1">
-                        <Skeleton className="h-3 w-20" />
-                        <Skeleton className="h-3 w-20" />
-                        <Skeleton className="h-3 w-24" />
-                      </div>
+                      {[1, 2, 3, 4].map((i) => (
+                        <div
+                          key={i}
+                          className="p-5 bg-card border border-border rounded-sm space-y-3"
+                        >
+                          <div className="flex gap-2">
+                            <Skeleton className="h-5 w-20" />
+                            <Skeleton className="h-5 w-16" />
+                          </div>
+                          <Skeleton className="h-6 w-3/4" />
+                          <Skeleton className="h-4 w-full" />
+                          <Skeleton className="h-4 w-2/3" />
+                          <div className="flex gap-4 pt-1">
+                            <Skeleton className="h-3 w-20" />
+                            <Skeleton className="h-3 w-20" />
+                            <Skeleton className="h-3 w-24" />
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
-              ) : displayClaims.length === 0 ? (
-                <div
-                  data-ocid="claim.empty_state"
-                  className="text-center py-20 text-muted-foreground"
-                >
-                  <RotateCcw className="h-12 w-12 mx-auto mb-4 opacity-20" />
-                  <p className="font-display text-xl font-semibold mb-1">
-                    No claims found
-                  </p>
-                  <p className="text-sm font-body">
-                    {searchQuery
-                      ? `No results for "${searchQuery}". Try a different search term.`
-                      : `No claims in ${selectedCategory} yet.`}
-                  </p>
-                  {!searchQuery && sessionId && (
-                    <Button
-                      onClick={() => setIsSubmitOpen(true)}
-                      variant="outline"
-                      className="mt-4 font-body border-border gap-2"
+                  ) : displayClaims.length === 0 ? (
+                    <div
+                      data-ocid="claim.empty_state"
+                      className="text-center py-20 text-muted-foreground"
                     >
-                      <Plus className="h-4 w-4" />
-                      Be first to submit a claim
-                    </Button>
+                      <RotateCcw className="h-12 w-12 mx-auto mb-4 opacity-20" />
+                      <p className="font-display text-xl font-semibold mb-1">
+                        No claims found
+                      </p>
+                      <p className="text-sm font-body">
+                        {searchQuery
+                          ? `No results for "${searchQuery}". Try a different search term.`
+                          : allClaims.length === 0 && selectedCategory === "All"
+                            ? "No claims yet. Be the first to submit one!"
+                            : `No claims in ${selectedCategory} yet.`}
+                      </p>
+                      {!searchQuery && sessionId && (
+                        <Button
+                          onClick={() => setIsSubmitOpen(true)}
+                          variant="outline"
+                          className="mt-4 font-body border-border gap-2"
+                        >
+                          <Plus className="h-4 w-4" />
+                          Be first to submit a claim
+                        </Button>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 gap-4">
+                      {visibleClaims.map((claim, index) => (
+                        <ClaimCard
+                          key={claim.id.toString()}
+                          claim={claim}
+                          index={index + 1}
+                          onClick={() => openClaim(claim.id)}
+                          sessionId={sessionId}
+                          slug={getClaimSlug(claim, allClaims)}
+                        />
+                      ))}
+
+                      {/* Infinite scroll sentinel */}
+                      {hasMore && (
+                        <div
+                          ref={sentinelRef}
+                          className="flex justify-center py-6"
+                        >
+                          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                        </div>
+                      )}
+                    </div>
                   )}
                 </div>
-              ) : (
-                <div className="grid grid-cols-1 gap-4">
-                  {displayClaims.map((claim, index) => (
-                    <ClaimCard
-                      key={claim.id.toString()}
-                      claim={claim}
-                      index={index + 1}
-                      onClick={() => openClaim(claim.id)}
-                      sessionId={sessionId}
-                      slug={getClaimSlug(claim, allClaims)}
-                    />
-                  ))}
-                </div>
-              )}
-            </motion.div>
-          )}
-        </AnimatePresence>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </Suspense>
       </main>
 
       {/* Footer */}
@@ -760,7 +917,7 @@ export default function App() {
               <button
                 type="button"
                 data-ocid="admin.open_modal_button"
-                onClick={() => setIsAdminOpen(true)}
+                onClick={openAdmin}
                 className="text-xs text-muted-foreground hover:text-foreground font-body transition-colors select-none"
                 aria-label="Admin"
               >
@@ -781,7 +938,6 @@ export default function App() {
       )}
 
       {/* Admin Panel */}
-      {isAdminOpen && <AdminPanel onClose={() => setIsAdminOpen(false)} />}
 
       {/* Username Setup / Change Dialog */}
       <Dialog
@@ -924,6 +1080,9 @@ export default function App() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Offline banner */}
+      <OfflineBanner />
     </div>
   );
 }
