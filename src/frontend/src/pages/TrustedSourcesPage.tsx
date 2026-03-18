@@ -188,14 +188,6 @@ function SourceCard({
               </span>
             )}
           </div>
-          <span
-            className={cn(
-              "inline-flex items-center px-2 py-0.5 rounded-sm text-[10px] font-body font-medium border",
-              getSourceTypeBadgeClasses(source.sourceType),
-            )}
-          >
-            {getSourceTypeLabel(source.sourceType)}
-          </span>
         </div>
       </div>
 

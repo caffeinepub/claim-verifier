@@ -103,6 +103,10 @@ import {
   useVerifiedAccount,
 } from "@/hooks/useVerifiedAccount";
 import { getClaimSlug } from "@/utils/slug";
+import {
+  computeFlatSourceBoost,
+  computeSourceCredibility,
+} from "@/utils/sourceCredibility";
 import { computeOverallVerdict } from "@/utils/verdict";
 import { CategoryBadge } from "./CategoryBadge";
 import { EvidenceTypeBadge } from "./EvidenceTypeBadge";
@@ -414,6 +418,40 @@ export function ClaimDetail({
         (item.urls ?? []).some((url) => url.toLowerCase().includes(q)),
     );
   }, [typeFilteredEvidence, evidenceSearch]);
+
+  // Source credibility boost computation
+  const allEvidenceWithScores = useMemo(() => {
+    return (evidence ?? []).map((e) => ({
+      urls: e.urls ?? [],
+      netScore: tallies[e.id.toString()] ?? 0,
+    }));
+  }, [evidence, tallies]);
+
+  const uniqueDomains = useMemo(() => {
+    const domains = new Set<string>();
+    for (const e of allEvidenceWithScores) {
+      for (const url of e.urls ?? []) {
+        try {
+          const hostname = new URL(url).hostname
+            .toLowerCase()
+            .replace(/^www\./, "");
+          if (hostname) domains.add(hostname);
+        } catch {}
+      }
+    }
+    return Array.from(domains);
+  }, [allEvidenceWithScores]);
+
+  const bestSourceBoost = useMemo(() => {
+    if (uniqueDomains.length === 0) return 0;
+    const boosts = uniqueDomains.map((domain) => {
+      const result = computeSourceCredibility(domain, allEvidenceWithScores);
+      const score = result.status === "scored" ? result.score : null;
+      return computeFlatSourceBoost(score);
+    });
+    return boosts.reduce((best, b) => (b > best ? b : best), boosts[0] ?? 0);
+  }, [uniqueDomains, allEvidenceWithScores]);
+
   const submitVote = useSubmitVote();
   const addRepEvent = useAddReputationEvent();
   const submitEvidence = useSubmitEvidence();
@@ -760,10 +798,14 @@ export function ClaimDetail({
                   verifiedVoteRecord?.voteType === "Unverified"
                     ? verifiedBonus
                     : 0;
+                const boostMultiplier = 1 + bestSourceBoost / 100;
                 const detailVerdict = computeOverallVerdict(
-                  Number(tally.trueCount) + verifiedTrueBonus,
-                  Number(tally.falseCount) + verifiedFalseBonus,
-                  Number(tally.unverifiedCount) + verifiedUnverifiedBonus,
+                  (Number(tally.trueCount) + verifiedTrueBonus) *
+                    boostMultiplier,
+                  (Number(tally.falseCount) + verifiedFalseBonus) *
+                    boostMultiplier,
+                  (Number(tally.unverifiedCount) + verifiedUnverifiedBonus) *
+                    boostMultiplier,
                   true,
                   Number(tally.trueDirect),
                   Number(tally.falseDirect),

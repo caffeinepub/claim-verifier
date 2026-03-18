@@ -1,58 +1,26 @@
 # Rebunked
 
 ## Current State
-
-- Verified accounts have a `displayName` stored in `useVerifiedAccount` hook that is separate from the session `username`
-- The `displayName` is set via a "Set your display name" dialog in App.tsx
-- The `displayName` can be updated repeatedly with no restrictions
-- Username uniqueness is not enforced
-- The `needsUsernameSetup` flag sometimes triggers the dialog on page refresh due to async state initialization timing
-- The `isSuggester` check in source detail uses display name string matching, causing mismatches
+Source credibility boost/penalty is calculated using `computeSourceAdjustment` in `sourceCredibility.ts`, which uses a `SOURCE_TYPE_CEILINGS` map with different max caps per category (peer-reviewed: 5%, government: 4%, major-news: 3%, etc.). The category is passed in from the source type field.
 
 ## Requested Changes (Diff)
 
 ### Add
-- Username uniqueness enforcement: all chosen usernames stored in localStorage registry; when setting/changing a username, check against registry
-- Username change cooldown: store `lastUsernameChangeTimestamp` per principal; block changes within 24 hours; show countdown message if blocked
-- "Change Username" option in avatar dropdown or profile settings
-- Available/taken feedback when typing a username in the setup/change dialog
-- Time remaining feedback when attempting to change within 24hrs
+- Flat 10% max boost/penalty ceiling for all sources regardless of type
+- New `computeSourceCredibilityBoost(credibilityScore)` function using evidence-performance credibility score (0-100) instead of vote ratio
 
 ### Modify
-- Rename all "display name" references to "username" throughout codebase (dialog titles, labels, hooks, state variables)
-- The username setup dialog: label it "Choose your username" instead of "Set your display name"
-- The username is shown everywhere the display name was shown (profile, comments, evidence, avatar dropdown, source suggestions)
-- `isSuggester` and similar checks should use principal ID as the canonical identity anchor, not display name string
-- Username setup dialog only shows once, not on every refresh (fix async initialization race)
+- `SOURCE_TYPE_CEILINGS` replaced with a single flat `FLAT_CEILING = 10`
+- Boost formula: `boost = (credibilityScore / 100) * 10` for scores >= 50
+- Penalty formula: `penalty = ((50 - credibilityScore) / 50) * 10` for scores < 50
+- Pending sources (insufficient data): 0 boost/penalty
+- All callers of `computeSourceAdjustment` updated to use new function
 
 ### Remove
-- The concept of "display name" as separate from username -- they are now the same thing
+- Category-based ceiling map (`SOURCE_TYPE_CEILINGS`)
+- `getSourceTypeCeiling` function (no longer needed)
 
 ## Implementation Plan
-
-1. Update `useVerifiedAccount` hook:
-   - Rename `displayName` -> `username` and `setDisplayName` -> `setUsername`
-   - Add `canChangeUsername` boolean (true if no change in last 24hrs)
-   - Add `timeUntilUsernameChange` string (e.g. "18h 32m")
-   - Store `lastUsernameChangeTimestamp` in localStorage keyed by principal
-   - On `setUsername`: check uniqueness registry in localStorage, check cooldown, update registry
-   - Fix async initialization: read username synchronously from localStorage on mount, not from async state
-
-2. Update username registry utility:
-   - `isUsernameTaken(username, excludePrincipal)` -- checks localStorage registry
-   - `registerUsername(username, principal)` -- adds to registry
-   - `releaseUsername(oldUsername, principal)` -- removes old entry when changing
-
-3. Update App.tsx:
-   - Rename `displayName` -> `username`, `setDisplayName` -> `setUsername`
-   - Update dialog title to "Choose your username"
-   - Add real-time availability check in the dialog input (debounced)
-   - Show "already taken" error or green checkmark inline
-   - Add change username option (reuses same dialog with cooldown enforcement)
-
-4. Update ProfilePage.tsx and all other components:
-   - Replace `displayName` with `username` everywhere
-   - Ensure `isSuggester` uses principal ID for checks, not username string
-
-5. Propagate renames across all components that receive/show display name:
-   - ClaimCard, ClaimDetail, EvidenceCard, SourceDetailPage, TrustedSourcesPage, etc.
+1. Update `sourceCredibility.ts` -- replace category-based ceiling with flat 10%, add new `computeFlatSourceBoost(credibilityScore: number | null): number` function
+2. Find and update all callers of the old boost functions in frontend components
+3. Remove the `source_type` / category tag display from source cards and source detail page

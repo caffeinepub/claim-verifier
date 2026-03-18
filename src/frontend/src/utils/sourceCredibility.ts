@@ -314,3 +314,27 @@ export function computeSourceCredibility(
     label,
   };
 }
+
+// ---------------------------------------------------------------------------
+// Flat 10% max boost system (replaces category-based ceilings)
+// ---------------------------------------------------------------------------
+
+/** Maximum source credibility boost or penalty, as a percentage. */
+export const FLAT_SOURCE_CEILING = 10;
+
+/**
+ * Compute flat source boost/penalty based on evidence-performance credibility score.
+ * Returns a signed percentage: positive = boost, negative = penalty.
+ * Score >= 50: boost  =  (score / 100) * 10
+ * Score <  50: penalty = -((50 - score) / 50) * 10  (never below -10)
+ * Null (insufficient data): 0
+ */
+export function computeFlatSourceBoost(
+  credibilityScore: number | null,
+): number {
+  if (credibilityScore === null) return 0;
+  if (credibilityScore >= 50) {
+    return (credibilityScore / 100) * FLAT_SOURCE_CEILING;
+  }
+  return -((50 - credibilityScore) / 50) * FLAT_SOURCE_CEILING;
+}
