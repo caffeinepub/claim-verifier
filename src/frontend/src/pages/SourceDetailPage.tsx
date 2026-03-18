@@ -173,19 +173,8 @@ function EvidencePerformanceSection({
 }) {
   return (
     <section>
-      <div className="flex items-center gap-2 mb-3">
-        <div className="w-1 h-5 bg-primary rounded-full" />
-        <h2 className="font-display text-lg font-bold text-foreground">
-          Evidence Performance
-        </h2>
-      </div>
       {credibility.status === "insufficient" ? (
-        <div className="p-4 bg-card border border-border rounded-sm space-y-3">
-          <p className="text-sm font-body text-muted-foreground">
-            Not enough data yet. This source needs at least{" "}
-            <span className="font-semibold text-foreground">5 citations</span>{" "}
-            in evidence before a credibility score can be calculated.
-          </p>
+        <>
           <div className="space-y-1">
             <div className="flex items-center justify-between text-xs font-body">
               <span className="text-muted-foreground">Citations so far</span>
@@ -200,7 +189,11 @@ function EvidencePerformanceSection({
               />
             </div>
           </div>
-        </div>
+          <p className="text-xs font-body text-muted-foreground italic mt-1.5">
+            Insufficient data — needs {5 - credibility.citations} more citation
+            {5 - credibility.citations !== 1 ? "s" : ""} for a score
+          </p>
+        </>
       ) : (
         <div className="p-4 bg-card border border-border rounded-sm space-y-4">
           {/* Score */}
@@ -1176,14 +1169,14 @@ export function SourceDetailPage({
             {/* ── Source Header ─────────────────────────────────── */}
             <div
               className={cn(
-                "p-5 bg-card border-l-4 border rounded-sm",
+                "pl-4 border-l-4",
                 credibility.status === "scored" &&
                   credibility.label === "High Credibility"
-                  ? "border-l-green-500 border-emerald-500/30 shadow-sm shadow-emerald-500/5"
+                  ? "border-l-green-500"
                   : credibility.status === "scored" &&
                       credibility.label === "Low Credibility"
-                    ? "border-l-red-500 border-red-400/30"
-                    : "border-l-amber-400 border-border",
+                    ? "border-l-red-500"
+                    : "border-l-amber-400",
               )}
             >
               {/* Row 1: Favicon + domain + status badge */}
@@ -1200,7 +1193,6 @@ export function SourceDetailPage({
                       {source.domain}
                       <ExternalLink className="h-4 w-4 opacity-50" />
                     </a>
-                    <CredibilityBadge credibility={credibility} />
                     {source.adminOverride && (
                       <span className="inline-flex items-center px-2 py-1 rounded text-xs font-body bg-violet-500/15 text-violet-600 border border-violet-500/30">
                         Admin Approved
@@ -1228,113 +1220,17 @@ export function SourceDetailPage({
                 </div>
               </div>
 
-              {/* Row 2: Stat row — credibility score + citation count */}
-              <div className="flex items-center gap-6 mb-4 pt-3 border-t border-border">
-                {credibility.status === "scored" ? (
-                  <>
-                    <div>
-                      <p className="text-xs font-body text-muted-foreground mb-0.5">
-                        Credibility Score
-                      </p>
-                      <p className="text-2xl font-bold font-mono text-foreground leading-none">
-                        {Math.round(credibility.score)}
-                        <span className="text-sm font-body text-muted-foreground font-normal">
-                          /100
-                        </span>
-                      </p>
-                    </div>
-                    <div className="w-px h-8 bg-border" />
-                    <div>
-                      <p className="text-xs font-body text-muted-foreground mb-0.5">
-                        Evidence Citations
-                      </p>
-                      <p className="text-2xl font-bold font-mono text-foreground leading-none">
-                        {credibility.totalCitations}
-                        <span className="text-sm font-body text-muted-foreground font-normal ml-1">
-                          citation{credibility.totalCitations !== 1 ? "s" : ""}
-                        </span>
-                      </p>
-                    </div>
-                    <div className="w-px h-8 bg-border" />
-                    <div>
-                      <p className="text-xs font-body text-muted-foreground mb-0.5">
-                        Pass Rate
-                      </p>
-                      <p className="text-2xl font-bold font-mono text-foreground leading-none">
-                        {Math.round(credibility.passRate)}
-                        <span className="text-sm font-body text-muted-foreground font-normal">
-                          %
-                        </span>
-                      </p>
-                    </div>
-                  </>
-                ) : (
-                  <p className="text-sm font-body text-muted-foreground italic">
-                    Insufficient data — needs {5 - credibility.citations} more
-                    citation
-                    {5 - credibility.citations !== 1 ? "s" : ""} for a score
-                  </p>
-                )}
-              </div>
-
-              {/* Full-width credibility bar */}
-              {credibility.status === "scored" && (
-                <div className="space-y-1">
-                  <div className="flex items-center justify-between">
-                    <p className="text-xs font-body font-semibold text-foreground">
-                      Source Credibility
-                    </p>
-                    <p className="text-xs font-body text-muted-foreground">
-                      {Math.round(credibility.score)}/100
-                    </p>
-                  </div>
-                  <div className="h-2.5 rounded-full bg-muted overflow-hidden">
-                    <div
-                      className={cn(
-                        "h-full rounded-full transition-all duration-700",
-                        credibility.label === "High Credibility"
-                          ? "bg-emerald-500"
-                          : credibility.label === "Mixed"
-                            ? "bg-amber-400"
-                            : "bg-red-400",
-                      )}
-                      style={{ width: `${Math.round(credibility.score)}%` }}
-                    />
-                  </div>
-                </div>
-              )}
-
-              {/* Admin override note */}
-              {source.adminOverrideNote?.trim() && (
-                <div className="flex items-start gap-2 mt-4 px-3 py-2 rounded-sm bg-violet-50 border border-violet-200 text-violet-700">
-                  <Shield className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" />
-                  <p className="text-xs font-body">
-                    <span className="font-semibold">Admin note:</span>{" "}
-                    {source.adminOverrideNote}
-                  </p>
-                </div>
-              )}
-            </div>
-
-            {/* ── About Blurb + Evidence Performance (combined container) ── */}
-            <section className="space-y-4">
-              {/* About blurb — directly beneath domain header */}
+              {/* About blurb — directly beneath domain/badge row */}
               {wikiLoading ? (
                 <Skeleton className="h-16 w-full rounded-sm" />
               ) : displayedBlurb ? (
-                <div>
-                  <div className="flex items-center justify-between gap-2 mb-2">
-                    <div className="flex items-center gap-2">
-                      <div className="w-1 h-5 bg-primary rounded-full" />
-                      <h2 className="font-display text-base font-semibold text-foreground">
-                        About
-                      </h2>
-                    </div>
+                <div className="mt-3">
+                  <div className="flex items-center justify-between gap-2 mb-1">
                     {canEditBlurb && !wikiBlurb && !editingBlurb && (
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="h-7 text-xs text-muted-foreground gap-1"
+                        className="h-7 text-xs text-muted-foreground gap-1 ml-auto"
                         onClick={startEditBlurb}
                         data-ocid="source_detail.edit_button"
                       >
@@ -1386,13 +1282,7 @@ export function SourceDetailPage({
                   )}
                 </div>
               ) : canEditBlurb ? (
-                <div>
-                  <div className="flex items-center gap-2 mb-2">
-                    <div className="w-1 h-5 bg-primary rounded-full" />
-                    <h2 className="font-display text-base font-semibold text-foreground">
-                      About
-                    </h2>
-                  </div>
+                <div className="mt-3">
                   {editingBlurb ? (
                     <div className="space-y-2">
                       <Textarea
@@ -1446,27 +1336,89 @@ export function SourceDetailPage({
               ) : null}
 
               {/* Evidence Performance — directly beneath About */}
-              <div>
-                <div className="flex items-center gap-2 mb-3">
-                  <div className="w-1 h-5 bg-primary rounded-full" />
-                  <h2 className="font-display text-base font-semibold text-foreground">
-                    Evidence Performance
-                  </h2>
-                </div>
+              <div className="mt-3">
                 <EvidencePerformanceSection credibility={credibility} />
               </div>
-            </section>
 
-            {/* ── Claims Citing This Source ─────────────────────── */}
-            <section>
-              <div className="flex items-center gap-2 mb-4">
-                <div className="w-1 h-5 bg-primary rounded-full" />
-                <h2 className="font-display text-base font-semibold text-foreground">
-                  Claims Citing This Source
-                </h2>
-              </div>
-              <ClaimsCitingSource domain={domain} onClaimClick={onClaimClick} />
-            </section>
+              {/* Row 2: Stat row — credibility score + citation count */}
+              {credibility.status === "scored" && (
+                <div className="flex items-center gap-6 mb-4 pt-3 border-t border-border">
+                  <div>
+                    <p className="text-xs font-body text-muted-foreground mb-0.5">
+                      Credibility Score
+                    </p>
+                    <p className="text-2xl font-bold font-mono text-foreground leading-none">
+                      {Math.round(credibility.score)}
+                      <span className="text-sm font-body text-muted-foreground font-normal">
+                        /100
+                      </span>
+                    </p>
+                  </div>
+                  <div className="w-px h-8 bg-border" />
+                  <div>
+                    <p className="text-xs font-body text-muted-foreground mb-0.5">
+                      Evidence Citations
+                    </p>
+                    <p className="text-2xl font-bold font-mono text-foreground leading-none">
+                      {credibility.totalCitations}
+                      <span className="text-sm font-body text-muted-foreground font-normal ml-1">
+                        citation{credibility.totalCitations !== 1 ? "s" : ""}
+                      </span>
+                    </p>
+                  </div>
+                  <div className="w-px h-8 bg-border" />
+                  <div>
+                    <p className="text-xs font-body text-muted-foreground mb-0.5">
+                      Pass Rate
+                    </p>
+                    <p className="text-2xl font-bold font-mono text-foreground leading-none">
+                      {Math.round(credibility.passRate)}
+                      <span className="text-sm font-body text-muted-foreground font-normal">
+                        %
+                      </span>
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Full-width credibility bar */}
+              {credibility.status === "scored" && (
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-body font-semibold text-foreground">
+                      Source Credibility
+                    </p>
+                    <p className="text-xs font-body text-muted-foreground">
+                      {Math.round(credibility.score)}/100
+                    </p>
+                  </div>
+                  <div className="h-2.5 rounded-full bg-muted overflow-hidden">
+                    <div
+                      className={cn(
+                        "h-full rounded-full transition-all duration-700",
+                        credibility.label === "High Credibility"
+                          ? "bg-emerald-500"
+                          : credibility.label === "Mixed"
+                            ? "bg-amber-400"
+                            : "bg-red-400",
+                      )}
+                      style={{ width: `${Math.round(credibility.score)}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Admin override note */}
+              {source.adminOverrideNote?.trim() && (
+                <div className="flex items-start gap-2 mt-4 px-3 py-2 rounded-sm bg-violet-50 border border-violet-200 text-violet-700">
+                  <Shield className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" />
+                  <p className="text-xs font-body">
+                    <span className="font-semibold">Admin note:</span>{" "}
+                    {source.adminOverrideNote}
+                  </p>
+                </div>
+              )}
+            </div>
 
             {/* ── Evidence Quality Breakdown ────────────────────── */}
             <section>
@@ -1480,6 +1432,17 @@ export function SourceDetailPage({
                 </span>
               </div>
               <EvidenceQualitySection domain={domain} />
+            </section>
+
+            {/* ── Claims Citing This Source ─────────────────────── */}
+            <section>
+              <div className="flex items-center gap-2 mb-4">
+                <div className="w-1 h-5 bg-primary rounded-full" />
+                <h2 className="font-display text-base font-semibold text-foreground">
+                  Claims Citing This Source
+                </h2>
+              </div>
+              <ClaimsCitingSource domain={domain} onClaimClick={onClaimClick} />
             </section>
 
             {/* ── Discussion ────────────────────────────────────── */}
