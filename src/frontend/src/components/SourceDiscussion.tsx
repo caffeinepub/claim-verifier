@@ -55,7 +55,7 @@ import {
   X,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 // ── Attachment helpers ───────────────────────────────────────────────────────────────────
@@ -176,6 +176,7 @@ interface CommentFormProps {
   autoFocus?: boolean;
   ocidPrefix: string;
   placeholder?: string;
+  collapsible?: boolean;
 }
 
 function CommentForm({
@@ -188,6 +189,7 @@ function CommentForm({
   autoFocus = false,
   ocidPrefix,
   placeholder = "Write a comment\u2026",
+  collapsible = false,
 }: CommentFormProps) {
   const [text, setText] = useState("");
   const [imageUrls, setImageUrls] = useState<string[]>([]);
@@ -196,8 +198,17 @@ function CommentForm({
   const [urls, setUrls] = useState<string[]>([]);
   const [showLinks, setShowLinks] = useState(false);
   const [cooldownLeft, setCooldownLeft] = useState(0);
+  const [isExpanded, setIsExpanded] = useState(!collapsible || autoFocus);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const addComment = useAddSourceComment();
   const { checkAction } = useSessionGate();
+
+  // Auto-focus when expanding
+  useEffect(() => {
+    if (isExpanded && collapsible && textareaRef.current) {
+      textareaRef.current.focus();
+    }
+  }, [isExpanded, collapsible]);
 
   useEffect(() => {
     if (cooldownLeft <= 0) return;
@@ -219,6 +230,37 @@ function CommentForm({
     return `${m}:${s.toString().padStart(2, "0")}`;
   }
 
+  function handleTextChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
+    setText(e.target.value);
+    // Auto-grow
+    const el = e.target;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }
+
+  function handleFormBlur(e: React.FocusEvent<HTMLFormElement>) {
+    if (!collapsible) return;
+    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+      if (!text.trim() && imageUrls.length === 0) {
+        setIsExpanded(false);
+        setShowLinks(false);
+      }
+    }
+  }
+
+  function collapse() {
+    setText("");
+    setImageUrls([]);
+    setIsImageUploading(false);
+    setUploaderKey((k) => k + 1);
+    setUrls([]);
+    setShowLinks(false);
+    if (collapsible) setIsExpanded(false);
+    if (textareaRef.current) {
+      textareaRef.current.style.height = "auto";
+    }
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!text.trim() || cooldownLeft > 0) return;
@@ -231,12 +273,7 @@ function CommentForm({
         authorUsername,
         sessionId,
       });
-      setText("");
-      setImageUrls([]);
-      setIsImageUploading(false);
-      setUploaderKey((k) => k + 1);
-      setUrls([]);
-      setShowLinks(false);
+      collapse();
       onSuccess?.();
     } catch (err) {
       const msg = err instanceof Error ? err.message : "";
@@ -249,103 +286,133 @@ function CommentForm({
     }
   }
 
+  // Collapsed placeholder
+  if (collapsible && !isExpanded) {
+    return (
+      <button
+        type="button"
+        onClick={() => setIsExpanded(true)}
+        className="w-full text-left px-3 py-2 rounded-md border border-border bg-muted/30 text-sm text-muted-foreground font-body hover:border-primary/40 hover:bg-muted/40 transition-colors"
+      >
+        {placeholder}
+      </button>
+    );
+  }
+
   return (
-    <form onSubmit={handleSubmit} className="space-y-2">
+    <form onSubmit={handleSubmit} onBlur={handleFormBlur} className="space-y-2">
       <Textarea
+        ref={textareaRef}
         data-ocid={`${ocidPrefix}.textarea`}
         placeholder={placeholder}
         value={text}
-        onChange={(e) => setText(e.target.value)}
-        rows={2}
+        onChange={handleTextChange}
         maxLength={500}
-        autoFocus={autoFocus}
-        className="bg-card border-border font-body resize-none text-sm min-h-[4rem]"
+        autoFocus={autoFocus || (collapsible && isExpanded)}
+        className="bg-card border-border font-body resize-none text-sm min-h-[4rem] overflow-hidden"
+        style={{ height: "auto" }}
       />
-      {/* Image uploader */}
-      <ImageUploader
-        key={uploaderKey}
-        onUploaded={setImageUrls}
-        onUploadingChange={setIsImageUploading}
-        maxFiles={3}
-        ocidPrefix={`${ocidPrefix}.image`}
-      />
-      {isImageUploading && (
-        <p className="text-xs text-muted-foreground font-body flex items-center gap-1.5">
-          <Loader2 className="h-3 w-3 animate-spin" />
-          Uploading images, please wait...
-        </p>
-      )}
-      <div>
-        <button
-          type="button"
-          onClick={() => setShowLinks((v) => !v)}
-          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground font-body transition-colors"
-        >
-          <Link2 className="h-3 w-3" />
-          {showLinks ? "Hide links" : "Add links"}
-        </button>
-        {showLinks && (
-          <div className="mt-2">
-            <UrlInputList
-              urls={urls}
-              onChange={setUrls}
-              ocidPrefix={`${ocidPrefix}.url`}
-              placeholder="https://example.com/source"
-            />
-          </div>
-        )}
-      </div>
-      {cooldownLeft > 0 && (
-        <div className="flex items-center gap-2 text-xs text-amber-400 font-body bg-amber-400/10 border border-amber-400/20 rounded-sm px-2 py-1.5">
-          <Clock className="h-3 w-3 flex-shrink-0" />
-          <span>
-            Comment again in{" "}
-            <span className="font-mono font-bold">
-              {formatCountdown(cooldownLeft)}
-            </span>
-          </span>
-        </div>
-      )}
-      <div className="flex items-center justify-between">
-        <span className="text-xs text-muted-foreground font-body">
-          {text.length}/500
-        </span>
-        <div className="flex gap-2">
-          {onCancel && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              data-ocid={`${ocidPrefix}.cancel_button`}
-              onClick={onCancel}
-              className="h-7 px-2.5 font-body text-xs text-muted-foreground"
-            >
-              Cancel
-            </Button>
-          )}
-          <Button
-            type="submit"
-            size="sm"
-            data-ocid={`${ocidPrefix}.submit_button`}
-            disabled={
-              addComment.isPending ||
-              cooldownLeft > 0 ||
-              isImageUploading ||
-              !text.trim()
-            }
-            className="h-7 px-2.5 font-body text-xs bg-primary text-primary-foreground gap-1"
+      <AnimatePresence initial={false}>
+        {isExpanded && (
+          <motion.div
+            key="comment-controls"
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.15 }}
+            className="overflow-hidden space-y-2"
           >
-            {addComment.isPending ? (
-              <Loader2 className="h-3 w-3 animate-spin" />
-            ) : cooldownLeft > 0 ? (
-              <Clock className="h-3 w-3" />
-            ) : (
-              <Send className="h-3 w-3" />
+            {/* Image uploader */}
+            <ImageUploader
+              key={uploaderKey}
+              onUploaded={setImageUrls}
+              onUploadingChange={setIsImageUploading}
+              maxFiles={3}
+              ocidPrefix={`${ocidPrefix}.image`}
+            />
+            {isImageUploading && (
+              <p className="text-xs text-muted-foreground font-body flex items-center gap-1.5">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                Uploading images, please wait...
+              </p>
             )}
-            {cooldownLeft > 0 ? "On Cooldown" : "Post"}
-          </Button>
-        </div>
-      </div>
+            <div>
+              <button
+                type="button"
+                onClick={() => setShowLinks((v) => !v)}
+                className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground font-body transition-colors"
+              >
+                <Link2 className="h-3 w-3" />
+                {showLinks ? "Hide links" : "Add links"}
+              </button>
+              {showLinks && (
+                <div className="mt-2">
+                  <UrlInputList
+                    urls={urls}
+                    onChange={setUrls}
+                    ocidPrefix={`${ocidPrefix}.url`}
+                    placeholder="https://example.com/source"
+                  />
+                </div>
+              )}
+            </div>
+            {cooldownLeft > 0 && (
+              <div className="flex items-center gap-2 text-xs text-amber-400 font-body bg-amber-400/10 border border-amber-400/20 rounded-sm px-2 py-1.5">
+                <Clock className="h-3 w-3 flex-shrink-0" />
+                <span>
+                  Comment again in{" "}
+                  <span className="font-mono font-bold">
+                    {formatCountdown(cooldownLeft)}
+                  </span>
+                </span>
+              </div>
+            )}
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-muted-foreground font-body">
+                {text.length}/500
+              </span>
+              <div className="flex gap-2">
+                {(onCancel || collapsible) && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    data-ocid={`${ocidPrefix}.cancel_button`}
+                    onClick={() => {
+                      collapse();
+                      onCancel?.();
+                    }}
+                    className="h-7 px-2.5 font-body text-xs text-muted-foreground"
+                  >
+                    Cancel
+                  </Button>
+                )}
+                <Button
+                  type="submit"
+                  size="sm"
+                  data-ocid={`${ocidPrefix}.submit_button`}
+                  disabled={
+                    addComment.isPending ||
+                    cooldownLeft > 0 ||
+                    isImageUploading ||
+                    !text.trim()
+                  }
+                  className="h-7 px-2.5 font-body text-xs bg-primary text-primary-foreground gap-1"
+                >
+                  {addComment.isPending ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : cooldownLeft > 0 ? (
+                    <Clock className="h-3 w-3" />
+                  ) : (
+                    <Send className="h-3 w-3" />
+                  )}
+                  {cooldownLeft > 0 ? "On Cooldown" : "Post"}
+                </Button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </form>
   );
 }
@@ -839,7 +906,7 @@ export function SourceDiscussion({
 
   return (
     <div data-ocid="source_discussion.panel">
-      {/* Top-level comment form */}
+      {/* Collapsible top-level comment form */}
       <div className="mb-6">
         <CommentForm
           sourceId={sourceId}
@@ -848,6 +915,7 @@ export function SourceDiscussion({
           authorUsername={verifiedUsername ?? username}
           ocidPrefix="source_discussion.toplevel"
           placeholder="Share your analysis of this source\u2026"
+          collapsible
         />
       </div>
 
