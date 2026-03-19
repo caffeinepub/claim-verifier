@@ -1,6 +1,5 @@
 import type { Evidence } from "@/backend.d";
 import { Input } from "@/components/ui/input";
-import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Tooltip,
@@ -13,6 +12,7 @@ import {
   useAllEvidenceForAllClaims,
   useAllEvidenceTallies,
   useTrustedSources,
+  useWikipediaBlurb,
 } from "@/hooks/useQueries";
 import { cn } from "@/lib/utils";
 import { computeSourceCredibility } from "@/utils/sourceCredibility";
@@ -148,6 +148,11 @@ function SourceCard({
         ? "bg-red-400"
         : "bg-amber-400";
 
+  const { data: wikiBlurb } = useWikipediaBlurb(
+    source.aboutBlurb?.trim() ? null : source.domain,
+  );
+  const aboutText = source.aboutBlurb?.trim() || wikiBlurb || null;
+
   return (
     <motion.div
       data-ocid={`source.item.${index}`}
@@ -168,7 +173,7 @@ function SourceCard({
       )}
     >
       {/* Top area: logo + domain */}
-      <div className="flex items-start gap-3 mb-3">
+      <div className="flex items-start gap-3 mb-2">
         <SourceLogo domain={source.domain} size="sm" />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap mb-1">
@@ -188,66 +193,68 @@ function SourceCard({
               </span>
             )}
           </div>
+          {/* About blurb directly beneath domain */}
+          {aboutText ? (
+            <p className="text-xs font-body text-muted-foreground line-clamp-2 leading-relaxed">
+              {aboutText}
+            </p>
+          ) : (
+            <p className="text-xs font-body text-muted-foreground italic">
+              No description available
+            </p>
+          )}
         </div>
       </div>
 
-      <Separator className="mb-3" />
-
       {/* Stats area */}
-      {credibility.status === "insufficient" ? (
-        <div>
-          <p className="text-sm font-body text-muted-foreground italic">
-            Insufficient data — needs {5 - credibility.citations} more citation
-            {5 - credibility.citations !== 1 ? "s" : ""}
-          </p>
-          <div className="mt-2 h-1.5 rounded-full bg-muted overflow-hidden">
-            <div
-              className="h-full bg-amber-400 rounded-full transition-all duration-500"
-              style={{ width: `${(credibility.citations / 5) * 100}%` }}
-            />
+      <div className="mt-3">
+        {credibility.status === "insufficient" ? (
+          <div>
+            <div className="flex items-center justify-between text-[10px] font-body text-muted-foreground mb-1">
+              <span>Citations toward score</span>
+              <span className="font-mono">{credibility.citations} / 5</span>
+            </div>
+            <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+              <div
+                className="h-full bg-amber-400 rounded-full transition-all duration-500"
+                style={{ width: `${(credibility.citations / 5) * 100}%` }}
+              />
+            </div>
           </div>
-          <p className="text-[10px] font-body text-muted-foreground mt-1">
-            {credibility.citations} / 5 citations
-          </p>
-        </div>
-      ) : (
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs font-body text-muted-foreground">
+        ) : (
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-body text-muted-foreground">
                 Credibility
-              </p>
-              <p className="text-lg font-bold font-mono text-foreground leading-tight">
-                {Math.round(credibility.score)}
-                <span className="text-xs font-body text-muted-foreground font-normal">
+              </span>
+              <div className="flex items-center gap-1.5">
+                <span className="text-sm font-bold font-mono text-foreground">
+                  {Math.round(credibility.score)}
+                </span>
+                <span className="text-[10px] font-body text-muted-foreground">
                   /100
                 </span>
-              </p>
+                <span className="text-[10px] font-body text-muted-foreground">
+                  ·
+                </span>
+                <span className="text-[10px] font-body text-muted-foreground">
+                  {credibility.totalCitations} citation
+                  {credibility.totalCitations !== 1 ? "s" : ""}
+                </span>
+              </div>
             </div>
-            <div className="text-right">
-              <p className="text-xs font-body text-muted-foreground">
-                Citations
-              </p>
-              <p className="text-lg font-bold font-mono text-foreground leading-tight">
-                {credibility.totalCitations}
-              </p>
+            <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+              <div
+                className={cn(
+                  "h-full rounded-full transition-all duration-700",
+                  scoreColor,
+                )}
+                style={{ width: `${Math.round(credibility.score)}%` }}
+              />
             </div>
           </div>
-          <div className="h-1.5 rounded-full bg-muted overflow-hidden">
-            <div
-              className={cn(
-                "h-full rounded-full transition-all duration-700",
-                scoreColor,
-              )}
-              style={{ width: `${Math.round(credibility.score)}%` }}
-            />
-          </div>
-          <p className="text-[10px] font-body text-muted-foreground">
-            Cited in {credibility.totalCitations} piece
-            {credibility.totalCitations !== 1 ? "s" : ""} of evidence
-          </p>
-        </div>
-      )}
+        )}
+      </div>
     </motion.div>
   );
 }
@@ -262,6 +269,7 @@ export function TrustedSourcesPage({
 }) {
   const { data: sources, isLoading, error } = useTrustedSources();
   const [searchQuery, setSearchQuery] = useState("");
+  const [credTooltipOpen, setCredTooltipOpen] = useState(false);
 
   // Load all evidence for credibility computation
   const allEvidence = useAllEvidenceForAllClaims();
@@ -308,21 +316,36 @@ export function TrustedSourcesPage({
         <p className="text-sm text-muted-foreground font-body ml-3">
           Sources are automatically indexed when cited in claims or evidence.
           Credibility scores are calculated from how well evidence citing each
-          source performs in the community.
-        </p>
-      </div>
-
-      {/* Explainer card */}
-      <div className="flex items-start gap-3 p-3 mb-6 bg-secondary border border-border rounded-sm">
-        <Info className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
-        <p className="text-xs font-body text-muted-foreground leading-relaxed">
-          <span className="font-semibold text-foreground">
-            How credibility is calculated:
-          </span>{" "}
-          Only evidence with a community net score of +3 or higher counts toward
-          a source&apos;s credibility. Scores are normalized so that average
-          quality and pass rate are weighted equally. A source needs at least 5
-          citations before receiving a score.
+          source performs in the community.{" "}
+          <TooltipProvider delayDuration={100}>
+            <Tooltip open={credTooltipOpen} onOpenChange={setCredTooltipOpen}>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  className="inline-flex items-center justify-center text-muted-foreground/50 hover:text-muted-foreground transition-colors focus-visible:outline-none align-middle"
+                  onClick={() => setCredTooltipOpen((v) => !v)}
+                >
+                  <Info className="h-3.5 w-3.5" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent
+                side="top"
+                align="start"
+                className="max-w-[200px] p-3 bg-white text-foreground border border-border shadow-md"
+              >
+                <p className="text-[11px] font-semibold text-foreground mb-2">
+                  How credibility is calculated
+                </p>
+                <p className="text-[11px] text-muted-foreground leading-relaxed">
+                  Only evidence with a community net score of +3 or higher
+                  counts toward a source&apos;s credibility. Scores are
+                  normalized so that average quality and pass rate are weighted
+                  equally. A source needs at least 5 citations before receiving
+                  a score.
+                </p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         </p>
       </div>
 
@@ -355,11 +378,10 @@ export function TrustedSourcesPage({
                 <Skeleton className="w-10 h-10 rounded-lg" />
                 <div className="flex-1 space-y-2">
                   <Skeleton className="h-5 w-1/2" />
-                  <Skeleton className="h-4 w-1/3" />
+                  <Skeleton className="h-4 w-3/4" />
+                  <Skeleton className="h-4 w-1/2" />
                 </div>
               </div>
-              <Skeleton className="h-px w-full" />
-              <Skeleton className="h-4 w-full" />
               <Skeleton className="h-2 w-full rounded-full" />
             </div>
           ))}

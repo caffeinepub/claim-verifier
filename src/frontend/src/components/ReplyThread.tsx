@@ -1,4 +1,8 @@
+import { EditHistoryModal } from "@/components/EditHistoryModal";
+import { ImageUploader } from "@/components/ImageUploader";
+import { Lightbox } from "@/components/Lightbox";
 import { ReportDialog } from "@/components/ReportDialog";
+import { UrlInputList } from "@/components/UrlInputList";
 import { UserAvatar } from "@/components/UserAvatar";
 import {
   UserProfileCard,
@@ -14,6 +18,11 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Textarea } from "@/components/ui/textarea";
 import { useAccountPermissions } from "@/hooks/useAccountPermissions";
+import {
+  canEditContent,
+  getEditRecord,
+  saveEditRecord,
+} from "@/hooks/useEditSystem";
 import {
   type Reply,
   useAddReply,
@@ -36,15 +45,19 @@ import {
 import { cn } from "@/lib/utils";
 import { formatRelativeTime } from "@/utils/time";
 import {
+  Check,
   ChevronDown,
   ChevronUp,
   Clock,
   CornerDownRight,
+  ExternalLink,
   Flag,
+  Link2,
   Loader2,
   LogIn,
   MessageSquare,
   MoreHorizontal,
+  Pencil,
   Send,
   Share2,
   X,
@@ -52,6 +65,112 @@ import {
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+
+// ── Attachment helpers ────────────────────────────────────────────────────────────
+
+const ATTACHMENT_SEP = "\u0000";
+
+function encodeAttachments(
+  text: string,
+  imageUrls: string[],
+  urls: string[],
+): string {
+  const filteredUrls = urls.filter(Boolean);
+  if (imageUrls.length === 0 && filteredUrls.length === 0) return text;
+  return (
+    text + ATTACHMENT_SEP + JSON.stringify({ imageUrls, urls: filteredUrls })
+  );
+}
+
+function decodeAttachments(raw: string): {
+  text: string;
+  imageUrls: string[];
+  urls: string[];
+} {
+  const idx = raw.indexOf(ATTACHMENT_SEP);
+  if (idx === -1) return { text: raw, imageUrls: [], urls: [] };
+  try {
+    const parsed = JSON.parse(raw.slice(idx + 1));
+    return {
+      text: raw.slice(0, idx),
+      imageUrls: parsed.imageUrls ?? [],
+      urls: parsed.urls ?? [],
+    };
+  } catch {
+    return { text: raw, imageUrls: [], urls: [] };
+  }
+}
+
+// ── URL Chips ────────────────────────────────────────────────────────────────────
+
+function UrlChips({ urls }: { urls: string[] }) {
+  const valid = urls.filter((u) => u.trim());
+  if (!valid.length) return null;
+  return (
+    <div className="flex flex-wrap gap-2 mt-2">
+      {valid.map((url, i) => (
+        <a
+          // biome-ignore lint/suspicious/noArrayIndexKey: stable ordered list
+          key={i}
+          href={url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-sm bg-secondary border border-border text-xs font-body text-muted-foreground hover:text-primary hover:border-primary/40 transition-colors max-w-[200px]"
+        >
+          <Link2 className="h-3 w-3 flex-shrink-0" />
+          <span className="truncate">{url.replace(/^https?:\/\//, "")}</span>
+          <ExternalLink className="h-2.5 w-2.5 flex-shrink-0 opacity-60" />
+        </a>
+      ))}
+    </div>
+  );
+}
+
+// ── Reply Image Grid with Lightbox ───────────────────────────────────────────────
+
+function ReplyImageGrid({ imageUrls }: { imageUrls: string[] }) {
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [lightboxIndex, setLightboxIndex] = useState(0);
+
+  if (!imageUrls.length) return null;
+
+  function openLightbox(index: number) {
+    setLightboxIndex(index);
+    setLightboxOpen(true);
+  }
+
+  return (
+    <>
+      <div className="flex flex-wrap gap-1.5 mb-2">
+        {imageUrls.map((url, i) => (
+          <button
+            // biome-ignore lint/suspicious/noArrayIndexKey: stable ordered list
+            key={i}
+            type="button"
+            data-ocid="image.open_modal_button"
+            onClick={() => openLightbox(i)}
+            className="block rounded-sm overflow-hidden border border-border hover:border-primary/40 transition-colors flex-shrink-0 cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 h-24"
+            aria-label={`View attachment ${i + 1} fullscreen`}
+          >
+            <img
+              src={url}
+              alt={`Attachment ${i + 1}`}
+              className="object-cover h-full w-auto max-w-[200px]"
+              loading="lazy"
+              draggable={false}
+            />
+          </button>
+        ))}
+      </div>
+      <Lightbox
+        imageUrls={imageUrls}
+        initialIndex={lightboxIndex}
+        isOpen={lightboxOpen}
+        onClose={() => setLightboxOpen(false)}
+      />
+    </>
+  );
+}
 
 // ── Reply Form ────────────────────────────────────────────────────────────────────
 
@@ -77,6 +196,11 @@ function ReplyForm({
   ocidPrefix,
 }: ReplyFormProps) {
   const [text, setText] = useState("");
+  const [imageUrls, setImageUrls] = useState<string[]>([]);
+  const [isImageUploading, setIsImageUploading] = useState(false);
+  const [uploaderKey, setUploaderKey] = useState(0);
+  const [urls, setUrls] = useState<string[]>([]);
+  const [showLinks, setShowLinks] = useState(false);
   const [cooldownLeft, setCooldownLeft] = useState(0);
   const addReply = useAddReply();
   const { checkAction } = useSessionGate();
@@ -108,14 +232,20 @@ function ReplyForm({
     if (!text.trim() || cooldownLeft > 0) return;
     if (!checkAction()) return;
     try {
+      const encodedText = encodeAttachments(text.trim(), imageUrls, urls);
       await addReply.mutateAsync({
         evidenceId,
         parentReplyId,
-        text: text.trim(),
+        text: encodedText,
         authorUsername,
         sessionId,
       });
       setText("");
+      setImageUrls([]);
+      setIsImageUploading(false);
+      setUploaderKey((k) => k + 1);
+      setUrls([]);
+      setShowLinks(false);
       const pid = getActivePrincipalId();
       if (pid) {
         const ts = new Date().toISOString();
@@ -161,6 +291,40 @@ function ReplyForm({
         autoFocus={autoFocus}
         className="bg-card border-border font-body resize-none text-sm min-h-[4rem]"
       />
+      {/* Image uploader */}
+      <ImageUploader
+        key={uploaderKey}
+        onUploaded={setImageUrls}
+        onUploadingChange={setIsImageUploading}
+        maxFiles={3}
+        ocidPrefix={`${ocidPrefix}.image`}
+      />
+      {isImageUploading && (
+        <p className="text-xs text-muted-foreground font-body flex items-center gap-1.5">
+          <Loader2 className="h-3 w-3 animate-spin" />
+          Uploading images, please wait...
+        </p>
+      )}
+      <div>
+        <button
+          type="button"
+          onClick={() => setShowLinks((v) => !v)}
+          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground font-body transition-colors"
+        >
+          <Link2 className="h-3 w-3" />
+          {showLinks ? "Hide links" : "Add links"}
+        </button>
+        {showLinks && (
+          <div className="mt-2">
+            <UrlInputList
+              urls={urls}
+              onChange={setUrls}
+              ocidPrefix={`${ocidPrefix}.url`}
+              placeholder="https://example.com/source"
+            />
+          </div>
+        )}
+      </div>
       {cooldownLeft > 0 && (
         <div className="flex items-center gap-2 text-xs text-amber-400 font-body bg-amber-400/10 border border-amber-400/20 rounded-sm px-2 py-1.5">
           <Clock className="h-3 w-3 flex-shrink-0" />
@@ -193,7 +357,12 @@ function ReplyForm({
             type="submit"
             size="sm"
             data-ocid={`${ocidPrefix}.submit_button`}
-            disabled={addReply.isPending || cooldownLeft > 0 || !text.trim()}
+            disabled={
+              addReply.isPending ||
+              cooldownLeft > 0 ||
+              isImageUploading ||
+              !text.trim()
+            }
             className="h-7 px-2.5 font-body text-xs bg-primary text-primary-foreground gap-1"
           >
             {addReply.isPending ? (
@@ -229,6 +398,7 @@ interface ReplyCardProps {
   children?: React.ReactNode;
   evidenceIndex: number;
   likeCounts: Record<string, number>;
+  principalId: string | null;
 }
 
 function ReplyCard({
@@ -247,7 +417,14 @@ function ReplyCard({
   children,
   evidenceIndex,
   likeCounts,
+  principalId,
 }: ReplyCardProps) {
+  const {
+    text: displayText,
+    imageUrls: attachedImages,
+    urls: attachedUrls,
+  } = decodeAttachments(reply.text);
+
   const isOwnReply = reply.sessionId === sessionId;
   const displayAuthor = isOwnReply
     ? (verifiedUsername ?? username)
@@ -260,6 +437,24 @@ function ReplyCard({
     : authorProfile?.avatarUrl || undefined;
   const isReplying = replyingToId === reply.id;
   const [reportDialogOpen, setReportDialogOpen] = useState(false);
+  const [isEditingReply, setIsEditingReply] = useState(false);
+  const [replyEditText, setReplyEditText] = useState("");
+  const [replyEditHistoryOpen, setReplyEditHistoryOpen] = useState(false);
+
+  // Derive edit record (read on each render since principalId may be null initially)
+  const replyEditRecord = principalId
+    ? getEditRecord("reply", reply.id.toString(), principalId)
+    : null;
+
+  const showReplyEdit =
+    !!principalId &&
+    canEditContent(
+      "reply",
+      reply.timestamp,
+      reply.sessionId,
+      sessionId,
+      principalId,
+    );
 
   const likeReply = useLikeReply();
   const { checkAction: checkReplyAction } = useSessionGate();
@@ -327,12 +522,101 @@ function ReplyCard({
         </div>
 
         {/* Reply text */}
-        <p className="text-sm text-foreground font-body leading-relaxed mb-2">
-          {reply.text}
-        </p>
+        {isEditingReply ? (
+          <div className="mb-2 space-y-1">
+            <Textarea
+              value={replyEditText}
+              onChange={(e) => setReplyEditText(e.target.value)}
+              rows={3}
+              maxLength={1000}
+              className="bg-card border-border font-body resize-none text-sm"
+              autoFocus
+            />
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  if (!replyEditText.trim() || !principalId) return;
+                  saveEditRecord(
+                    "reply",
+                    reply.id.toString(),
+                    principalId,
+                    replyEditText.trim(),
+                    replyEditRecord?.currentText ?? displayText,
+                    0,
+                  );
+                  setIsEditingReply(false);
+                  toast.success("Reply updated");
+                }}
+                className="flex items-center gap-1 h-6 px-2 text-xs font-body bg-primary text-primary-foreground rounded-sm hover:bg-primary/90 transition-colors"
+              >
+                <Check className="h-3 w-3" />
+                Save
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setReplyEditText("");
+                  setIsEditingReply(false);
+                }}
+                className="flex items-center gap-1 h-6 px-2 text-xs font-body text-muted-foreground hover:text-foreground rounded-sm hover:bg-secondary transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="mb-2 group/replytext">
+            <p className="text-sm text-foreground font-body leading-relaxed inline">
+              {replyEditRecord?.currentText ?? displayText}
+            </p>
+            {replyEditRecord && (
+              <button
+                type="button"
+                onClick={() => setReplyEditHistoryOpen(true)}
+                className="ml-1 text-xs text-muted-foreground italic font-body hover:text-foreground transition-colors"
+              >
+                (edited)
+              </button>
+            )}
+            {showReplyEdit && (
+              <button
+                type="button"
+                onClick={() => {
+                  setReplyEditText(replyEditRecord?.currentText ?? displayText);
+                  setIsEditingReply(true);
+                }}
+                className="ml-1.5 inline-flex items-center gap-0.5 text-xs text-muted-foreground hover:text-foreground opacity-0 group-hover/replytext:opacity-100 transition-opacity"
+                aria-label="Edit reply"
+              >
+                <Pencil className="h-2.5 w-2.5" />
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Decoded attachments — images with lightbox */}
+        {attachedImages.length > 0 && (
+          <ReplyImageGrid imageUrls={attachedImages} />
+        )}
+
+        {/* Decoded attachments — links */}
+        {attachedUrls.filter(Boolean).length > 0 && (
+          <UrlChips urls={attachedUrls} />
+        )}
+
+        {replyEditRecord && (
+          <EditHistoryModal
+            open={replyEditHistoryOpen}
+            onClose={() => setReplyEditHistoryOpen(false)}
+            history={replyEditRecord.editHistory}
+            currentText={replyEditRecord.currentText}
+            currentEditedAt={replyEditRecord.lastEditedAt}
+          />
+        )}
 
         {/* Actions row: [Reply] [ChevronUp] ... [⋯] */}
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 mt-2">
           {/* Reply button — depth < 4 allows up to 5-level nesting */}
           {depth < 4 && (
             <button
@@ -500,7 +784,11 @@ export function ReplyThread({
   const [replyingToId, setReplyingToId] = useState<bigint | null>(null);
   const [reportedIds, setReportedIds] = useState<Set<string>>(new Set());
   const username = useUsername();
-  const { username: verifiedUsername, avatarUrl } = useVerifiedAccount();
+  const {
+    username: verifiedUsername,
+    avatarUrl,
+    principal: verifiedPrincipal,
+  } = useVerifiedAccount();
   const reportReply = useReportReply();
   const { checkAction: checkThreadAction } = useSessionGate();
 
@@ -593,6 +881,7 @@ export function ReplyThread({
         onToggleReply={handleToggleReply}
         evidenceIndex={evidenceIndex}
         likeCounts={likeCounts}
+        principalId={verifiedPrincipal?.toString() ?? null}
       >
         {nested.length > 0 && depth < 4 && (
           <div className="space-y-0">

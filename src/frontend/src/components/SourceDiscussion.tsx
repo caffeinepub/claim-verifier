@@ -1,4 +1,6 @@
+import { EditHistoryModal } from "@/components/EditHistoryModal";
 import { ImageUploader } from "@/components/ImageUploader";
+import { Lightbox } from "@/components/Lightbox";
 import { UrlInputList } from "@/components/UrlInputList";
 import { UserAvatar } from "@/components/UserAvatar";
 import {
@@ -16,6 +18,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { useAccountPermissions } from "@/hooks/useAccountPermissions";
 import {
+  canEditContent,
+  getEditRecord,
+  saveEditRecord,
+} from "@/hooks/useEditSystem";
+import {
   type SourceComment,
   useAddSourceComment,
   useLikeSourceComment,
@@ -31,15 +38,18 @@ import { useVerifiedAccount } from "@/hooks/useVerifiedAccount";
 import { cn } from "@/lib/utils";
 import { formatRelativeTime } from "@/utils/time";
 import {
+  Check,
   ChevronUp,
   Clock,
   CornerDownRight,
+  ExternalLink,
   Flag,
   Link2,
   Loader2,
   LogIn,
   MessageSquare,
   MoreHorizontal,
+  Pencil,
   Send,
   Share2,
   X,
@@ -81,6 +91,77 @@ function decodeAttachments(raw: string): {
   } catch {
     return { text: raw, imageUrls: [], urls: [] };
   }
+}
+
+// ── URL Chips ────────────────────────────────────────────────────────────────────────────
+
+function UrlChips({ urls }: { urls: string[] }) {
+  const valid = urls.filter((u) => u.trim());
+  if (!valid.length) return null;
+  return (
+    <div className="flex flex-wrap gap-2 mt-2">
+      {valid.map((url, i) => (
+        <a
+          // biome-ignore lint/suspicious/noArrayIndexKey: stable ordered list
+          key={i}
+          href={url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-sm bg-secondary border border-border text-xs font-body text-muted-foreground hover:text-primary hover:border-primary/40 transition-colors max-w-[200px]"
+        >
+          <Link2 className="h-3 w-3 flex-shrink-0" />
+          <span className="truncate">{url.replace(/^https?:\/\//, "")}</span>
+          <ExternalLink className="h-2.5 w-2.5 flex-shrink-0 opacity-60" />
+        </a>
+      ))}
+    </div>
+  );
+}
+
+// ── Image Grid with Lightbox ──────────────────────────────────────────────────────────────
+
+function CommentImageGrid({ imageUrls }: { imageUrls: string[] }) {
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [lightboxIndex, setLightboxIndex] = useState(0);
+
+  if (!imageUrls.length) return null;
+
+  function openLightbox(index: number) {
+    setLightboxIndex(index);
+    setLightboxOpen(true);
+  }
+
+  return (
+    <>
+      <div className="flex flex-wrap gap-1.5 mb-2">
+        {imageUrls.map((url, i) => (
+          <button
+            // biome-ignore lint/suspicious/noArrayIndexKey: stable ordered list
+            key={i}
+            type="button"
+            data-ocid="image.open_modal_button"
+            onClick={() => openLightbox(i)}
+            className="block rounded-sm overflow-hidden border border-border hover:border-primary/40 transition-colors flex-shrink-0 cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 h-24"
+            aria-label={`View attachment ${i + 1} fullscreen`}
+          >
+            <img
+              src={url}
+              alt={`Attachment ${i + 1}`}
+              className="object-cover h-full w-auto max-w-[200px]"
+              loading="lazy"
+              draggable={false}
+            />
+          </button>
+        ))}
+      </div>
+      <Lightbox
+        imageUrls={imageUrls}
+        initialIndex={lightboxIndex}
+        isOpen={lightboxOpen}
+        onClose={() => setLightboxOpen(false)}
+      />
+    </>
+  );
 }
 
 // ── Comment Form ──────────────────────────────────────────────────────────────────
@@ -286,6 +367,7 @@ interface CommentCardProps {
   onToggleReply: (commentId: bigint | null) => void;
   children?: React.ReactNode;
   likeCounts: Record<string, number>;
+  principalId: string | null;
 }
 
 function CommentCard({
@@ -303,6 +385,7 @@ function CommentCard({
   onToggleReply,
   children,
   likeCounts,
+  principalId,
 }: CommentCardProps) {
   const {
     text: displayText,
@@ -321,6 +404,22 @@ function CommentCard({
     ? avatarUrl
     : authorProfile?.avatarUrl || undefined;
   const isReplying = replyingToId === comment.id;
+  const [isEditingComment, setIsEditingComment] = useState(false);
+  const [commentEditText, setCommentEditText] = useState("");
+  const [commentEditHistoryOpen, setCommentEditHistoryOpen] = useState(false);
+
+  const commentEditRecord = principalId
+    ? getEditRecord("comment", comment.id.toString(), principalId)
+    : null;
+  const showCommentEdit =
+    !!principalId &&
+    canEditContent(
+      "comment",
+      comment.timestamp,
+      comment.sessionId,
+      sessionId,
+      principalId,
+    );
 
   const likeComment = useLikeSourceComment();
   const { checkAction } = useSessionGate();
@@ -393,44 +492,103 @@ function CommentCard({
         </div>
 
         {/* Comment text */}
-        <p className="text-sm text-foreground font-body leading-relaxed mb-2">
-          {displayText}
-        </p>
-
-        {/* Decoded attachments — images */}
-        {attachedImages.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 mb-2">
-            {attachedImages.map((url) => (
-              <img
-                key={url}
-                src={url}
-                alt="Attachment"
-                className="h-24 max-w-[200px] object-cover rounded border border-border"
-              />
-            ))}
+        {isEditingComment ? (
+          <div className="mb-2 space-y-1">
+            <Textarea
+              value={commentEditText}
+              onChange={(e) => setCommentEditText(e.target.value)}
+              rows={3}
+              maxLength={1000}
+              className="bg-card border-border font-body resize-none text-sm"
+              autoFocus
+            />
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  if (!commentEditText.trim() || !principalId) return;
+                  saveEditRecord(
+                    "comment",
+                    comment.id.toString(),
+                    principalId,
+                    commentEditText.trim(),
+                    commentEditRecord?.currentText ?? displayText,
+                    0,
+                  );
+                  setIsEditingComment(false);
+                  toast.success("Comment updated");
+                }}
+                className="flex items-center gap-1 h-6 px-2 text-xs font-body bg-primary text-primary-foreground rounded-sm hover:bg-primary/90 transition-colors"
+              >
+                <Check className="h-3 w-3" />
+                Save
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setCommentEditText("");
+                  setIsEditingComment(false);
+                }}
+                className="flex items-center gap-1 h-6 px-2 text-xs font-body text-muted-foreground hover:text-foreground rounded-sm hover:bg-secondary transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
           </div>
+        ) : (
+          <div className="mb-2 group/commenttext">
+            <p className="text-sm text-foreground font-body leading-relaxed inline">
+              {commentEditRecord?.currentText ?? displayText}
+            </p>
+            {commentEditRecord && (
+              <button
+                type="button"
+                onClick={() => setCommentEditHistoryOpen(true)}
+                className="ml-1 text-xs text-muted-foreground italic font-body hover:text-foreground transition-colors"
+              >
+                (edited)
+              </button>
+            )}
+            {showCommentEdit && (
+              <button
+                type="button"
+                onClick={() => {
+                  setCommentEditText(
+                    commentEditRecord?.currentText ?? displayText,
+                  );
+                  setIsEditingComment(true);
+                }}
+                className="ml-1.5 inline-flex items-center gap-0.5 text-xs text-muted-foreground hover:text-foreground opacity-0 group-hover/commenttext:opacity-100 transition-opacity"
+                aria-label="Edit comment"
+              >
+                <Pencil className="h-2.5 w-2.5" />
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Decoded attachments — images with lightbox */}
+        {attachedImages.length > 0 && (
+          <CommentImageGrid imageUrls={attachedImages} />
         )}
 
         {/* Decoded attachments — links */}
         {attachedUrls.filter(Boolean).length > 0 && (
-          <div className="flex flex-col gap-0.5 mb-2">
-            {attachedUrls.filter(Boolean).map((url) => (
-              <a
-                key={url}
-                href={url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-xs text-primary hover:underline font-body flex items-center gap-1 truncate"
-              >
-                <Link2 className="h-2.5 w-2.5 flex-shrink-0" />
-                {url}
-              </a>
-            ))}
-          </div>
+          <UrlChips urls={attachedUrls} />
+        )}
+
+        {commentEditRecord && (
+          <EditHistoryModal
+            open={commentEditHistoryOpen}
+            onClose={() => setCommentEditHistoryOpen(false)}
+            history={commentEditRecord.editHistory}
+            currentText={commentEditRecord.currentText}
+            currentEditedAt={commentEditRecord.lastEditedAt}
+          />
         )}
 
         {/* Actions row: [Reply] [ChevronUp + count] [spacer] [⋯] */}
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 mt-2">
           {/* Reply button — depth < 4 allows up to 5-level nesting */}
           {depth < 4 && (
             <button
@@ -585,7 +743,11 @@ export function SourceDiscussion({
   const [replyingToId, setReplyingToId] = useState<bigint | null>(null);
   const [reportedIds, setReportedIds] = useState<Set<string>>(new Set());
   const username = useUsername();
-  const { username: verifiedUsername, avatarUrl } = useVerifiedAccount();
+  const {
+    username: verifiedUsername,
+    avatarUrl,
+    principal: verifiedPrincipal,
+  } = useVerifiedAccount();
   const reportComment = useReportSourceComment();
   const { checkAction } = useSessionGate();
 
@@ -664,6 +826,7 @@ export function SourceDiscussion({
         replyingToId={replyingToId}
         onToggleReply={setReplyingToId}
         likeCounts={likeCounts}
+        principalId={verifiedPrincipal?.toString() ?? null}
       >
         {nested.length > 0 && depth < 4 && (
           <div className="space-y-0">

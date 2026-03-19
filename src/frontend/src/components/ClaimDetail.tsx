@@ -29,6 +29,7 @@ import {
 } from "@/hooks/useQueries";
 import { cn } from "@/lib/utils";
 import { formatRelativeTime } from "@/utils/time";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   AlertCircle,
   ArrowLeft,
@@ -81,17 +82,19 @@ function sortEvidence(
       return arr.sort((a, b) => Number(a.timestamp) - Number(b.timestamp));
   }
 }
+import { EditHistoryModal } from "@/components/EditHistoryModal";
 import { UserAvatar } from "@/components/UserAvatar";
 import { AuthorDisplay, UserProfileCard } from "@/components/UserProfileCard";
 import { VerifiedBadge } from "@/components/VerifiedBadge";
 import { Input } from "@/components/ui/input";
-import {
-  getEdit,
-  isWithinEditWindow,
-  saveEdit,
-  useAccountPermissions,
-} from "@/hooks/useAccountPermissions";
+import { useAccountPermissions } from "@/hooks/useAccountPermissions";
 import { useActor } from "@/hooks/useActor";
+import {
+  canEditContent,
+  getDisplayText,
+  getEditRecord,
+  saveEditRecord,
+} from "@/hooks/useEditSystem";
 import { useReportContent } from "@/hooks/useQueries";
 import { useAddReputationEvent } from "@/hooks/useQueries";
 import { useSessionGate } from "@/hooks/useSessionGate";
@@ -204,33 +207,55 @@ function ImageGrid({
   );
 }
 
-// ── Evidence editable text display ──────────────────────────────────────────
+// ── Evidence editable text display ──────────────────────────────
 function EvidenceTextDisplay({
   item,
   sessionId,
-  canEdit,
+  principalId,
+  voteCount,
 }: {
   item: { id: bigint; text: string; sessionId: string; timestamp: bigint };
   sessionId: string;
-  canEdit: boolean;
+  principalId: string | null;
+  voteCount: number;
 }) {
-  const editKey = `evidence_${item.id.toString()}`;
-  const stored = getEdit(editKey);
+  const record = principalId
+    ? getEditRecord("evidence", item.id.toString(), principalId)
+    : null;
+  const initialText = record?.currentText ?? item.text;
   const [isEditing, setIsEditing] = useState(false);
-  const [editText, setEditText] = useState(stored?.text ?? item.text);
-  const [displayText, setDisplayText] = useState(stored?.text ?? item.text);
-  const [isEdited, setIsEdited] = useState(!!stored);
+  const [editText, setEditText] = useState(initialText);
+  const [displayText, setDisplayText] = useState(initialText);
+  const [editRecord, setEditRecord] = useState(record);
+  const [historyOpen, setHistoryOpen] = useState(false);
 
-  const isOwn = item.sessionId === sessionId;
-  const withinWindow = isWithinEditWindow(item.timestamp);
-  const showEdit = canEdit && isOwn && withinWindow;
+  const showEdit =
+    !!principalId &&
+    canEditContent(
+      "evidence",
+      item.timestamp,
+      item.sessionId,
+      sessionId,
+      principalId,
+    );
+
+  const isEdited = !!editRecord;
+  const wasEditedAfterVotes = editRecord?.wasEditedAfterVotes ?? false;
 
   function handleSave() {
-    if (!editText.trim()) return;
-    saveEdit(editKey, editText.trim());
+    if (!editText.trim() || !principalId) return;
+    const updated = saveEditRecord(
+      "evidence",
+      item.id.toString(),
+      principalId,
+      editText.trim(),
+      displayText,
+      voteCount,
+    );
     setDisplayText(editText.trim());
-    setIsEdited(true);
+    setEditRecord(updated);
     setIsEditing(false);
+    toast.success("Evidence updated");
   }
 
   if (isEditing) {
@@ -242,7 +267,6 @@ function EvidenceTextDisplay({
           rows={3}
           maxLength={1000}
           className="bg-card border-border font-body resize-none text-sm"
-          autoFocus
         />
         <div className="flex gap-2">
           <Button
@@ -272,26 +296,47 @@ function EvidenceTextDisplay({
   }
 
   return (
-    <div className="mb-1 group/text">
-      <p className="text-sm text-foreground font-body leading-relaxed inline">
-        {displayText}
-      </p>
-      {isEdited && (
-        <span className="ml-1 text-xs text-muted-foreground italic font-body">
-          (edited)
-        </span>
+    <>
+      <div className="mb-1 group/text">
+        <p className="text-sm text-foreground font-body leading-relaxed inline">
+          {displayText}
+        </p>
+        {isEdited && (
+          <button
+            type="button"
+            onClick={() => setHistoryOpen(true)}
+            className="ml-1 text-xs text-muted-foreground italic font-body hover:text-foreground transition-colors"
+            aria-label="View edit history"
+          >
+            (edited)
+          </button>
+        )}
+        {showEdit && (
+          <button
+            type="button"
+            onClick={() => setIsEditing(true)}
+            className="ml-1.5 inline-flex items-center gap-0.5 text-xs text-muted-foreground hover:text-foreground opacity-0 group-hover/text:opacity-100 transition-opacity"
+            aria-label="Edit evidence"
+          >
+            <Pencil className="h-2.5 w-2.5" />
+          </button>
+        )}
+      </div>
+      {wasEditedAfterVotes && (
+        <p className="text-xs text-amber-600 dark:text-amber-400 font-body italic mb-1">
+          ⚠️ Edited after receiving votes
+        </p>
       )}
-      {showEdit && (
-        <button
-          type="button"
-          onClick={() => setIsEditing(true)}
-          className="ml-1.5 inline-flex items-center gap-0.5 text-xs text-muted-foreground hover:text-foreground opacity-0 group-hover/text:opacity-100 transition-opacity"
-          aria-label="Edit evidence"
-        >
-          <Pencil className="h-2.5 w-2.5" />
-        </button>
+      {editRecord && (
+        <EditHistoryModal
+          open={historyOpen}
+          onClose={() => setHistoryOpen(false)}
+          history={editRecord.editHistory}
+          currentText={editRecord.currentText}
+          currentEditedAt={editRecord.lastEditedAt}
+        />
       )}
-    </div>
+    </>
   );
 }
 
@@ -329,6 +374,64 @@ function ClaimDetailMeta({
   );
 }
 
+// ── Claim edit form ───────────────────────────────────────────────────────────────────
+function ClaimEditForm({
+  initialTitle,
+  initialDescription,
+  onSave,
+  onCancel,
+}: {
+  initialTitle: string;
+  initialDescription: string;
+  onSave: (title: string, description: string) => void;
+  onCancel: () => void;
+}) {
+  const [title, setTitle] = useState(initialTitle);
+  const [description, setDescription] = useState(initialDescription);
+  return (
+    <div className="space-y-2 mb-4">
+      <input
+        type="text"
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        maxLength={200}
+        className="w-full font-display text-2xl font-bold bg-card border border-border rounded-sm px-3 py-2 focus:outline-none focus:ring-1 focus:ring-primary/60"
+        placeholder="Claim title"
+      />
+      <Textarea
+        value={description}
+        onChange={(e) => setDescription(e.target.value)}
+        rows={4}
+        maxLength={1000}
+        className="bg-card border-border font-body resize-none text-sm"
+        placeholder="Claim description"
+      />
+      <div className="flex gap-2">
+        <Button
+          type="button"
+          size="sm"
+          onClick={() => {
+            if (title.trim()) onSave(title.trim(), description.trim());
+          }}
+          className="h-7 px-3 text-xs font-body gap-1"
+        >
+          <Check className="h-3 w-3" />
+          Save
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={onCancel}
+          className="h-7 px-3 text-xs font-body text-muted-foreground"
+        >
+          Cancel
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 export function ClaimDetail({
   claimId,
   sessionId,
@@ -357,6 +460,9 @@ export function ClaimDetail({
   );
   // Claim report dialog
   const [reportDialogOpen, setReportDialogOpen] = useState(false);
+  // Claim edit state
+  const [claimEditOpen, setClaimEditOpen] = useState(false);
+  const [claimEditHistoryOpen, setClaimEditHistoryOpen] = useState(false);
   // Evidence report dialog — tracks which evidence id is being reported
   const [reportingEvidenceId, setReportingEvidenceId] = useState<bigint | null>(
     null,
@@ -456,6 +562,7 @@ export function ClaimDetail({
   const addRepEvent = useAddReputationEvent();
   const submitEvidence = useSubmitEvidence();
   const reportContent = useReportContent();
+  const queryClient = useQueryClient();
   const { actor } = useActor();
   const { checkAction, checkVoteAction } = useSessionGate();
 
@@ -585,6 +692,26 @@ export function ClaimDetail({
           actor
             ?.suggestTrustedSource(d, "general", sessionId, autoUsername)
             .catch(() => {});
+          // Prefetch Wikipedia blurb so source cards show it immediately
+          queryClient.prefetchQuery({
+            queryKey: ["wikipedia-blurb", d],
+            queryFn: async () => {
+              const firstSegment = d.split(".")[0];
+              const title =
+                firstSegment.charAt(0).toUpperCase() + firstSegment.slice(1);
+              try {
+                const res = await fetch(
+                  `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`,
+                );
+                if (!res.ok) return null;
+                const data = await res.json();
+                return (data.extract as string) || null;
+              } catch {
+                return null;
+              }
+            },
+            staleTime: 1000 * 60 * 60,
+          });
         }
       }
 
@@ -705,37 +832,133 @@ export function ClaimDetail({
             </div>
 
             {/* Title */}
-            <div className="mb-4">
-              <h1 className="font-display text-3xl font-bold leading-tight text-foreground">
-                {claim.title}
-                {claimTotalVotes >= 10 && (
-                  <TooltipProvider>
-                    <Tooltip
-                      open={hotTooltipOpen}
-                      onOpenChange={setHotTooltipOpen}
-                    >
-                      <TooltipTrigger asChild>
-                        <Flame
-                          className="inline w-6 h-6 text-orange-500 ml-2 align-middle relative -top-[3px] sm:-top-[3px] cursor-pointer"
-                          aria-label="Hot claim"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setHotTooltipOpen((v) => !v);
-                          }}
+            {(() => {
+              const pid = verifiedPrincipal?.toString() ?? null;
+              // Use separate edit records for title and description
+              const titleRecord = pid
+                ? getEditRecord("claim", `${claim.id}_title`, pid)
+                : null;
+              const descRecord = pid
+                ? getEditRecord("claim", `${claim.id}_desc`, pid)
+                : null;
+              const editedTitle = titleRecord?.currentText ?? claim.title;
+              const editedDesc = descRecord?.currentText ?? claim.description;
+              const showClaimEdit =
+                pid &&
+                canEditContent(
+                  "claim",
+                  claim.timestamp,
+                  claim.sessionId ?? "",
+                  sessionId,
+                  pid,
+                );
+              const anyRecord = titleRecord ?? descRecord;
+              return (
+                <>
+                  {claimEditOpen && pid ? (
+                    <div className="mb-4">
+                      <ClaimEditForm
+                        initialTitle={editedTitle}
+                        initialDescription={editedDesc}
+                        onSave={(t, d) => {
+                          saveEditRecord(
+                            "claim",
+                            `${claim.id}_title`,
+                            pid,
+                            t,
+                            editedTitle,
+                            claimTotalVotes,
+                          );
+                          saveEditRecord(
+                            "claim",
+                            `${claim.id}_desc`,
+                            pid,
+                            d,
+                            editedDesc,
+                            claimTotalVotes,
+                          );
+                          setClaimEditOpen(false);
+                          toast.success("Claim updated");
+                        }}
+                        onCancel={() => setClaimEditOpen(false)}
+                      />
+                    </div>
+                  ) : (
+                    <div className="mb-4">
+                      <div className="flex items-start gap-2 group/claimtitle">
+                        <h1 className="font-display text-3xl font-bold leading-tight text-foreground flex-1">
+                          {editedTitle}
+                          {claimTotalVotes >= 10 && (
+                            <TooltipProvider>
+                              <Tooltip
+                                open={hotTooltipOpen}
+                                onOpenChange={setHotTooltipOpen}
+                              >
+                                <TooltipTrigger asChild>
+                                  <Flame
+                                    className="inline w-6 h-6 text-orange-500 ml-2 align-middle relative -top-[3px] sm:-top-[3px] cursor-pointer"
+                                    aria-label="Hot claim"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setHotTooltipOpen((v) => !v);
+                                    }}
+                                  />
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p>High activity in the last 24 hours</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          )}
+                        </h1>
+                        {showClaimEdit && (
+                          <button
+                            type="button"
+                            onClick={() => setClaimEditOpen(true)}
+                            className="mt-1 flex-shrink-0 text-muted-foreground hover:text-foreground opacity-0 group-hover/claimtitle:opacity-100 transition-opacity"
+                            aria-label="Edit claim"
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </div>
+                      {anyRecord && (
+                        <div className="flex items-center gap-2 mt-1 flex-wrap">
+                          <button
+                            type="button"
+                            onClick={() => setClaimEditHistoryOpen(true)}
+                            className="text-xs text-muted-foreground italic font-body hover:text-foreground transition-colors"
+                          >
+                            (edited)
+                          </button>
+                          {anyRecord.wasEditedAfterVotes && (
+                            <span className="text-xs text-amber-600 dark:text-amber-400 font-body italic">
+                              ⚠️ This claim was edited after voting began
+                            </span>
+                          )}
+                        </div>
+                      )}
+                      {anyRecord && (
+                        <EditHistoryModal
+                          open={claimEditHistoryOpen}
+                          onClose={() => setClaimEditHistoryOpen(false)}
+                          history={
+                            titleRecord?.editHistory ??
+                            descRecord?.editHistory ??
+                            []
+                          }
+                          currentText={editedTitle}
+                          currentEditedAt={anyRecord.lastEditedAt}
                         />
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>High activity in the last 24 hours</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                )}
-              </h1>
-            </div>
-
-            <p className="font-body text-base text-muted-foreground leading-relaxed">
-              {claim.description}
-            </p>
+                      )}
+                    </div>
+                  )}
+                  <p className="font-body text-base text-muted-foreground leading-relaxed">
+                    {editedDesc}
+                  </p>
+                </>
+              );
+            })()}
             {/* Claim images */}
             <ImageGrid imageUrls={claim.imageUrls ?? []} size="md" />
             {/* Claim URLs */}
@@ -1227,7 +1450,8 @@ export function ClaimDetail({
                       <EvidenceTextDisplay
                         item={item}
                         sessionId={sessionId}
-                        canEdit={canReport}
+                        principalId={verifiedPrincipal?.toString() ?? null}
+                        voteCount={tallies[item.id.toString()] ?? 0}
                       />
 
                       {/* Evidence images */}
